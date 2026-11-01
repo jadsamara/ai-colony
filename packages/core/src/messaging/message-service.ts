@@ -355,6 +355,14 @@ export class MessagingService {
     });
   }
 
+  async touchLease(messageId: string, workerId: string): Promise<void> {
+    await this.persistence.repos.messages.touchProcessingLease(
+      messageId,
+      workerId,
+      new Date(Date.now() + this.policy.leaseMs),
+    );
+  }
+
   metrics(ctx: RequestContext) {
     this.authorizer.assert(ctx.actor, "message:admin");
     return this.persistence.repos.messages.metrics();

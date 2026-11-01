@@ -287,6 +287,20 @@ export function createMessageRepository(db: DbExecutor): MessageRepository {
         leaseUntil: input.leaseUntil,
       });
     },
+    async touchProcessingLease(messageId, workerId, leaseUntil) {
+      const rows = await db
+        .update(messageProcessingRecords)
+        .set({ leaseUntil, updatedAt: new Date() })
+        .where(
+          and(
+            eq(messageProcessingRecords.messageId, messageId),
+            eq(messageProcessingRecords.owner, workerId),
+            eq(messageProcessingRecords.status, "processing"),
+          ),
+        )
+        .returning({ id: messageProcessingRecords.messageId });
+      return rows.length > 0;
+    },
     async updateProcessing(messageId, patch) {
       const [row] = await db
         .update(messageProcessingRecords)

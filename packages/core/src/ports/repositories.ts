@@ -18,10 +18,14 @@ import type {
   MessagingMetrics,
   ModelRecord,
   ModelStatus,
+  ObjectiveStatus,
   ParameterBudget,
   PrincipalType,
   ResourceBudget,
   RoleName,
+  RuntimeStatus,
+  TaskStatus,
+  TaskType,
 } from "@ai-colony/contracts";
 import type { DecodedCursor } from "../pagination.js";
 
@@ -369,6 +373,7 @@ export interface MessageRepository {
   listOutbox(messageId: string): Promise<OutboxRow[]>;
   lockProcessing(messageId: string): Promise<ProcessingRow | null>;
   insertProcessing(input: { messageId: string; owner: string; leaseUntil: Date }): Promise<void>;
+  touchProcessingLease(messageId: string, workerId: string, leaseUntil: Date): Promise<boolean>;
   updateProcessing(
     messageId: string,
     patch: {
@@ -405,6 +410,287 @@ export interface MessageRepository {
   listArchivedAgents(): Promise<Array<{ departmentId: string; agentId: string }>>;
 }
 
+export interface ObjectiveLimitsRow {
+  maxInferenceRequests: number;
+  maxOutputTokens: number;
+  maxEstimatedTokens: number;
+  maxTaskAttempts: number;
+  maxConcurrentTasks: number;
+  maxDurationMs: number;
+}
+
+export interface ObjectiveRun {
+  id: string;
+  submitterPrincipalId: string;
+  objective: string;
+  status: ObjectiveStatus;
+  correlationId: string;
+  failureReason: string | null;
+  finalOutput: string | null;
+  executionAuthorized: boolean;
+  planCorrections: number;
+  memoryProfile: "shared" | "split";
+  primaryModelId: string;
+  operationalModelId: string | null;
+  limits: ObjectiveLimitsRow;
+  consumedRequests: number;
+  reservedRequests: number;
+  consumedInputTokens: number;
+  consumedOutputTokens: number;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  reservedOutputTokens: number;
+  estimatedCostUsdMicros: number | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  updatedAt: string;
+}
+
+export interface ObjectiveTaskRecord {
+  id: string;
+  objectiveId: string;
+  localId: string;
+  departmentId: string;
+  departmentSlug: TaskType;
+  taskType: TaskType;
+  objective: string;
+  expectedOutput: string;
+  dependsOn: string[];
+  status: TaskStatus;
+  attempt: number;
+  assignedAgentId: string | null;
+  requestMessageId: string | null;
+  error: string | null;
+  resultSummary: string | null;
+  deadline: string | null;
+  leaseOwner: string | null;
+  leaseUntil: string | null;
+  createdAt: string;
+  updatedAt: string;
+  objectiveCreatedAt: string;
+}
+
+export interface InferenceRow {
+  id: string;
+  objectiveId: string;
+  taskId: string | null;
+  attempt: number;
+  purpose: string;
+  registryModelId: string;
+  intendedModelId: string;
+  requestedAlias: string;
+  status: string;
+  reservedOutputTokens: number;
+  idempotencyKey: string;
+  responseText: string | null;
+  error: string | null;
+  leaseOwner: string | null;
+  leaseUntil: string | null;
+}
+
+export interface RuntimeRow {
+  modelId: string;
+  displayName: string;
+  registryStatus: string;
+  runtimeStatus: RuntimeStatus;
+  expectedAlias: string | null;
+  loadedModelId: string | null;
+  endpointUrl: string | null;
+  lastError: string | null;
+  probedAt: string | null;
+}
+
+export interface HeartbeatRow {
+  workerId: string;
+  role: string;
+  beatAt: string;
+  detail: string | null;
+}
+
+export interface EligibleAgent {
+  id: string;
+  principalId: string;
+  departmentId: string;
+  role: RoleName;
+  status: AgentStatus;
+  name: string;
+}
+
+export interface ObjectiveRepository {
+  insertRun(input: {
+    id: string;
+    submitterPrincipalId: string;
+    objective: string;
+    correlationId: string;
+    executionAuthorized: boolean;
+    memoryProfile: "shared" | "split";
+    primaryModelId: string;
+    operationalModelId: string | null;
+    limits: ObjectiveLimitsRow;
+  }): Promise<ObjectiveRun>;
+  getRun(id: string): Promise<ObjectiveRun | null>;
+  lockRun(id: string): Promise<ObjectiveRun | null>;
+  saveRun(
+    id: string,
+    patch: Partial<{
+      status: ObjectiveRun["status"];
+      failureReason: string | null;
+      finalOutput: string | null;
+      executionAuthorized: boolean;
+      planCorrections: number;
+      startedAt: Date | null;
+      completedAt: Date | null;
+    }>,
+  ): Promise<ObjectiveRun>;
+  listRuns(filter: {
+    limit: number;
+    cursor: DecodedCursor | null;
+    status?: ObjectiveRun["status"];
+    submitterPrincipalId?: string;
+  }): Promise<Page<ObjectiveRun>>;
+  insertPlan(input: {
+    id: string;
+    objectiveId: string;
+    version: number;
+    body: Record<string, unknown>;
+    valid: boolean;
+    errors: string[];
+  }): Promise<void>;
+  latestPlan(
+    objectiveId: string,
+  ): Promise<{ version: number; valid: boolean; body: Record<string, unknown>; errors: string[] } | null>;
+  insertTasks(
+    tasks: Array<{
+      id: string;
+      objectiveId: string;
+      localId: string;
+      departmentId: string;
+      departmentSlug: ObjectiveTaskRecord["departmentSlug"];
+      taskType: ObjectiveTaskRecord["taskType"];
+      objective: string;
+      expectedOutput: string;
+      dependsOn: string[];
+    }>,
+  ): Promise<void>;
+  listTasks(objectiveId?: string): Promise<ObjectiveTaskRecord[]>;
+  lockTask(id: string): Promise<ObjectiveTaskRecord | null>;
+  saveTask(
+    id: string,
+    patch: Partial<{
+      status: ObjectiveTaskRecord["status"];
+      attempt: number;
+      assignedAgentId: string | null;
+      requestMessageId: string | null;
+      error: string | null;
+      resultSummary: string | null;
+      deadline: Date | null;
+      leaseOwner: string | null;
+      leaseUntil: Date | null;
+      startedAt: Date | null;
+      completedAt: Date | null;
+    }>,
+  ): Promise<void>;
+  insertAssignment(input: {
+    id: string;
+    taskId: string;
+    agentId: string;
+    departmentId: string;
+    attempt: number;
+  }): Promise<void>;
+  insertResult(input: {
+    id: string;
+    taskId: string;
+    attempt: number;
+    status: string;
+    summary: string;
+    messageId: string | null;
+  }): Promise<void>;
+  findResult(taskId: string, attempt: number): Promise<{ id: string } | null>;
+  insertInference(input: {
+    id: string;
+    objectiveId: string;
+    taskId: string | null;
+    attempt: number;
+    purpose: string;
+    registryModelId: string;
+    intendedModelId: string;
+    requestedAlias: string;
+    reservedOutputTokens: number;
+    idempotencyKey: string;
+    leaseOwner: string;
+    leaseUntil: Date;
+  }): Promise<"created" | "exists">;
+  getInference(key: string): Promise<InferenceRow | null>;
+  getInferenceById(id: string): Promise<InferenceRow | null>;
+  reopenInference(id: string, leaseOwner: string, leaseUntil: Date): Promise<void>;
+  finishInference(
+    id: string,
+    patch: { status: string; responseText: string | null; error: string | null },
+  ): Promise<void>;
+  insertUsage(input: {
+    requestId: string;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    tokenSource: string;
+    servedModel: string;
+    latencyMs: number;
+    estimatedCostUsdMicros: number | null;
+    overrideApplied: boolean;
+  }): Promise<void>;
+  reserve(input: {
+    objectiveId: string;
+    outputTokens: number;
+    estimatedTokens: number;
+  }): Promise<boolean>;
+  releaseReservation(objectiveId: string, outputTokens: number): Promise<void>;
+  reconcile(input: {
+    objectiveId: string;
+    reservedOutputTokens: number;
+    observedInputTokens: number;
+    observedOutputTokens: number;
+    estimatedInputTokens: number;
+    estimatedOutputTokens: number;
+    estimatedCostUsdMicros: number | null;
+  }): Promise<void>;
+  appendEvent(input: {
+    id: string;
+    objectiveId: string | null;
+    eventType: string;
+    summary: string;
+  }): Promise<void>;
+  listEvents(filter: {
+    objectiveId: string;
+    limit: number;
+    cursor: DecodedCursor | null;
+  }): Promise<Page<{ id: string; objectiveId: string | null; eventType: string; summary: string; createdAt: string }>>;
+  hasEvent(objectiveId: string | null, eventType: string): Promise<boolean>;
+  counts(): Promise<{
+    objectives: Array<{ status: string; count: number }>;
+    tasks: Array<{ status: string; count: number }>;
+    inferenceRequests: number;
+    observedOutputTokens: number;
+    estimatedOutputTokens: number;
+    unavailableUsage: number;
+    estimatedCostUsdMicros: number | null;
+  }>;
+  upsertRuntime(input: {
+    modelId: string;
+    runtimeStatus: RuntimeStatus;
+    endpointUrl: string | null;
+    expectedAlias: string | null;
+    loadedModelId: string | null;
+    lastError: string | null;
+    probedAt: Date | null;
+  }): Promise<void>;
+  listRuntimes(): Promise<RuntimeRow[]>;
+  heartbeat(input: { workerId: string; role: string; beatAt: Date; detail: string | null }): Promise<void>;
+  listHeartbeats(): Promise<HeartbeatRow[]>;
+  findDepartmentBySlug(slug: string): Promise<{ id: string; slug: string; status: string } | null>;
+  listEligibleAgents(departmentId: string): Promise<EligibleAgent[]>;
+  findAgent(id: string): Promise<EligibleAgent | null>;
+}
+
 export interface Repositories {
   departments: DepartmentRepository;
   agents: AgentRepository;
@@ -414,6 +700,7 @@ export interface Repositories {
   audit: AuditRepository;
   lifecycle: LifecycleRepository;
   messages: MessageRepository;
+  objectives: ObjectiveRepository;
 }
 
 export interface Persistence {

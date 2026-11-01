@@ -63,6 +63,17 @@ export {
 export { messageIdentityHash } from "./messaging/hash.js";
 export { MessageHandlingError, recordReceipt, type MessageHandler } from "./messaging/handlers.js";
 export { MessagingService, type DeliveryOutcome, type SendResult } from "./messaging/message-service.js";
+export { InferenceError, type InferenceProvider, type InferenceRequest, type InferenceResult, type ModelProbe } from "./inference/provider.js";
+export { estimateCostUsdMicros, estimateTokens, normalizeUsage, type CostRates, type TokenUsage } from "./inference/usage.js";
+export {
+  ObjectiveService,
+  DEFAULT_OBJECTIVE_LIMITS,
+  type InferenceRoute,
+  type PreparedGeneration,
+} from "./objectives/objective-service.js";
+export { validatePlan, extractJsonObject, planErrors, type PlanContext } from "./objectives/plan.js";
+export { chooseDispatch, readyTaskIds, blockedTaskIds } from "./objectives/schedule.js";
+export { assertObjectiveTransition, assertTaskTransition } from "./objectives/transitions.js";
 export {
   DEAD_EXCHANGE,
   DEAD_QUEUE,
@@ -87,8 +98,13 @@ export type {
   DepartmentRepository,
   LifecycleRepository,
   MessageListFilter,
+  EligibleAgent,
+  InferenceRow,
   MessageRepository,
   MessageVisibility,
+  ObjectiveRepository,
+  ObjectiveRun,
+  ObjectiveTaskRecord,
   ModelListFilter,
   ModelRepository,
   NewAgent,

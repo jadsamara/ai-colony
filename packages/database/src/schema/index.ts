@@ -30,12 +30,16 @@ import {
   DEPLOYMENT_TARGETS,
   MESSAGE_STATUSES,
   MESSAGE_TYPES,
+  INFERENCE_REQUEST_STATUSES,
   MODEL_STATUSES,
+  OBJECTIVE_STATUSES,
   OUTBOX_STATUSES,
   PRINCIPAL_TYPES,
   PROCESSING_STATUSES,
   QUANTIZATIONS,
   ROLE_NAMES,
+  TASK_STATUSES,
+  TASK_TYPES,
 } from "./constants.js";
 import { textIn } from "./sql.js";
 
@@ -434,3 +438,250 @@ export const messageDeadLetters = pgTable(
     check("message_dead_letters_status_check", textIn("status", DEAD_LETTER_STATUSES)),
   ],
 );
+
+export const objectiveRuns = pgTable(
+  "objective_runs",
+  {
+    id: uuid("id").primaryKey(),
+    submitterPrincipalId: uuid("submitter_principal_id")
+      .notNull()
+      .references(() => principals.id, { onDelete: "restrict" }),
+    objectiveText: text("objective_text").notNull(),
+    status: text("status").notNull(),
+    correlationId: uuid("correlation_id").notNull(),
+    failureReason: text("failure_reason"),
+    finalOutput: text("final_output"),
+    executionAuthorized: boolean("execution_authorized").notNull(),
+    planCorrections: integer("plan_corrections").notNull().default(0),
+    memoryProfile: text("memory_profile").notNull(),
+    primaryModelId: uuid("primary_model_id")
+      .notNull()
+      .references(() => models.id, { onDelete: "restrict" }),
+    operationalModelId: uuid("operational_model_id").references(() => models.id, {
+      onDelete: "restrict",
+    }),
+    maxInferenceRequests: integer("max_inference_requests").notNull(),
+    maxOutputTokens: integer("max_output_tokens").notNull(),
+    maxEstimatedTokens: integer("max_estimated_tokens").notNull(),
+    maxTaskAttempts: integer("max_task_attempts").notNull(),
+    maxConcurrentTasks: integer("max_concurrent_tasks").notNull(),
+    maxDurationMs: integer("max_duration_ms").notNull(),
+    consumedRequests: integer("consumed_requests").notNull().default(0),
+    reservedRequests: integer("reserved_requests").notNull().default(0),
+    consumedInputTokens: integer("consumed_input_tokens").notNull().default(0),
+    consumedOutputTokens: integer("consumed_output_tokens").notNull().default(0),
+    estimatedInputTokens: integer("estimated_input_tokens").notNull().default(0),
+    estimatedOutputTokens: integer("estimated_output_tokens").notNull().default(0),
+    reservedOutputTokens: integer("reserved_output_tokens").notNull().default(0),
+    estimatedCostUsdMicros: bigint("estimated_cost_usd_micros", { mode: "number" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("objective_runs_status_idx").on(table.status, table.createdAt),
+    index("objective_runs_submitter_idx").on(table.submitterPrincipalId, table.createdAt),
+    check("objective_runs_status_check", textIn("status", OBJECTIVE_STATUSES)),
+    check("objective_runs_profile_check", sql`${table.memoryProfile} in ('shared', 'split')`),
+    check("objective_runs_limits_check", sql`${table.maxInferenceRequests} > 0`),
+  ],
+);
+
+export const objectivePlans = pgTable(
+  "objective_plans",
+  {
+    id: uuid("id").primaryKey(),
+    objectiveId: uuid("objective_id")
+      .notNull()
+      .references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    body: jsonb("body").$type<Record<string, unknown>>().notNull(),
+    valid: boolean("valid").notNull(),
+    errors: jsonb("errors").$type<string[]>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("objective_plans_version_unique").on(table.objectiveId, table.version),
+    index("objective_plans_objective_idx").on(table.objectiveId, table.version),
+  ],
+);
+
+export const objectiveTasks = pgTable(
+  "objective_tasks",
+  {
+    id: uuid("id").primaryKey(),
+    objectiveId: uuid("objective_id")
+      .notNull()
+      .references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    localId: text("local_id").notNull(),
+    departmentId: uuid("department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    departmentSlug: text("department_slug").notNull(),
+    taskType: text("task_type").notNull(),
+    objectiveText: text("objective_text").notNull(),
+    expectedOutput: text("expected_output").notNull(),
+    dependsOn: uuid("depends_on").array().notNull(),
+    status: text("status").notNull(),
+    attempt: integer("attempt").notNull(),
+    assignedAgentId: uuid("assigned_agent_id").references(() => agents.id, {
+      onDelete: "restrict",
+    }),
+    requestMessageId: uuid("request_message_id"),
+    error: text("error"),
+    resultSummary: text("result_summary"),
+    deadline: timestamp("deadline", { withTimezone: true }),
+    leaseOwner: text("lease_owner"),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("objective_tasks_local_unique").on(table.objectiveId, table.localId),
+    index("objective_tasks_status_idx").on(table.status, table.createdAt),
+    index("objective_tasks_objective_idx").on(table.objectiveId),
+    check("objective_tasks_status_check", textIn("status", TASK_STATUSES)),
+    check("objective_tasks_type_check", textIn("task_type", TASK_TYPES)),
+    check("objective_tasks_attempt_check", sql`${table.attempt} > 0`),
+  ],
+);
+
+export const taskAssignments = pgTable(
+  "task_assignments",
+  {
+    id: uuid("id").primaryKey(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => objectiveTasks.id, { onDelete: "restrict" }),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    attempt: integer("attempt").notNull(),
+    assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("task_assignments_task_idx").on(table.taskId, table.attempt)],
+);
+
+export const taskResults = pgTable(
+  "task_results",
+  {
+    id: uuid("id").primaryKey(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => objectiveTasks.id, { onDelete: "restrict" }),
+    attempt: integer("attempt").notNull(),
+    status: text("status").notNull(),
+    summary: text("summary").notNull(),
+    messageId: uuid("message_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("task_results_attempt_unique").on(table.taskId, table.attempt)],
+);
+
+export const inferenceRequests = pgTable(
+  "inference_requests",
+  {
+    id: uuid("id").primaryKey(),
+    objectiveId: uuid("objective_id")
+      .notNull()
+      .references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    taskId: uuid("task_id").references(() => objectiveTasks.id, { onDelete: "restrict" }),
+    attempt: integer("attempt").notNull(),
+    purpose: text("purpose").notNull(),
+    registryModelId: uuid("registry_model_id")
+      .notNull()
+      .references(() => models.id, { onDelete: "restrict" }),
+    intendedModelId: uuid("intended_model_id")
+      .notNull()
+      .references(() => models.id, { onDelete: "restrict" }),
+    requestedAlias: text("requested_alias").notNull(),
+    status: text("status").notNull(),
+    reservedOutputTokens: integer("reserved_output_tokens").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    responseText: text("response_text"),
+    error: text("error"),
+    leaseOwner: text("lease_owner"),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("inference_requests_key_unique").on(table.idempotencyKey),
+    index("inference_requests_objective_idx").on(table.objectiveId, table.createdAt),
+    check("inference_requests_status_check", textIn("status", INFERENCE_REQUEST_STATUSES)),
+    check(
+      "inference_requests_purpose_check",
+      sql`${table.purpose} in ('plan', 'correct', 'specialist', 'synthesize', 'monitor')`,
+    ),
+  ],
+);
+
+export const inferenceUsage = pgTable(
+  "inference_usage",
+  {
+    requestId: uuid("request_id")
+      .primaryKey()
+      .references(() => inferenceRequests.id, { onDelete: "restrict" }),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    tokenSource: text("token_source").notNull(),
+    servedModel: text("served_model").notNull(),
+    latencyMs: integer("latency_ms").notNull(),
+    estimatedCostUsdMicros: bigint("estimated_cost_usd_micros", { mode: "number" }),
+    overrideApplied: boolean("override_applied").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "inference_usage_source_check",
+      sql`${table.tokenSource} in ('observed', 'unavailable', 'estimated')`,
+    ),
+  ],
+);
+
+export const workflowEvents = pgTable(
+  "workflow_events",
+  {
+    id: uuid("id").primaryKey(),
+    objectiveId: uuid("objective_id").references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    eventType: text("event_type").notNull(),
+    summary: text("summary").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("workflow_events_objective_idx").on(table.objectiveId, table.createdAt)],
+);
+
+export const modelRuntimes = pgTable(
+  "model_runtimes",
+  {
+    modelId: uuid("model_id")
+      .primaryKey()
+      .references(() => models.id, { onDelete: "restrict" }),
+    runtimeStatus: text("runtime_status").notNull(),
+    endpointUrl: text("endpoint_url"),
+    expectedAlias: text("expected_alias"),
+    loadedModelId: text("loaded_model_id"),
+    lastError: text("last_error"),
+    probedAt: timestamp("probed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "model_runtimes_status_check",
+      sql`${table.runtimeStatus} in ('not_deployed', 'loading', 'ready', 'unavailable', 'failed')`,
+    ),
+  ],
+);
+
+export const workerHeartbeats = pgTable("worker_heartbeats", {
+  workerId: text("worker_id").primaryKey(),
+  role: text("role").notNull(),
+  beatAt: timestamp("beat_at", { withTimezone: true }).notNull(),
+  detail: text("detail"),
+});

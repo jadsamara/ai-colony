@@ -4,6 +4,8 @@ Milestone 1 is the colony control plane: a department registry, a universal agen
 
 Milestone 2 adds IACP 1.0, the inter-agent communication protocol. Agents send versioned messages through a PostgreSQL transactional outbox. A publisher confirms them to RabbitMQ, and a consumer records receipt. Messaging does not grant authority: a training request does not start training, a resource request does not change a budget, and an evolution proposal does not create a department.
 
+Milestone 3 adds LangGraph.js workflows for the CEO, Orchestration, and Monitoring, plus an OpenAI-compatible inference adapter. RabbitMQ still carries task requests and results. PostgreSQL still stores the objective, the outbox, and the LangGraph checkpoints. A model cannot grant permissions, change a budget, create a department, or mark itself ready.
+
 This process does not run language models, download weights, train networks, or spend cloud GPU time. A stored budget is a validated limit inside the control plane. It does not cap real cloud billing. An agent status of `running` means a lifecycle executor in this process was started. It does not mean the agent is reasoning or learning.
 
 ## Requirements
@@ -187,6 +189,50 @@ Supported message types are `TASK_REQUEST`, `TASK_RESULT`, `COLLABORATION_REQUES
 
 `GET /api/v1/messaging/metrics` is limited to the system administrator and reports outbox, processing, and dead-letter counts from PostgreSQL. Workers also write JSON logs with correlation ids. Payloads are not logged.
 
+## Objectives and inference
+
+The development machine target is an Apple Silicon Mac with 24 GB unified memory. The default profile loads one model and allows one in-flight inference request. Qwen3-8B is the primary model for the CEO, Math, Science, Research, and Reasoning. Orchestration and Monitoring are intended to use Qwen3-4B when `INFERENCE_MEMORY_PROFILE=split` and a second endpoint is configured. In the default `shared` profile every role calls the one loaded model. Usage records the served model id. The Qwen3-4B and Gemma 3 270M registry rows stay `not_deployed` until their own endpoint is probed. Gemma 3 270M is registered only. This milestone does not require it and does not train anything.
+
+The adapter speaks to `INFERENCE_BASE_URL` with `/v1/chat/completions` and `/v1/models`. It does not call OpenAI and does not fall back to another host. A response whose `model` field differs from `INFERENCE_MODEL_ALIAS` is rejected. Token counts are `observed` only when the server returns them. Otherwise they are `unavailable`. Estimated cost is stored only when `INFERENCE_INPUT_USD_PER_MILLION` and `INFERENCE_OUTPUT_USD_PER_MILLION` are set. Those rates are not a cloud bill.
+
+Local serving uses the existing Ollama install. Qwen3 thinks by default, and Ollama's OpenAI endpoint ignores a `think` flag. The adapter sends `reasoning_effort: "none"` so the answer is returned in `content` and the output budget is not spent on a reasoning trace. A server that rejects that field is retried without it. The alias must be the id from `/v1/models`. On this machine that id is `qwen3:8b`.
+
+```bash
+ollama serve
+curl -s http://127.0.0.1:11434/v1/models
+```
+
+Do not pull another model when `qwen3:8b` is already listed. Then start the colony:
+
+```bash
+pnpm db:up
+pnpm db:migrate
+pnpm db:seed
+pnpm dev
+pnpm dev:publisher
+pnpm dev:ceo
+pnpm dev:orchestration
+pnpm dev:specialists
+pnpm dev:monitoring
+```
+
+Do not run `pnpm dev:consumer` at the same time as the orchestration and specialist workers. They share department queues. The publisher must stay up, because workers write the outbox and do not talk to RabbitMQ directly.
+
+Seed creates one idle agent for the CEO, Orchestration, Monitoring, Math, Science, Research, and Reasoning departments. Submit an objective as the system administrator:
+
+```bash
+curl -s http://localhost:3000/api/v1/objectives \
+  -H "Authorization: Bearer 00000000-0000-4000-8000-000000000001" \
+  -H "Content-Type: application/json" \
+  -d '{"objective":"Compare solar and wind energy for powering a small remote research station. Calculate a simple illustrative energy requirement and identify important engineering tradeoffs."}'
+```
+
+Read it back with `GET /api/v1/objectives/:id`, the tasks with `GET /api/v1/objectives/:id/tasks`, and the colony health with `GET /api/v1/monitoring/overview`. Probe the local server with `POST /api/v1/inference/probe`. A failed probe records `unavailable` or `failed` and does not change the registry row to `available`.
+
+`pnpm test:smoke` calls the configured server only when `RUN_REAL_INFERENCE=1`. The default test suite uses a scripted provider and does not download weights.
+
+Stop the workers with Ctrl-C. They finish the current graph step or in-flight delivery before closing the database and the checkpoint pool.
+
 ## Model registry
 
 Seeded metadata, status `not_deployed`, no artifact URI, deployment target `none`:
@@ -209,15 +255,24 @@ Those triggers live in the same database as the data. A database superuser can d
 | ----------------------------- | ------------------------------------------------- |
 | `pnpm dev`                    | Compile and run the API with reload               |
 | `pnpm dev:publisher`          | Run the outbox publisher with reload              |
-| `pnpm dev:consumer`           | Run the message consumer with reload              |
+| `pnpm dev:consumer`           | Run the generic message consumer with reload      |
+| `pnpm dev:ceo`                | Run the CEO LangGraph worker                      |
+| `pnpm dev:orchestration`      | Schedule tasks and consume orchestration results  |
+| `pnpm dev:specialists`        | Consume specialist tasks and call inference       |
+| `pnpm dev:monitoring`         | Record health findings and alerts                 |
 | `pnpm start`                  | Run the compiled API                              |
 | `pnpm start:publisher`        | Run the compiled outbox publisher                 |
 | `pnpm start:consumer`         | Run the compiled message consumer                 |
+| `pnpm start:ceo`              | Run the compiled CEO worker                       |
+| `pnpm start:orchestration`    | Run the compiled orchestration worker             |
+| `pnpm start:specialists`      | Run the compiled specialist worker                |
+| `pnpm start:monitoring`       | Run the compiled monitoring worker                |
 | `pnpm build`                  | TypeScript project build                          |
 | `pnpm typecheck`              | Strict check of the app, packages, and tests      |
 | `pnpm lint`                   | ESLint                                            |
 | `pnpm format`                 | Prettier                                          |
 | `pnpm test`                   | Unit tests, then PostgreSQL integration tests     |
+| `pnpm test:smoke`             | Optional real-model call. Requires `RUN_REAL_INFERENCE=1` |
 | `pnpm db:up` / `pnpm db:down` | Start or stop PostgreSQL and RabbitMQ             |
 | `pnpm db:generate`            | Write a Drizzle migration from the schema         |
 | `pnpm db:migrate`             | Apply migrations and audit triggers               |
@@ -231,6 +286,8 @@ packages/contracts/  Zod request and response contracts
 packages/core/       Departments, agents, governance, budgets, runtime
 packages/database/   Drizzle schema, repositories, migrations, seed
 packages/messaging/  RabbitMQ transport, outbox publisher, consumer
+packages/inference/  OpenAI-compatible inference adapter
+packages/workflows/  LangGraph CEO, orchestration, and monitoring workers
 services/inference/  Boundary notes for a future worker
 services/training/   Boundary notes for a future worker
 tests/unit/          Pure tests
@@ -243,7 +300,7 @@ tests/integration/   Tests against PostgreSQL
 
 The HTTP process is stateless. Configuration comes from the environment, logs are JSON, `/health` and `/ready` exist at the root and under `/api/v1`, and the Dockerfile uses Node 22, `PORT=8080`, and `AUTH_MODE=disabled`. It does not pin a Google Cloud project or a GPU. Do not deploy from this milestone.
 
-Set `DATABASE_URL` to a PostgreSQL instance the service can reach. Run the publisher and consumer as separate processes with `RABBITMQ_URL` pointing at a broker outside Cloud Run. Use TLS and a secret manager for that URL in a real environment. The image still needs a real authentication mechanism before it is exposed. `AUTH_MODE=disabled` fail-closes the API: every route except health, readiness, and documentation returns 401. Development bearer tokens cannot be turned on when `NODE_ENV=production`.
+Set `DATABASE_URL` to a PostgreSQL instance the service can reach. Run the publisher, CEO, orchestration, specialist, and monitoring processes separately. Point `RABBITMQ_URL` at a broker outside Cloud Run and `INFERENCE_BASE_URL` at an OpenAI-compatible server you operate. Use TLS and a secret manager for those URLs in a real environment. Do not put either URL in a model prompt. The image still needs a real authentication mechanism before it is exposed. `AUTH_MODE=disabled` fail-closes the API: every route except health, readiness, and documentation returns 401. Development bearer tokens cannot be turned on when `NODE_ENV=production`.
 
 ## Troubleshooting
 
@@ -255,5 +312,6 @@ Set `DATABASE_URL` to a PostgreSQL instance the service can reach. Run the publi
 - The API exits immediately with `AUTH_MODE=development cannot be used when NODE_ENV=production`.
 - Integration tests need the database from `pnpm db:up`. They create and migrate `ai_colony_test`, then truncate it between tests. The RabbitMQ routing test needs the broker from the same Compose file. If `RABBITMQ_URL` is unreachable, that test is skipped and the PostgreSQL messaging tests still run.
 - The management UI rejects `guest`. Use `colony` / `colony-dev-password` from `.env.example`.
-- A message stays `accepted` until the publisher is running. Start `pnpm dev:publisher`, then `pnpm dev:consumer`, to move it to `delivered`.
-# ai-colony
+- A message stays `accepted` until the publisher is running. For ordinary IACP traffic, start `pnpm dev:publisher` and `pnpm dev:consumer`. For objectives, start `pnpm dev:publisher`, `pnpm dev:ceo`, `pnpm dev:orchestration`, and `pnpm dev:specialists` instead of the generic consumer.
+- `POST /api/v1/inference/probe` reports the live server. A connection error is an `unavailable` runtime status, not a successful inference.
+- `pnpm test:smoke` does nothing useful until `RUN_REAL_INFERENCE=1` and Ollama is serving the configured alias at `INFERENCE_BASE_URL`.

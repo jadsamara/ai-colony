@@ -8,6 +8,8 @@ import type {
   IdentityService,
   MessagingService,
   ModelService,
+  InferenceRoute,
+  ObjectiveService,
 } from "@ai-colony/core";
 
 export interface AppServices {
@@ -19,6 +21,14 @@ export interface AppServices {
   models: ModelService;
   audit: AuditQueryService;
   messages: MessagingService;
+  objectives: ObjectiveService;
+  inference: {
+    baseUrl: string;
+    apiKey: string | null;
+    primaryModelId: string;
+    staleAfterMs: number;
+    route: InferenceRoute;
+  };
 }
 
 declare module "fastify" {

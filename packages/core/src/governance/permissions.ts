@@ -26,6 +26,13 @@ export const PERMISSIONS = [
   "message:dead_letter:read",
   "message:dead_letter:redrive",
   "message:admin",
+  "objective:submit",
+  "objective:read",
+  "objective:admin",
+  "objective:execute",
+  "objective:cancel",
+  "inference:read",
+  "monitoring:read",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -55,6 +62,13 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   "message:dead_letter:read": "Inspect dead letters the actor is allowed to see",
   "message:dead_letter:redrive": "Republish a dead-lettered message through the outbox",
   "message:admin": "Read messaging records and metrics across the colony",
+  "objective:submit": "Submit an objective for CEO planning",
+  "objective:read": "Read objectives submitted by this principal",
+  "objective:admin": "Read every objective",
+  "objective:execute": "Authorize ordinary objective execution after a valid plan",
+  "objective:cancel": "Cancel an objective",
+  "inference:read": "Read model runtime health and inference usage",
+  "monitoring:read": "Read operational monitoring overview",
 };
 
 export const ROLE_DESCRIPTIONS: Record<RoleName, string> = {
@@ -134,6 +148,8 @@ export const ROLE_PERMISSIONS: Record<RoleName, ReadonlySet<Permission>> = {
     "message:consume",
     "message:acknowledge",
     "message:dead_letter:read",
+    "inference:read",
+    "monitoring:read",
   ),
   department_agent: grants(
     "message:publish",

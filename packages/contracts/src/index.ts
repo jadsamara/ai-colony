@@ -19,6 +19,16 @@ export {
   PRINCIPAL_TYPES,
   QUANTIZATIONS,
   ROLE_NAMES,
+  GEMMA3_270M_MODEL_ID,
+  INFERENCE_REQUEST_STATUSES,
+  OBJECTIVE_HARD_CAPS,
+  OBJECTIVE_STATUSES,
+  QWEN3_4B_MODEL_ID,
+  QWEN3_8B_MODEL_ID,
+  RUNTIME_STATUSES,
+  TASK_STATUSES,
+  TASK_TYPES,
+  TOKEN_SOURCES,
 } from "./constants.js";
 
 export {
@@ -181,3 +191,37 @@ export type {
   MessageType,
   MessagingMetrics,
 } from "./schemas/message.js";
+
+export {
+  inferenceHealthSchema,
+  monitoringOverviewSchema,
+  objectiveCancelResponseSchema,
+  objectiveCreateSchema,
+  objectiveLimitsSchema,
+  objectiveListQuerySchema,
+  objectiveListResponseSchema,
+  objectivePlanSchema,
+  objectiveResponseSchema,
+  objectiveSchema,
+  objectiveTaskListResponseSchema,
+  objectiveTaskSchema,
+  planTaskSchema,
+  runtimeModelSchema,
+  workflowEventListResponseSchema,
+  workflowEventSchema,
+} from "./schemas/objective.js";
+export type {
+  InferenceHealth,
+  MonitoringOverview,
+  ObjectiveCreate,
+  ObjectiveLimits,
+  ObjectivePlan,
+  ObjectiveRecord,
+  ObjectiveStatus,
+  ObjectiveTask,
+  PlanTask,
+  RuntimeStatus,
+  TaskStatus,
+  TaskType,
+  WorkflowEvent,
+} from "./schemas/objective.js";

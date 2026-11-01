@@ -123,7 +123,7 @@ export async function provisionDepartment(
   return decided.department as { id: string; status: string };
 }
 
-async function expectStatus(app: FastifyInstance, options: InjectOptions, statusCode: number) {
+export async function expectStatus(app: FastifyInstance, options: InjectOptions, statusCode: number) {
   const response = await app.inject(options);
   if (response.statusCode !== statusCode) {
     throw new Error(
@@ -133,6 +133,8 @@ async function expectStatus(app: FastifyInstance, options: InjectOptions, status
   return response.json() as {
     department: { id: string; status: string };
     approval: { id: string };
+    objective: { id: string };
+    data: Array<{ status: string }>;
   };
 }
 

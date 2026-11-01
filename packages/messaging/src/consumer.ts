@@ -1,5 +1,6 @@
 import {
   departmentQueueName,
+  type DeliveryOutcome,
   type MessagingPolicy,
   type MessagingService,
   type Persistence,
@@ -11,6 +12,7 @@ export async function handleDelivery(
   service: MessagingService,
   workerId: string,
   delivery: InboundDelivery,
+  leaseMs = 30_000,
 ): Promise<void> {
   let body: unknown = null;
   try {
@@ -18,15 +20,22 @@ export async function handleDelivery(
   } catch {
     body = null;
   }
-  const outcome = await service.processInbound({
-    workerId,
-    routingKey: delivery.routingKey,
-    body,
-  });
-  const messageId =
-    body && typeof body === "object" && "messageId" in body && typeof body.messageId === "string"
-      ? body.messageId
-      : undefined;
+  const messageId = readId(body, "messageId");
+  const timer = setInterval(() => {
+    if (messageId) {
+      void service.touchLease(messageId, workerId).catch(() => undefined);
+    }
+  }, Math.max(1000, Math.floor(leaseMs / 3)));
+  let outcome: DeliveryOutcome;
+  try {
+    outcome = await service.processInbound({
+      workerId,
+      routingKey: delivery.routingKey,
+      body,
+    });
+  } finally {
+    clearInterval(timer);
+  }
   const correlationId =
     body &&
     typeof body === "object" &&
@@ -62,19 +71,21 @@ export async function runMessageConsumer(input: {
   workerId: string;
   policy: MessagingPolicy;
   signal: AbortSignal;
+  departmentIds?: () => Promise<readonly string[]>;
 }): Promise<void> {
   await input.transport.connect();
   let inflight = 0;
   const handler = async (delivery: InboundDelivery) => {
     inflight += 1;
     try {
-      await handleDelivery(input.service, input.workerId, delivery);
+      await handleDelivery(input.service, input.workerId, delivery, input.policy.leaseMs);
     } finally {
       inflight -= 1;
     }
   };
   while (!input.signal.aborted) {
-    await reconcileTopology(input.persistence, input.transport, handler);
+    const allowed = input.departmentIds ? new Set(await input.departmentIds()) : undefined;
+    await reconcileTopology(input.persistence, input.transport, handler, allowed);
     const metrics = await input.persistence.repos.messages.metrics();
     logEvent("info", "consumer health", {
       workerId: input.workerId,
@@ -95,8 +106,11 @@ async function reconcileTopology(
   persistence: Persistence,
   transport: MessageTransport,
   handler: (delivery: InboundDelivery) => Promise<void>,
+  departmentIds?: ReadonlySet<string>,
 ): Promise<void> {
-  const routing = await persistence.repos.messages.listActiveRouting();
+  const routing = (await persistence.repos.messages.listActiveRouting()).filter((target) =>
+    departmentIds ? departmentIds.has(target.departmentId) : true,
+  );
   for (const target of routing) {
     await transport.provisionDepartment(target.departmentId);
     await transport.consume(departmentQueueName(target.departmentId), handler);
@@ -110,6 +124,14 @@ async function reconcileTopology(
   for (const agent of await persistence.repos.messages.listArchivedAgents()) {
     await transport.unbindAgent(agent.departmentId, agent.agentId);
   }
+}
+
+function readId(body: unknown, key: string): string | undefined {
+  if (!body || typeof body !== "object" || !(key in body)) {
+    return undefined;
+  }
+  const value = (body as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : undefined;
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {

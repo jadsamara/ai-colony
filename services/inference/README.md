@@ -1,15 +1,7 @@
-# Inference worker
+# Inference boundary
 
-This directory is reserved for a future Python inference worker. Milestone 1 does not implement it.
+Milestone 3 calls models through `@ai-colony/inference`, an OpenAI-compatible HTTP client. This directory is still not a model server and it does not download weights.
 
-The control plane keeps model metadata in the model registry and agent lifecycle in the TypeScript runtime. Neither downloads weights, opens a model socket, nor claims that an agent is inferring.
+Point `INFERENCE_BASE_URL` at a local Ollama server, by default `http://127.0.0.1:11434`, and set `INFERENCE_MODEL_ALIAS` to the id from `/v1/models`. The control plane probes that endpoint before it records a runtime status of `ready`. Registry metadata alone does not make a model ready.
 
-A later worker can implement the `InferenceWorkerPort` interface in `packages/core/src/runtime/worker-ports.ts`. That port is documentation of the boundary only. No class implements it, and the Milestone 1 runtime does not call it.
-
-Expected future responsibilities, not built here:
-
-- load a registry model id and optional adapter version
-- serve generation requests from an approved runtime
-- report readiness without the control plane pretending the worker exists
-
-Do not add a mock server that returns generated text.
+The Python training and inference workers described in Milestone 1 are still not implemented here.

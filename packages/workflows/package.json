@@ -1,0 +1,30 @@
+{
+  "name": "@ai-colony/workflows",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-colony/contracts": "workspace:*",
+    "@ai-colony/core": "workspace:*",
+    "@ai-colony/database": "workspace:*",
+    "@ai-colony/inference": "workspace:*",
+    "@ai-colony/messaging": "workspace:*",
+    "@langchain/core": "^1.3.2",
+    "@langchain/langgraph": "^1.6.0",
+    "@langchain/langgraph-checkpoint": "^1.2.2",
+    "@langchain/langgraph-checkpoint-postgres": "^1.1.2",
+    "dotenv": "^17.2.3"
+  }
+}

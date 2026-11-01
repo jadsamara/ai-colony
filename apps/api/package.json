@@ -15,6 +15,7 @@
     "@ai-colony/contracts": "workspace:*",
     "@ai-colony/core": "workspace:*",
     "@ai-colony/database": "workspace:*",
+    "@ai-colony/inference": "workspace:*",
     "@fastify/swagger": "^9.5.1",
     "@fastify/swagger-ui": "^5.2.3",
     "dotenv": "^17.2.3",

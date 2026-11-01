@@ -18,8 +18,11 @@ import {
   IdentityService,
   MessagingService,
   ModelService,
+  ObjectiveService,
   type Persistence,
 } from "@ai-colony/core";
+import { QWEN3_8B_MODEL_ID } from "@ai-colony/contracts";
+import { loadInferenceConfig, routeFromConfig } from "@ai-colony/inference";
 import type { AppConfig } from "./config.js";
 import { registerAuth } from "./plugins/auth.js";
 import { registerCorrelation } from "./plugins/correlation.js";
@@ -30,6 +33,7 @@ import { registerGovernanceRoutes } from "./routes/governance.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerMessageRoutes } from "./routes/messages.js";
 import { registerModelRoutes } from "./routes/models.js";
+import { registerObjectiveRoutes } from "./routes/objectives.js";
 import "./types.js";
 
 export interface BuildAppOptions {
@@ -50,6 +54,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.setSerializerCompiler(serializerCompiler);
 
   const authorizer = new Authorizer();
+  const inferenceConfig = loadInferenceConfig(process.env);
+  const messages = new MessagingService(options.persistence, authorizer, DEFAULT_MESSAGING_POLICY);
   const runtime = new AgentRuntime(
     options.persistence,
     authorizer,
@@ -67,7 +73,15 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     ),
     models: new ModelService(options.persistence, authorizer),
     audit: new AuditQueryService(options.persistence, authorizer),
-    messages: new MessagingService(options.persistence, authorizer, DEFAULT_MESSAGING_POLICY),
+    messages,
+    objectives: new ObjectiveService(options.persistence, authorizer, messages),
+    inference: {
+      baseUrl: inferenceConfig.baseUrl,
+      apiKey: inferenceConfig.apiKey,
+      primaryModelId: QWEN3_8B_MODEL_ID,
+      staleAfterMs: options.config.runtimeStaleAfterMs,
+      route: routeFromConfig(inferenceConfig),
+    },
   });
   app.decorateRequest("actor", null);
   app.decorateRequest("correlationId", "");
@@ -78,7 +92,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         title: "AI Colony API",
         version: "1.0.0",
         description:
-          "AI Colony control plane. Departments, agents, IACP messages, model metadata, approvals, budgets, and audit. This API does not run inference or training. A message cannot grant permissions, change budgets, or activate a department. Stored budgets do not limit cloud spend. AUTH_MODE=disabled fail-closes every non-public route. Development bearer authentication is refused when NODE_ENV=production.",
+          "AI Colony control plane and IACP workflows. Objectives are planned by the CEO graph and dispatched through RabbitMQ. Model output cannot grant permissions, change budgets, create departments, or mark a model ready. Registry metadata is not deployment. AUTH_MODE=disabled fail-closes every non-public route. Development bearer authentication is refused when NODE_ENV=production. Stored budgets do not limit cloud spend.",
       },
       components: {
         securitySchemes: {
@@ -115,6 +129,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await registerAgentRoutes(app);
   await registerModelRoutes(app);
   await registerMessageRoutes(app);
+  await registerObjectiveRoutes(app);
   await registerGovernanceRoutes(app);
 
   app.get("/api/v1/openapi.json", { schema: { hide: true } }, async () => app.swagger());

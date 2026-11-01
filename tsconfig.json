@@ -5,6 +5,8 @@
     { "path": "./packages/core" },
     { "path": "./packages/database" },
     { "path": "./packages/messaging" },
+    { "path": "./packages/inference" },
+    { "path": "./packages/workflows" },
     { "path": "./apps/api" }
   ]
 }

@@ -25,6 +25,7 @@ import {
   principals,
 } from "../schema/index.js";
 import { createMessageRepository } from "./messages.js";
+import { createObjectiveRepository } from "./objectives.js";
 import {
   mapAgent,
   mapApproval,
@@ -577,6 +578,7 @@ export function createRepositories(db: DbExecutor): Repositories {
       },
     },
     messages: createMessageRepository(db),
+    objectives: createObjectiveRepository(db),
   };
 }
 

@@ -7,7 +7,9 @@
       "@ai-colony/contracts": ["./packages/contracts/src/index.ts"],
       "@ai-colony/core": ["./packages/core/src/index.ts"],
       "@ai-colony/database": ["./packages/database/src/index.ts"],
-      "@ai-colony/messaging": ["./packages/messaging/src/index.ts"]
+      "@ai-colony/messaging": ["./packages/messaging/src/index.ts"],
+      "@ai-colony/inference": ["./packages/inference/src/index.ts"],
+      "@ai-colony/workflows": ["./packages/workflows/src/index.ts"]
     }
   },
   "include": [

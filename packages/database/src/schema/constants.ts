@@ -99,3 +99,46 @@ export const PROCESSING_STATUSES = [
 ] as const;
 
 export const DEAD_LETTER_STATUSES = ["open", "redriven"] as const;
+
+export const OBJECTIVE_STATUSES = [
+  "submitted",
+  "planning",
+  "awaiting_approval",
+  "scheduled",
+  "running",
+  "synthesizing",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+
+export const TASK_STATUSES = [
+  "pending",
+  "ready",
+  "dispatched",
+  "running",
+  "completed",
+  "failed",
+  "timed_out",
+  "cancelled",
+] as const;
+
+export const TASK_TYPES = ["math", "science", "research", "reasoning"] as const;
+
+export const RUNTIME_STATUSES = [
+  "not_deployed",
+  "loading",
+  "ready",
+  "unavailable",
+  "failed",
+] as const;
+
+export const INFERENCE_REQUEST_STATUSES = [
+  "reserved",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+
+export const TOKEN_SOURCES = ["observed", "unavailable", "estimated"] as const;

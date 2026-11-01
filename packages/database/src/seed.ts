@@ -3,6 +3,7 @@ import {
   ROLE_NAMES,
   SPECIFICATION_VERSION,
   SYSTEM_ADMINISTRATOR_ID,
+  parameterBudgetSchema,
   resourceBudgetSchema,
 } from "@ai-colony/contracts";
 import {
@@ -15,6 +16,7 @@ import {
 import { sql } from "drizzle-orm";
 import type { Database } from "./client.js";
 import {
+  agents,
   auditEvents,
   departments,
   models,
@@ -27,6 +29,7 @@ import {
 export interface SeedResult {
   departmentsInserted: number;
   modelsInserted: number;
+  agentsInserted: number;
 }
 
 export const SEED_DEPARTMENT_BUDGET = resourceBudgetSchema.parse({
@@ -153,6 +156,16 @@ const INITIAL_MODELS = [
     parameterCount: 270_000_000,
     contextWindow: 32768,
   },
+] as const;
+
+const FOUNDING_AGENTS = [
+  ["00000000-0000-4000-8000-000000000201", "00000000-0000-4000-8000-000000000011", "CEO", "ceo_agent", "seed.ceo", "00000000-0000-4000-8000-000000000101", "Plans objectives. Does not grant permissions."],
+  ["00000000-0000-4000-8000-000000000202", "00000000-0000-4000-8000-000000000012", "Orchestration", "orchestration_agent", "seed.orchestration", "00000000-0000-4000-8000-000000000102", "Schedules approved tasks."],
+  ["00000000-0000-4000-8000-000000000203", "00000000-0000-4000-8000-000000000013", "Monitoring", "monitoring_agent", "seed.monitoring", "00000000-0000-4000-8000-000000000102", "Observes execution and publishes health alerts."],
+  ["00000000-0000-4000-8000-000000000204", "00000000-0000-4000-8000-000000000019", "Math", "department_agent", "seed.math", "00000000-0000-4000-8000-000000000101", "Completes quantitative tasks."],
+  ["00000000-0000-4000-8000-000000000205", "00000000-0000-4000-8000-00000000001b", "Science", "department_agent", "seed.science", "00000000-0000-4000-8000-000000000101", "Completes scientific analysis tasks."],
+  ["00000000-0000-4000-8000-000000000206", "00000000-0000-4000-8000-000000000018", "Research", "department_agent", "seed.research", "00000000-0000-4000-8000-000000000101", "Completes evidence tasks without external tools."],
+  ["00000000-0000-4000-8000-000000000207", "00000000-0000-4000-8000-00000000001a", "Reasoning", "department_agent", "seed.reasoning", "00000000-0000-4000-8000-000000000101", "Completes reasoning tasks."],
 ] as const;
 
 type SeedExecutor = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -296,13 +309,76 @@ export async function seed(db: Database): Promise<SeedResult> {
       }
     }
 
-    return { departmentsInserted, modelsInserted };
+    const agentBudget = resourceBudgetSchema.parse({
+      ...SEED_DEPARTMENT_BUDGET,
+      maxConcurrentExecutions: 1,
+    });
+    const parameterBudget = parameterBudgetSchema.parse({
+      maxModelParameterCount: { value: 0, unit: "parameters" },
+    });
+    let agentsInserted = 0;
+    for (const [id, departmentId, name, role, namespace, modelId, description] of FOUNDING_AGENTS) {
+      const inserted = await tx
+        .insert(agents)
+        .values({
+          id,
+          departmentId,
+          name,
+          roleName: role,
+          description,
+          capabilities: ["text-generation"],
+          modelId,
+          adapterVersion: null,
+          memoryNamespace: namespace,
+          computeBudget: agentBudget,
+          parameterBudget,
+          status: "idle",
+          performanceMetrics: {},
+          parentAgentId: null,
+          specificationVersion: SPECIFICATION_VERSION,
+        })
+        .onConflictDoNothing({ target: agents.id })
+        .returning();
+      const row = inserted[0];
+      if (!row) {
+        continue;
+      }
+      agentsInserted += 1;
+      await tx
+        .insert(principals)
+        .values({
+          id,
+          principalType: "agent",
+          displayName: name,
+          roleName: role,
+          agentId: id,
+        })
+        .onConflictDoNothing();
+      await recordSeedAudit(tx, "agent", row.id, "agent.created", {
+        id: row.id,
+        name: row.name,
+        status: row.status,
+        role: row.roleName,
+      });
+    }
+
+    return { departmentsInserted, modelsInserted, agentsInserted };
   });
 }
 
 export async function truncateColony(db: Database): Promise<void> {
   await db.execute(sql`
     TRUNCATE TABLE
+      inference_usage,
+      inference_requests,
+      task_results,
+      task_assignments,
+      objective_tasks,
+      objective_plans,
+      workflow_events,
+      worker_heartbeats,
+      objective_runs,
+      model_runtimes,
       message_delivery_attempts,
       message_dead_letters,
       message_processing_records,

@@ -94,4 +94,64 @@ export const MAX_MESSAGE_PAYLOAD_BYTES = 65_536;
 
 export const SYSTEM_ADMINISTRATOR_ID = "00000000-0000-4000-8000-000000000001";
 
+export const QWEN3_8B_MODEL_ID = "00000000-0000-4000-8000-000000000101";
+export const QWEN3_4B_MODEL_ID = "00000000-0000-4000-8000-000000000102";
+export const GEMMA3_270M_MODEL_ID = "00000000-0000-4000-8000-000000000103";
+
+export const OBJECTIVE_STATUSES = [
+  "submitted",
+  "planning",
+  "awaiting_approval",
+  "scheduled",
+  "running",
+  "synthesizing",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+
+export const TASK_STATUSES = [
+  "pending",
+  "ready",
+  "dispatched",
+  "running",
+  "completed",
+  "failed",
+  "timed_out",
+  "cancelled",
+] as const;
+
+export const TASK_TYPES = ["math", "science", "research", "reasoning"] as const;
+
+export const RUNTIME_STATUSES = [
+  "not_deployed",
+  "loading",
+  "ready",
+  "unavailable",
+  "failed",
+] as const;
+
+export const INFERENCE_REQUEST_STATUSES = [
+  "reserved",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+
+export const TOKEN_SOURCES = ["observed", "unavailable", "estimated"] as const;
+
+export const OBJECTIVE_HARD_CAPS = {
+  maxInferenceRequests: 24,
+  maxOutputTokens: 16_384,
+  maxEstimatedTokens: 65_536,
+  maxTaskAttempts: 3,
+  maxConcurrentTasks: 2,
+  maxDurationMs: 60 * 60 * 1000,
+  maxPlanCorrections: 2,
+  maxTasks: 8,
+  maxDependencyDepth: 4,
+  objectiveText: 8_000,
+} as const;
+
 export const PERMANENT_DEPARTMENT_TYPES = ["system", "specialized", "experimental"] as const;
