@@ -24,6 +24,10 @@ import {
   models,
   principals,
 } from "../schema/index.js";
+import { createMemoryRepository } from "./memories.js";
+import { createEvaluationRepository } from "./evaluation.js";
+import { createLearningRepository } from "./learning.js";
+import { createTrainingRepository } from "./training.js";
 import { createMessageRepository } from "./messages.js";
 import { createObjectiveRepository } from "./objectives.js";
 import {
@@ -579,6 +583,10 @@ export function createRepositories(db: DbExecutor): Repositories {
     },
     messages: createMessageRepository(db),
     objectives: createObjectiveRepository(db),
+    memories: createMemoryRepository(db),
+    training: createTrainingRepository(db),
+    evaluation: createEvaluationRepository(db),
+    learning: createLearningRepository(db),
   };
 }
 

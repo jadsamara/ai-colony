@@ -1,0 +1,123 @@
+{
+  "startedAt": "2026-11-01T15:51:03.950Z",
+  "demonstration": "completed",
+  "qwenBefore": {
+    "status": "not_deployed",
+    "artifactUri": null
+  },
+  "revokedCandidateBefore": "revoked",
+  "knowledge": {
+    "transferId": "05d9eaba-6b10-4e69-b3ff-feb57ead6983",
+    "sourceMemoryId": "f7eb735c-69ad-41bf-9794-0a363157d161",
+    "acceptedMemoryId": "98ff418c-b816-499a-8781-161b73b2396b",
+    "retrieved": true,
+    "retrievalMode": "hybrid",
+    "embeddingModel": "embeddinggemma",
+    "invalidTransfer": "Model-generated or forgotten content cannot be transferred as verified knowledge",
+    "outcome": "MEMORY_IMPROVEMENT"
+  },
+  "specialization": {
+    "mathDepartment": "00000000-0000-4000-8000-000000000019",
+    "scienceDepartment": "00000000-0000-4000-8000-00000000001b",
+    "mathTool": {
+      "tool": "exact_arithmetic",
+      "output": "13",
+      "modelCopied": false
+    },
+    "scienceTool": "Department 00000000-0000-4000-8000-00000000001b is not approved to use exact_arithmetic",
+    "mathAssignment": {
+      "family": "qwen3",
+      "candidateId": null,
+      "role": "shared_base"
+    },
+    "scienceAssignment": {
+      "family": "qwen3",
+      "candidateId": null,
+      "role": "shared_base"
+    },
+    "revokedAdapterOnQwen": "The revoked M5 candidate stays revoked",
+    "independentlyTrained": false
+  },
+  "training": {
+    "cycleId": "f96ff49d-2258-4d65-800f-37263d25ec26",
+    "objectiveId": "f48c0fa8-dc7b-4d92-a192-e2fc1c0c5c9b",
+    "benchmarkVersionId": "60fd01cf-a2e0-428e-a8f9-075de2b15c99",
+    "sealedItemsHiddenFromMath": true,
+    "executionBeforeApproval": "The learning cycle has no training proposal",
+    "trainingRunId": "87e19092-e603-48cf-8efe-14d979329cf2",
+    "trainingStatus": "evaluating",
+    "retrained": true,
+    "evaluationRunId": "396efaba-7bf4-4949-b571-8611d9f70515",
+    "summary": {
+      "scorerId": "arithmetic",
+      "scorerVersion": "m6-equation-v1",
+      "benchmarkVersionId": "60fd01cf-a2e0-428e-a8f9-075de2b15c99",
+      "contentHash": "3880e089ba8e69ca0a3d0195930726640f4231d23abdaa1a1d55f80defca8be5",
+      "sampleSize": 30,
+      "strictBaseline": 0,
+      "strictCandidate": 0,
+      "taskBaseline": 0,
+      "taskCandidate": 0,
+      "formatBaseline": 0.3,
+      "formatCandidate": 0.2,
+      "paired": {
+        "sampleSize": 30,
+        "bothCorrect": 0,
+        "baselineOnly": 0,
+        "candidateOnly": 0,
+        "neitherCorrect": 30,
+        "baselineAccuracy": 0,
+        "candidateAccuracy": 0,
+        "difference": 0
+      },
+      "wilsonBaseline": {
+        "low": 0,
+        "high": 0.113517091390478
+      },
+      "wilsonCandidate": {
+        "low": 0,
+        "high": 0.113517091390478
+      },
+      "pValue": 1,
+      "claimSignificance": false,
+      "baseSha256": "0e2acba196efd538420b12060013cab1b11344fb8ebfd6a1c5813cafc2f79162",
+      "adapterSha256": "36d29035475a9f7fbda9541d264582d49361d2e49c9d779b15ee832dc426ac9f",
+      "candidateId": "90e946d9-1f73-416a-b48d-fb34e5492494",
+      "framework": "mlx",
+      "decoding": {
+        "strategy": "greedy",
+        "maxTokens": 8,
+        "temperature": 0
+      },
+      "productionModelId": "00000000-0000-4000-8000-000000000101",
+      "historicalM5RowPreserved": true
+    },
+    "gate": "PASS",
+    "gateMeaning": "The frozen gate returned PASS because task accuracy did not fall and the sample had 30 items. Both models scored 0/30 on task accuracy. Format accuracy fell from 9/30 to 6/30. PASS here means no critical regression under the frozen rule, not a verified improvement.",
+    "adopted": false,
+    "outcome": "NO_VERIFIED_IMPROVEMENT",
+    "withdrawnClaim": "The first adopt() call recorded ADOPTED and MODEL_WEIGHT_IMPROVEMENT. That claim was withdrawn. The cycle is REJECTED, the outcome is unverified, and production routing was not changed.",
+    "published": {
+      "messageId": "8b0b0f30-d219-46e4-b831-40058fc0743f",
+      "cycleId": "f96ff49d-2258-4d65-800f-37263d25ec26",
+      "status": "ADOPTED",
+      "outcome": "MODEL_WEIGHT_IMPROVEMENT",
+      "note": "This first notification overclaimed the result. Message ddcf4005-c159-4af9-81e6-ea83a9e3d96c later reported REJECTED and NO_VERIFIED_IMPROVEMENT."
+    },
+    "retrainedTwice": false
+  },
+  "recovery": {
+    "next": "none",
+    "executedByResume": false,
+    "trainingStatus": "evaluating",
+    "retrained": false
+  },
+  "qwenAfter": {
+    "status": "not_deployed",
+    "artifactUri": null
+  },
+  "productionUnchanged": true,
+  "historicalM5Unchanged": true,
+  "revokedCandidateAfter": "revoked",
+  "finishedAt": "2026-11-01T15:51:19.257Z"
+}

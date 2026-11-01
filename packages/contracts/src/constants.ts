@@ -72,6 +72,12 @@ export const MESSAGE_TYPES = [
   "RESOURCE_REQUEST",
   "HEALTH_ALERT",
   "EVOLUTION_PROPOSAL",
+  "CAPABILITY_GAP",
+  "LEARNING_OBJECTIVE",
+  "KNOWLEDGE_TRANSFER",
+  "KNOWLEDGE_VALIDATION",
+  "LEARNING_CYCLE_RESULT",
+  "CAPABILITY_UPDATE",
 ] as const;
 
 export const MESSAGE_STATUSES = [
@@ -97,6 +103,22 @@ export const SYSTEM_ADMINISTRATOR_ID = "00000000-0000-4000-8000-000000000001";
 export const QWEN3_8B_MODEL_ID = "00000000-0000-4000-8000-000000000101";
 export const QWEN3_4B_MODEL_ID = "00000000-0000-4000-8000-000000000102";
 export const GEMMA3_270M_MODEL_ID = "00000000-0000-4000-8000-000000000103";
+
+export const TRAINING_PROFILE_ID = "gemma3-270m-math-v1" as const;
+
+export const TRAINING_RUN_STATUSES = [
+  "proposed",
+  "awaiting_approval",
+  "queued",
+  "preparing",
+  "training",
+  "evaluating",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+
+export const CANDIDATE_STATUSES = ["experimental", "rejected", "approved", "retired", "revoked", "quarantined"] as const;
 
 export const OBJECTIVE_STATUSES = [
   "submitted",
@@ -140,6 +162,14 @@ export const INFERENCE_REQUEST_STATUSES = [
 ] as const;
 
 export const TOKEN_SOURCES = ["observed", "unavailable", "estimated"] as const;
+
+export const MEMORY_SCOPES = ["agent", "department", "colony"] as const;
+export const MEMORY_CATEGORIES = ["episodic", "semantic", "procedural", "failure", "operational"] as const;
+export const MEMORY_PROVENANCE = ["model_generated", "system_observed", "user_provided", "externally_verified"] as const;
+export const MEMORY_STATUSES = ["candidate", "validated", "disputed", "superseded", "archived", "expired", "forgetting_requested", "forgotten"] as const;
+export const MEMORY_PROMOTION_STATUSES = ["pending", "approved", "rejected"] as const;
+/** Measured from Ollama `embeddinggemma` via POST /api/embed. Do not mix another model into this space. */
+export const EMBEDDING_DIMENSIONS = 768 as const;
 
 export const OBJECTIVE_HARD_CAPS = {
   maxInferenceRequests: 24,

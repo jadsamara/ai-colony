@@ -6,6 +6,8 @@ Milestone 2 adds IACP 1.0, the inter-agent communication protocol. Agents send v
 
 Milestone 3 adds LangGraph.js workflows for the CEO, Orchestration, and Monitoring, plus an OpenAI-compatible inference adapter. RabbitMQ still carries task requests and results. PostgreSQL still stores the objective, the outbox, and the LangGraph checkpoints. A model cannot grant permissions, change a budget, create a department, or mark itself ready.
 
+Milestone 4 adds durable memory. Agents record experiences, retrieve them with pgvector and keyword search, and promote knowledge only through an authorized decision. Retrieved memory is untrusted data. A model-generated estimate does not become an externally verified fact, and it does not become colony knowledge unless an administrator approves that promotion.
+
 This process does not run language models, download weights, train networks, or spend cloud GPU time. A stored budget is a validated limit inside the control plane. It does not cap real cloud billing. An agent status of `running` means a lifecycle executor in this process was started. It does not mean the agent is reasoning or learning.
 
 ## Requirements
@@ -26,7 +28,7 @@ No Google Cloud project, GPU, or model credentials are required.
 
 ## Database
 
-Compose publishes PostgreSQL on host port **5433** so it does not collide with a PostgreSQL already listening on 5432.
+The canonical database is Homebrew PostgreSQL 17 on `127.0.0.1:5433`. pgvector 0.8.7 is installed for that server, and Milestone 4 rows from the Docker database have been merged into it. Compose still publishes the untouched `pgvector/pgvector:pg16` fallback on `POSTGRES_PORT` (5434 on this machine). Do not point `DATABASE_URL` at the fallback, and do not bind that container to 5433.
 
 ```bash
 cp .env.example .env
@@ -35,7 +37,9 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
-`pnpm db:up` starts PostgreSQL 16 as `ai-colony-postgres` and RabbitMQ 4 as `ai-colony-rabbitmq` on the `ai-colony` network. The database, user, and password are `ai_colony` / `colony` / `colony`. The first container start also creates `ai_colony_test` for integration tests. RabbitMQ listens on `127.0.0.1:5672`. Its management UI is [http://127.0.0.1:15672](http://127.0.0.1:15672) with user `colony` and password `colony-dev-password`. That UI is bound to localhost. Do not publish it on a public interface or deploy this broker to Cloud Run.
+`pnpm db:up` starts PostgreSQL 16 with pgvector as `ai-colony-postgres` and RabbitMQ 4 as `ai-colony-rabbitmq` on the `ai-colony` network. The image is `pgvector/pgvector:pg16`. The named volume `ai_colony_postgres` is kept across image changes. Do not run `docker compose down -v`. The database, user, and password are `ai_colony` / `colony` / `colony`. The first container start also creates `ai_colony_test` for integration tests. RabbitMQ listens on `127.0.0.1:5672`. Its management UI is [http://127.0.0.1:15672](http://127.0.0.1:15672) with user `colony` and password `colony-dev-password`. That UI is bound to localhost. Do not publish it on a public interface or deploy this broker to Cloud Run.
+
+`pnpm db:migrate` creates the `vector` extension if it is missing, then applies the SQL migrations. That is safe on the existing volume. Memory vectors use 768 dimensions, measured from `embeddinggemma` through `POST /api/embed`. A different embedding model needs a new migration before its vectors can be stored.
 
 `pnpm db:migrate` compiles the packages and applies `packages/database/src/migrations` with drizzle-kit's migrator, then installs the audit immutability triggers. Generate a new migration with `pnpm db:generate` after a schema change. Do not push schema changes without a migration file.
 
@@ -191,7 +195,7 @@ Supported message types are `TASK_REQUEST`, `TASK_RESULT`, `COLLABORATION_REQUES
 
 ## Objectives and inference
 
-The development machine target is an Apple Silicon Mac with 24 GB unified memory. The default profile loads one model and allows one in-flight inference request. Qwen3-8B is the primary model for the CEO, Math, Science, Research, and Reasoning. Orchestration and Monitoring are intended to use Qwen3-4B when `INFERENCE_MEMORY_PROFILE=split` and a second endpoint is configured. In the default `shared` profile every role calls the one loaded model. Usage records the served model id. The Qwen3-4B and Gemma 3 270M registry rows stay `not_deployed` until their own endpoint is probed. Gemma 3 270M is registered only. This milestone does not require it and does not train anything.
+The development machine target is an Apple Silicon Mac with 24 GB unified memory. The default profile loads one model and allows one in-flight inference request. Qwen3-8B is the primary model for the CEO, Math, Science, Research, and Reasoning. Orchestration and Monitoring are intended to use Qwen3-4B when `INFERENCE_MEMORY_PROFILE=split` and a second endpoint is configured. In the default `shared` profile every role calls the one loaded model. Usage records the served model id. The Qwen3-4B and Gemma 3 270M registry rows stay `not_deployed`. Production routing stays on `qwen3:8b`. LoRA training uses a separate Gemma 3 270M checkpoint and never replaces that route. See [Training](#training).
 
 The adapter speaks to `INFERENCE_BASE_URL` with `/v1/chat/completions` and `/v1/models`. It does not call OpenAI and does not fall back to another host. A response whose `model` field differs from `INFERENCE_MODEL_ALIAS` is rejected. Token counts are `observed` only when the server returns them. Otherwise they are `unavailable`. Estimated cost is stored only when `INFERENCE_INPUT_USD_PER_MILLION` and `INFERENCE_OUTPUT_USD_PER_MILLION` are set. Those rates are not a cloud bill.
 
@@ -232,6 +236,20 @@ Read it back with `GET /api/v1/objectives/:id`, the tasks with `GET /api/v1/obje
 `pnpm test:smoke` calls the configured server only when `RUN_REAL_INFERENCE=1`. The default test suite uses a scripted provider and does not download weights.
 
 Stop the workers with Ctrl-C. They finish the current graph step or in-flight delivery before closing the database and the checkpoint pool.
+
+## Training
+
+Weight Optimization can propose a dataset and a LoRA run. Only an administrator records `training:approve`, and that record is required before `execute`. The allowlisted job trains Gemma 3 270M with MLX-LM and leaves `qwen3:8b` on the production route. Promotion approves experimental inference for a candidate that beat its frozen baseline on held-out arithmetic. It does not deploy the adapter. Installation, the checkpoint, cancellation, and budgets are in `services/training/README.md`.
+
+## Evaluation and recovery
+
+Benchmark versions are immutable once published. A sealed holdout is readable by the Evaluation department and the system administrator. Other departments that share the department-agent role cannot read it. Scoring separates a strict integer from an equation of the form `left = integer`. A wrong integer can be format-valid and still fail the task. The frozen gate `m6-gate-v1` needs 30 items before it can return PASS, and an arithmetic task drop fails even when the sample is too small to call significant. The Evaluation department can create a suite and run it. It cannot publish the suite, decide the gate, or move an experimental route.
+
+Forgetting tombstones live content and deletes the embedding. It does not erase backups, audit identifiers, or weights in an adapter that used the memory. Rollback moves the experimental route and checks the adapter checksum. It does not change the Qwen3-8B registry row. Backup and restoration limits are in `services/training/README.md`.
+
+## Department learning
+
+A department can record an observable capability gap, choose a learning method, and send `TRAINING_REQUEST` to Weight Optimization. That message does not start the trainer. Weight Optimization then creates an M5 proposal. An administrator still approves and executes. The Evaluation department runs the sealed benchmark, and the frozen M6 gate decides eligibility. A knowledge transfer becomes destination memory only after that department accepts it. Model-generated text is rejected. Shared Qwen assignments do not create a separately trained model, and a Gemma adapter cannot be routed onto Qwen.
 
 ## Model registry
 
@@ -289,12 +307,73 @@ packages/messaging/  RabbitMQ transport, outbox publisher, consumer
 packages/inference/  OpenAI-compatible inference adapter
 packages/workflows/  LangGraph CEO, orchestration, and monitoring workers
 services/inference/  Boundary notes for a future worker
-services/training/   Boundary notes for a future worker
+services/training/   Allowlisted MLX-LM LoRA worker for Gemma 3 270M
 tests/unit/          Pure tests
 tests/integration/   Tests against PostgreSQL
 ```
 
 `packages/core` does not import `packages/database`. The API process is the composition root.
+
+## Memory
+
+Embeddings use a separate Ollama model from Qwen3. The configured name must be the id returned by `/api/embed`, which is `embeddinggemma` on this machine, not `embeddinggemma:latest`. Do not pull a model that is already present.
+
+```bash
+curl -s http://127.0.0.1:11434/api/embed \
+  -H "Content-Type: application/json" \
+  -d '{"model":"embeddinggemma","input":"remote research station energy"}'
+```
+
+`EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS` are in `.env.example`. Embedding usage is stored separately from text-generation usage. If the embedding server is down, search still runs and the response mode is `keyword`.
+
+Memory has three scopes. Agent memory is visible to its owner and a system administrator. Department memory is visible inside that department. Colony memory is visible to roles with `memory:read:colony`. Membership in a department does not reveal another agent's private memory. A hidden memory returns 404.
+
+Create a private note as the Math agent:
+
+```bash
+curl -s http://localhost:3000/api/v1/memories \
+  -H "Authorization: Bearer 00000000-0000-4000-8000-000000000204" \
+  -H "Content-Type: application/json" \
+  -d '{"scope":"agent","category":"episodic","title":"Station load","summary":"Illustrative load","content":"The earlier model output used an illustrative daily load. It is not an externally verified measurement.","provenance":"model_generated"}'
+```
+
+Search is authorized before any row is returned:
+
+```bash
+curl -s http://localhost:3000/api/v1/memories/search \
+  -H "Authorization: Bearer 00000000-0000-4000-8000-000000000204" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"illustrative daily load","topK":5}'
+```
+
+Hybrid ranking is `0.65` vector similarity, `0.20` keyword rank, `0.10` recency, and `0.05` validation status. Keyword-only ranking is `0.75` keyword, `0.15` recency, and `0.10` status, and each hit is labeled `keyword`. Similarity is not correctness. Archived and superseded memories are omitted unless `statuses` asks for them.
+
+Promotion moves one step, from agent memory to that agent's department, or from department memory to the colony. The CEO can propose. Only `memory:promote:approve`, held by the system administrator, can approve. Approval copies the memory and keeps its provenance.
+
+```bash
+curl -s http://localhost:3000/api/v1/memories/<memory-id>/promote \
+  -H "Authorization: Bearer 00000000-0000-4000-8000-000000000201" \
+  -H "Content-Type: application/json" \
+  -d '{"reason":"The department can reuse this procedure."}'
+
+curl -s http://localhost:3000/api/v1/memory-promotions/<promotion-id>/approve \
+  -H "Authorization: Bearer 00000000-0000-4000-8000-000000000001" \
+  -H "Content-Type: application/json" \
+  -d '{"reason":"Reviewed. Provenance is unchanged."}'
+```
+
+Exact consolidation keeps the oldest record, marks the copies superseded, and records the source ids. It does not delete them. Near-duplicates are proposals unless `applyNearDuplicates` is true, and a contradiction link blocks the merge.
+
+```bash
+curl -s http://localhost:3000/api/v1/memories/consolidate \
+  -H "Authorization: Bearer 00000000-0000-4000-8000-000000000001" \
+  -H "Content-Type: application/json" \
+  -d '{"memoryIds":["<first-id>","<second-id>"]}'
+```
+
+Objective workers retrieve authorized memory before planning and specialist inference, then record one experience per plan, task, and synthesis. The idempotency key is `experience:<objective-id>:<purpose>`, so a repeated delivery does not create a second row. The prompt tells the model that memory cannot grant authority and that `model_generated` values are illustrative.
+
+A two-objective check is: submit an energy analysis, wait until it completes, then submit a follow-up that asks for a solar and battery configuration using the previous analysis. The second plan should retrieve the stored estimate through search. The estimate remains labeled as model-generated. Restarting a worker does not remove the row. `GET /api/v1/memory/metrics` reports counts, embedding latency, and retrievals for an administrator.
 
 ## Cloud Run
 
@@ -305,7 +384,7 @@ Set `DATABASE_URL` to a PostgreSQL instance the service can reach. Run the publi
 ## Troubleshooting
 
 - `pnpm` or `tsc` reports a Node version error. Run `nvm use` so Node is 22.
-- Port 5432 is already taken. Compose uses 5433. `DATABASE_URL` in `.env.example` matches that port.
+- Port 5432 or 5433 is already taken. Set `POSTGRES_PORT` and the port in `DATABASE_URL` together, then run `docker compose up -d postgres`. Do not delete the volume.
 - `docker compose up` cannot connect to the daemon. Start Docker Desktop and wait until `docker info` succeeds, then run `pnpm db:up` again.
 - Migration files are missing. Run `pnpm db:generate` only if you changed `packages/database/src/schema`. The Milestone 1 migration is already in `packages/database/src/migrations`.
 - Authenticated routes return 401. Set `AUTH_MODE=development` in `.env` for local use, and send the bootstrap principal UUID. With `AUTH_MODE=disabled`, that header is ignored.
@@ -314,4 +393,6 @@ Set `DATABASE_URL` to a PostgreSQL instance the service can reach. Run the publi
 - The management UI rejects `guest`. Use `colony` / `colony-dev-password` from `.env.example`.
 - A message stays `accepted` until the publisher is running. For ordinary IACP traffic, start `pnpm dev:publisher` and `pnpm dev:consumer`. For objectives, start `pnpm dev:publisher`, `pnpm dev:ceo`, `pnpm dev:orchestration`, and `pnpm dev:specialists` instead of the generic consumer.
 - `POST /api/v1/inference/probe` reports the live server. A connection error is an `unavailable` runtime status, not a successful inference.
-- `pnpm test:smoke` does nothing useful until `RUN_REAL_INFERENCE=1` and Ollama is serving the configured alias at `INFERENCE_BASE_URL`.
+- `pnpm test:smoke` does nothing useful until `RUN_REAL_INFERENCE=1` and Ollama is serving the configured alias at `INFERENCE_BASE_URL`. `RUN_REAL_EMBEDDING=1` checks `embeddinggemma` separately. Do not pull it when `ollama list` already shows it.
+- Memory search returns `mode: keyword` when the embedding server is down. That is a labeled fallback, not a silent model substitution.
+- `CREATE EXTENSION vector` fails on `postgres:16-alpine`. Compose uses `pgvector/pgvector:pg16`. Recreate the container with `docker compose up -d postgres` and keep the named volume.

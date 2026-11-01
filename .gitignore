@@ -6,3 +6,6 @@ coverage/
 .DS_Store
 .drizzle/
 .pnpm-store/
+services/training/.venv/
+services/training/artifacts/
+services/training/checkpoints/

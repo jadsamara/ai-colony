@@ -22,6 +22,41 @@
       "when": 1793502848319,
       "tag": "0002_objectives",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793511336200,
+      "tag": "0003_memory",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793543175713,
+      "tag": "0004_training",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793546614500,
+      "tag": "0005_stormy_multiple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793547792853,
+      "tag": "0006_tricky_expediter",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793549256995,
+      "tag": "0007_m7h_hardening",
+      "breakpoints": true
     }
   ]
 }

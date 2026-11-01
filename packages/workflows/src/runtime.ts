@@ -35,6 +35,7 @@ export async function executePrepared(
     jsonObject: prepared.purpose === "plan" || prepared.purpose === "correct",
     signal,
   };
+  request.messages = (await service.memoryMessages(prepared)) ?? prepared.messages;
   try {
     const result = await provider.generate(request);
     await service.completeGeneration({

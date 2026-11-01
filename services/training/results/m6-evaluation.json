@@ -1,0 +1,271 @@
+{
+  "startedAt": "2026-11-01T15:34:29.964Z",
+  "demonstration": "completed",
+  "qwenBefore": {
+    "status": "not_deployed",
+    "artifactUri": null
+  },
+  "gemmaBefore": {
+    "status": "not_deployed",
+    "artifactUri": null
+  },
+  "historicalM5EvaluationId": "cfc7190c-f6cc-4b2c-819e-cc00e7e1ca83",
+  "benchmark": {
+    "suiteId": "82c61874-78a2-4a81-8ed2-8f72d3b1ace5",
+    "versionId": "cc9294d5-7035-4fc4-94d4-7d1b009e63e4",
+    "scorer": "arithmetic/m6-equation-v1",
+    "sealed": true
+  },
+  "historical": {
+    "summary": {
+      "scorerId": "arithmetic",
+      "scorerVersion": "m6-equation-v1",
+      "benchmarkVersionId": "cc9294d5-7035-4fc4-94d4-7d1b009e63e4",
+      "contentHash": "1d3165002f333e0b854f39fc0f6a753d4f430cd1cea85bacc7f271c0bffef16d",
+      "sampleSize": 5,
+      "strictBaseline": 0,
+      "strictCandidate": 0.2,
+      "taskBaseline": 0.6,
+      "taskCandidate": 0.2,
+      "formatBaseline": 1,
+      "formatCandidate": 1,
+      "paired": {
+        "sampleSize": 5,
+        "bothCorrect": 0,
+        "baselineOnly": 3,
+        "candidateOnly": 1,
+        "neitherCorrect": 1,
+        "baselineAccuracy": 0.6,
+        "candidateAccuracy": 0.2,
+        "difference": -0.4
+      },
+      "wilsonBaseline": {
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467
+      },
+      "wilsonCandidate": {
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613
+      },
+      "pValue": 0.625,
+      "claimSignificance": false,
+      "baseSha256": "0e2acba196efd538420b12060013cab1b11344fb8ebfd6a1c5813cafc2f79162",
+      "adapterSha256": "f6c44d975820f871c7929e82c3ea548cba66fc7ad3e6d33b7b15f06d2f28b6f4",
+      "candidateId": "4c67ce90-ad8c-4b9b-9994-2a9454e915d7",
+      "framework": "mlx",
+      "decoding": {
+        "strategy": "greedy",
+        "maxTokens": 8,
+        "temperature": 0
+      },
+      "productionModelId": "00000000-0000-4000-8000-000000000101",
+      "historicalM5RowPreserved": true
+    },
+    "gate": "FAIL",
+    "rationale": "arithmetic task correctness fell; a format gain cannot offset it"
+  },
+  "live": {
+    "summary": {
+      "scorerId": "arithmetic",
+      "scorerVersion": "m6-equation-v1",
+      "benchmarkVersionId": "cc9294d5-7035-4fc4-94d4-7d1b009e63e4",
+      "contentHash": "1d3165002f333e0b854f39fc0f6a753d4f430cd1cea85bacc7f271c0bffef16d",
+      "sampleSize": 5,
+      "strictBaseline": 0,
+      "strictCandidate": 0.2,
+      "taskBaseline": 0.6,
+      "taskCandidate": 0.2,
+      "formatBaseline": 1,
+      "formatCandidate": 1,
+      "paired": {
+        "sampleSize": 5,
+        "bothCorrect": 0,
+        "baselineOnly": 3,
+        "candidateOnly": 1,
+        "neitherCorrect": 1,
+        "baselineAccuracy": 0.6,
+        "candidateAccuracy": 0.2,
+        "difference": -0.4
+      },
+      "wilsonBaseline": {
+        "low": 0.23071993220883708,
+        "high": 0.8823817688407467
+      },
+      "wilsonCandidate": {
+        "low": 0.03622316096978745,
+        "high": 0.6244717358814613
+      },
+      "pValue": 0.625,
+      "claimSignificance": false,
+      "baseSha256": "0e2acba196efd538420b12060013cab1b11344fb8ebfd6a1c5813cafc2f79162",
+      "adapterSha256": "f6c44d975820f871c7929e82c3ea548cba66fc7ad3e6d33b7b15f06d2f28b6f4",
+      "candidateId": "4c67ce90-ad8c-4b9b-9994-2a9454e915d7",
+      "framework": "mlx",
+      "decoding": {
+        "strategy": "greedy",
+        "maxTokens": 8,
+        "temperature": 0
+      },
+      "productionModelId": "00000000-0000-4000-8000-000000000101",
+      "historicalM5RowPreserved": true
+    },
+    "gate": "FAIL",
+    "rationale": "arithmetic task correctness fell; a format gain cannot offset it",
+    "items": [
+      {
+        "id": "debc33d3-bbbd-478b-992a-f5e85c0dbdf0",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 0,
+        "role": "baseline",
+        "rawOutput": "0 + 1 = 1",
+        "taskCorrect": true,
+        "formatValid": true,
+        "strictIntegerMatch": false,
+        "ambiguous": false,
+        "equationValue": "1"
+      },
+      {
+        "id": "faae659e-9cd2-4102-a34a-d3425b9211ee",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 0,
+        "role": "candidate",
+        "rawOutput": "11",
+        "taskCorrect": false,
+        "formatValid": true,
+        "strictIntegerMatch": false,
+        "ambiguous": false,
+        "equationValue": null
+      },
+      {
+        "id": "47b687ee-08dc-41f5-bb44-8a71baaa0053",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 1,
+        "role": "baseline",
+        "rawOutput": "0 + 10 = 1",
+        "taskCorrect": false,
+        "formatValid": true,
+        "strictIntegerMatch": false,
+        "ambiguous": false,
+        "equationValue": "1"
+      },
+      {
+        "id": "f0b2efba-716a-4940-9dee-578e67497d56",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 1,
+        "role": "candidate",
+        "rawOutput": "10",
+        "taskCorrect": true,
+        "formatValid": true,
+        "strictIntegerMatch": true,
+        "ambiguous": false,
+        "equationValue": null
+      },
+      {
+        "id": "2d1a0470-de84-420e-88ed-dbbf71c359a8",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 2,
+        "role": "baseline",
+        "rawOutput": "0 + 7 = 7",
+        "taskCorrect": true,
+        "formatValid": true,
+        "strictIntegerMatch": false,
+        "ambiguous": false,
+        "equationValue": "7"
+      },
+      {
+        "id": "85f8dc56-df1c-47a7-bbf3-2d327c24179f",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 2,
+        "role": "candidate",
+        "rawOutput": "11",
+        "taskCorrect": false,
+        "formatValid": true,
+        "strictIntegerMatch": false,
+        "ambiguous": false,
+        "equationValue": null
+      },
+      {
+        "id": "c5544ada-1912-4454-b9c9-660fbeaae124",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 3,
+        "role": "baseline",
+        "rawOutput": "1 + 12 = 1",
+        "taskCorrect": false,
+        "formatValid": true,
+        "strictIntegerMatch": false,
+        "ambiguous": false,
+        "equationValue": "1"
+      },
+      {
+        "id": "aae26e2c-341e-461f-ae85-a03089d7fa05",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 3,
+        "role": "candidate",
+        "rawOutput": "15",
+        "taskCorrect": false,
+        "formatValid": true,
+        "strictIntegerMatch": false,
+        "ambiguous": false,
+        "equationValue": null
+      },
+      {
+        "id": "db9f0000-6846-4cbc-a81d-5de70a2c8b34",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 4,
+        "role": "baseline",
+        "rawOutput": "2 + 7 = 9",
+        "taskCorrect": true,
+        "formatValid": true,
+        "strictIntegerMatch": false,
+        "ambiguous": false,
+        "equationValue": "9"
+      },
+      {
+        "id": "b98af082-0265-4017-9ecd-f63400763fca",
+        "runId": "b09ef569-1d58-4439-94c1-97c1bcaa1e71",
+        "ordinal": 4,
+        "role": "candidate",
+        "rawOutput": "19",
+        "taskCorrect": false,
+        "formatValid": true,
+        "strictIntegerMatch": false,
+        "ambiguous": false,
+        "equationValue": null
+      }
+    ]
+  },
+  "forgetting": {
+    "requestId": "cbabc99f-a6d9-4c47-a0f0-9236d001f1fe",
+    "memoryId": "de33f564-f65d-43d3-a0bd-42bd9e5ab165",
+    "relation": "not_used",
+    "weightUnlearning": false,
+    "retrievableBefore": true,
+    "retrievableAfter": false,
+    "embeddingRemoved": true,
+    "auditKept": true,
+    "secretInAudit": false,
+    "otherMemoriesUnchanged": true,
+    "productionMemoryUnchanged": true
+  },
+  "rollback": {
+    "status": "completed",
+    "fromVersion": 2,
+    "restoredVersion": 1,
+    "adapterSha256": "f6c44d975820f871c7929e82c3ea548cba66fc7ad3e6d33b7b15f06d2f28b6f4",
+    "loadedAdapter": true,
+    "verificationOutput": "10",
+    "revokedStatus": "revoked",
+    "routeAfterRevoke": 2
+  },
+  "qwenAfter": {
+    "status": "not_deployed",
+    "artifactUri": null
+  },
+  "gemmaAfter": {
+    "status": "not_deployed",
+    "artifactUri": null
+  },
+  "productionUnchanged": true,
+  "historicalM5Unchanged": true,
+  "finishedAt": "2026-11-01T15:34:40.822Z"
+}

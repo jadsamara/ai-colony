@@ -1,6 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ResourceBudget } from "@ai-colony/contracts";
+import { ScriptedTrainingProvider, type TrainingProvider } from "@ai-colony/core";
 import { SYSTEM_ADMINISTRATOR_ID } from "@ai-colony/contracts";
 import type { FastifyInstance, InjectOptions } from "fastify";
+import { ScriptedEmbeddingProvider } from "@ai-colony/inference";
 import { createPersistence } from "@ai-colony/database";
 import { buildApp } from "../../apps/api/src/app.js";
 import { loadConfig } from "../../apps/api/src/config.js";
@@ -47,6 +52,8 @@ export async function createTestApp(options?: {
   authMode?: "development" | "disabled";
   checkReady?: () => Promise<boolean>;
   staleAfterMs?: number;
+  trainingProvider?: TrainingProvider;
+  trainingRoots?: { artifacts: string; checkpoints: string };
 }): Promise<FastifyInstance> {
   const config = loadConfig({
     NODE_ENV: "test",
@@ -57,9 +64,13 @@ export async function createTestApp(options?: {
     LOG_LEVEL: "silent",
     RUNTIME_STALE_AFTER_MS: String(options?.staleAfterMs ?? 30_000),
   });
+  const root = mkdtempSync(join(tmpdir(), "ai-colony-training-"));
   return buildApp({
     config,
     persistence,
+    embeddings: new ScriptedEmbeddingProvider(),
+    trainingProvider: options?.trainingProvider ?? new ScriptedTrainingProvider(),
+    trainingRoots: options?.trainingRoots ?? { artifacts: join(root, "artifacts"), checkpoints: join(root, "checkpoints") },
     ...(options?.checkReady ? { checkReady: options.checkReady } : {}),
   });
 }
@@ -134,7 +145,23 @@ export async function expectStatus(app: FastifyInstance, options: InjectOptions,
     department: { id: string; status: string };
     approval: { id: string };
     objective: { id: string };
-    data: Array<{ status: string }>;
+    data: Array<{ id: string; status: string; content: string }>;
+    memory: {
+      id: string;
+      scope: string;
+      status: string;
+      provenance: string;
+      content: string;
+      embeddingModel: string | null;
+      supersededBy: string | null;
+      qualityCalibrated: false;
+    };
+    promotion: { id: string; status: string; toScope: string; createdMemoryId: string | null };
+    hits: Array<{ id: string; retrievalMode: string; provenance: string; content: string }>;
+    mode: string;
+    applied: Array<{ keeperId: string; mergedIds: string[] }>;
+    proposals: Array<{ keeperId: string }>;
+    revisions: Array<{ revision: number; status: string }>;
   };
 }
 

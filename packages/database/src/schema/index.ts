@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   index,
+  doublePrecision,
   integer,
   jsonb,
   pgTable,
@@ -13,9 +14,13 @@ import {
   unique,
   uniqueIndex,
   uuid,
+  vector,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import type { ParameterBudget, ResourceBudget } from "@ai-colony/contracts";
+
+/** Measured length of embeddinggemma vectors from Ollama POST /api/embed. */
+const EMBEDDING_DIMENSIONS = 768;
 import {
   ACTOR_TYPES,
   AGENT_STATUSES,
@@ -685,3 +690,1102 @@ export const workerHeartbeats = pgTable("worker_heartbeats", {
   beatAt: timestamp("beat_at", { withTimezone: true }).notNull(),
   detail: text("detail"),
 });
+
+export const memories = pgTable(
+  "memories",
+  {
+    id: uuid("id").primaryKey(),
+    scope: text("scope").notNull(),
+    category: text("category").notNull(),
+    ownerAgentId: uuid("owner_agent_id").references(() => agents.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").references(() => departments.id, { onDelete: "restrict" }),
+    title: text("title").notNull(),
+    summary: text("summary").notNull(),
+    content: text("content").notNull(),
+    provenance: text("provenance").notNull(),
+    status: text("status").notNull(),
+    qualityScore: doublePrecision("quality_score"),
+    embeddingModel: text("embedding_model"),
+    embeddingDimensions: integer("embedding_dimensions"),
+    contentHash: text("content_hash").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    supersededBy: uuid("superseded_by").references((): AnyPgColumn => memories.id, { onDelete: "restrict" }),
+    originAgentId: uuid("origin_agent_id").references(() => agents.id, { onDelete: "restrict" }),
+    createdBy: text("created_by").notNull(),
+    embeddingError: text("embedding_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("memories_idempotency_key_unique").on(table.idempotencyKey),
+    index("memories_scope_status_idx").on(table.scope, table.status, table.createdAt),
+    index("memories_owner_idx").on(table.ownerAgentId),
+    index("memories_department_idx").on(table.departmentId),
+    index("memories_hash_idx").on(table.contentHash),
+    check("memories_scope_check", sql`${table.scope} in ('agent', 'department', 'colony')`),
+    check("memories_category_check", sql`${table.category} in ('episodic', 'semantic', 'procedural', 'failure', 'operational')`),
+    check("memories_provenance_check", sql`${table.provenance} in ('model_generated', 'system_observed', 'user_provided', 'externally_verified')`),
+    check("memories_status_check", sql`${table.status} in ('candidate', 'validated', 'disputed', 'superseded', 'archived', 'expired', 'forgetting_requested', 'forgotten')`),
+    check(
+      "memories_scope_owner_check",
+      sql`(${table.scope} = 'agent' and ${table.ownerAgentId} is not null and ${table.departmentId} is not null) or (${table.scope} = 'department' and ${table.ownerAgentId} is null and ${table.departmentId} is not null) or (${table.scope} = 'colony' and ${table.ownerAgentId} is null and ${table.departmentId} is null)`,
+    ),
+  ],
+);
+
+export const memoryEmbeddings = pgTable("memory_embeddings", {
+  memoryId: uuid("memory_id")
+    .primaryKey()
+    .references(() => memories.id, { onDelete: "restrict" }),
+  modelName: text("model_name").notNull(),
+  dimensions: integer("dimensions").notNull(),
+  embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const memorySources = pgTable(
+  "memory_sources",
+  {
+    id: uuid("id").primaryKey(),
+    memoryId: uuid("memory_id")
+      .notNull()
+      .references(() => memories.id, { onDelete: "restrict" }),
+    objectiveId: uuid("objective_id").references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    taskId: uuid("task_id").references(() => objectiveTasks.id, { onDelete: "restrict" }),
+    messageId: uuid("message_id").references(() => iacpMessages.id, { onDelete: "restrict" }),
+    sourceMemoryId: uuid("source_memory_id").references((): AnyPgColumn => memories.id, { onDelete: "restrict" }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("memory_sources_objective_idx").on(table.objectiveId), index("memory_sources_memory_idx").on(table.memoryId)],
+);
+
+export const memoryRevisions = pgTable(
+  "memory_revisions",
+  {
+    id: uuid("id").primaryKey(),
+    memoryId: uuid("memory_id")
+      .notNull()
+      .references(() => memories.id, { onDelete: "restrict" }),
+    revision: integer("revision").notNull(),
+    status: text("status").notNull(),
+    summary: text("summary").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("memory_revisions_memory_revision_unique").on(table.memoryId, table.revision)],
+);
+
+export const memoryPromotionRequests = pgTable("memory_promotion_requests", {
+  id: uuid("id").primaryKey(),
+  memoryId: uuid("memory_id")
+    .notNull()
+    .references(() => memories.id, { onDelete: "restrict" }),
+  fromScope: text("from_scope").notNull(),
+  toScope: text("to_scope").notNull(),
+  status: text("status").notNull(),
+  reason: text("reason").notNull(),
+  proposedBy: text("proposed_by").notNull(),
+  decidedBy: text("decided_by"),
+  decisionReason: text("decision_reason"),
+  createdMemoryId: uuid("created_memory_id").references(() => memories.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+});
+
+export const memoryConsolidationRecords = pgTable("memory_consolidation_records", {
+  id: uuid("id").primaryKey(),
+  keeperId: uuid("keeper_id")
+    .notNull()
+    .references(() => memories.id, { onDelete: "restrict" }),
+  mergedIds: uuid("merged_ids").array().notNull(),
+  kind: text("kind").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const memoryContradictions = pgTable(
+  "memory_contradictions",
+  {
+    memoryId: uuid("memory_id")
+      .notNull()
+      .references(() => memories.id, { onDelete: "restrict" }),
+    otherMemoryId: uuid("other_memory_id")
+      .notNull()
+      .references(() => memories.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.memoryId, table.otherMemoryId] })],
+);
+
+export const memoryRetrievalEvents = pgTable("memory_retrieval_events", {
+  id: uuid("id").primaryKey(),
+  objectiveId: uuid("objective_id").references(() => objectiveRuns.id, { onDelete: "restrict" }),
+  taskId: uuid("task_id").references(() => objectiveTasks.id, { onDelete: "restrict" }),
+  actorId: text("actor_id").notNull(),
+  queryHash: text("query_hash").notNull(),
+  mode: text("mode").notNull(),
+  hitCount: integer("hit_count").notNull(),
+  latencyMs: integer("latency_ms").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const memoryRetrievalHits = pgTable(
+  "memory_retrieval_hits",
+  {
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => memoryRetrievalEvents.id, { onDelete: "restrict" }),
+    memoryId: uuid("memory_id")
+      .notNull()
+      .references(() => memories.id, { onDelete: "restrict" }),
+    rank: integer("rank").notNull(),
+    score: doublePrecision("score").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.eventId, table.memoryId] })],
+);
+
+export const memoryEmbeddingUsage = pgTable("memory_embedding_usage", {
+  id: uuid("id").primaryKey(),
+  modelName: text("model_name").notNull(),
+  vectorCount: integer("vector_count").notNull(),
+  latencyMs: integer("latency_ms").notNull(),
+  success: boolean("success").notNull(),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+const TRAINING_RUN_STATUSES = [
+  "proposed",
+  "awaiting_approval",
+  "queued",
+  "preparing",
+  "training",
+  "evaluating",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+
+const TRAINABLE_KINDS = ["trainable_checkpoint"] as const;
+const DATASET_VERSION_STATUSES = ["sealed"] as const;
+const EXAMPLE_SPLITS = ["train", "validation", "test"] as const;
+const EXAMPLE_SOURCES = ["curated_arithmetic", "supplied", "memory", "objective_trace"] as const;
+const ARTIFACT_KINDS = ["adapter", "checkpoint"] as const;
+const ARTIFACT_FORMATS = ["safetensors", "float32-bin"] as const;
+const CANDIDATE_STATUSES = ["experimental", "rejected", "approved", "retired", "revoked", "quarantined"] as const;
+const PROMOTION_STATUSES = ["proposed", "approved", "rejected"] as const;
+
+export const trainableModels = pgTable(
+  "trainable_models",
+  {
+    id: uuid("id").primaryKey(),
+    registryModelId: uuid("registry_model_id")
+      .notNull()
+      .references(() => models.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    displayName: text("display_name").notNull(),
+    modelFamily: text("model_family").notNull(),
+    source: text("source").notNull(),
+    revision: text("revision").notNull(),
+    parameterCount: bigint("parameter_count", { mode: "number" }).notNull(),
+    precision: text("precision").notNull(),
+    architecture: text("architecture").notNull(),
+    tokenizerId: text("tokenizer_id").notNull(),
+    contextLength: integer("context_length").notNull(),
+    framework: text("framework").notNull(),
+    frameworkVersion: text("framework_version").notNull(),
+    artifactUri: text("artifact_uri").notNull(),
+    sha256: text("sha256").notNull(),
+    license: text("license").notNull(),
+    availableLocally: boolean("available_locally").notNull(),
+    eligibleForTraining: boolean("eligible_for_training").notNull(),
+    servingReady: boolean("serving_ready").notNull(),
+    compatibility: jsonb("compatibility").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("trainable_models_registry_sha_unique").on(table.registryModelId, table.sha256),
+    index("trainable_models_family_idx").on(table.modelFamily),
+    check("trainable_models_kind_check", textIn("kind", TRAINABLE_KINDS)),
+    check("trainable_models_parameter_count_check", sql`${table.parameterCount} > 0`),
+    check("trainable_models_context_check", sql`${table.contextLength} > 0`),
+    check("trainable_models_sha_check", sql`char_length(${table.sha256}) = 64`),
+  ],
+);
+
+export const trainingDatasets = pgTable(
+  "training_datasets",
+  {
+    id: uuid("id").primaryKey(),
+    name: text("name").notNull(),
+    taskDomain: text("task_domain").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("training_datasets_idempotency_key_unique").on(table.idempotencyKey),
+    index("training_datasets_created_at_idx").on(table.createdAt, table.id),
+  ],
+);
+
+export const trainingDatasetVersions = pgTable(
+  "training_dataset_versions",
+  {
+    id: uuid("id").primaryKey(),
+    datasetId: uuid("dataset_id")
+      .notNull()
+      .references(() => trainingDatasets.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    contentHash: text("content_hash").notNull(),
+    splitSeed: integer("split_seed").notNull(),
+    status: text("status").notNull(),
+    trainCount: integer("train_count").notNull(),
+    validationCount: integer("validation_count").notNull(),
+    testCount: integer("test_count").notNull(),
+    criteria: jsonb("criteria").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("training_dataset_versions_dataset_version_unique").on(table.datasetId, table.version),
+    check("training_dataset_versions_status_check", textIn("status", DATASET_VERSION_STATUSES)),
+    check("training_dataset_versions_version_check", sql`${table.version} >= 1`),
+    check("training_dataset_versions_counts_check", sql`${table.trainCount} >= 0 and ${table.validationCount} >= 0 and ${table.testCount} >= 0`),
+    check("training_dataset_versions_hash_check", sql`char_length(${table.contentHash}) = 64`),
+  ],
+);
+
+export const trainingExamples = pgTable(
+  "training_examples",
+  {
+    id: uuid("id").primaryKey(),
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => trainingDatasetVersions.id, { onDelete: "restrict" }),
+    split: text("split").notNull(),
+    groupKey: text("group_key").notNull(),
+    source: text("source").notNull(),
+    license: text("license").notNull(),
+    inputText: text("input_text").notNull(),
+    expectedOutput: text("expected_output").notNull(),
+    validationStatus: text("validation_status").notNull(),
+    sourceMemoryId: uuid("source_memory_id").references(() => memories.id, { onDelete: "restrict" }),
+    sourceObjectiveId: uuid("source_objective_id").references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    contentHash: text("content_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("training_examples_version_group_unique").on(table.versionId, table.groupKey),
+    unique("training_examples_version_hash_unique").on(table.versionId, table.contentHash),
+    index("training_examples_split_idx").on(table.versionId, table.split),
+    check("training_examples_split_check", textIn("split", EXAMPLE_SPLITS)),
+    check("training_examples_source_check", textIn("source", EXAMPLE_SOURCES)),
+    check("training_examples_validation_check", sql`${table.validationStatus} = 'verified'`),
+    check("training_examples_hash_check", sql`char_length(${table.contentHash}) = 64`),
+  ],
+);
+
+export const trainingRuns = pgTable(
+  "training_runs",
+  {
+    id: uuid("id").primaryKey(),
+    datasetVersionId: uuid("dataset_version_id")
+      .notNull()
+      .references(() => trainingDatasetVersions.id, { onDelete: "restrict" }),
+    trainableModelId: uuid("trainable_model_id")
+      .notNull()
+      .references(() => trainableModels.id, { onDelete: "restrict" }),
+    parentRunId: uuid("parent_run_id").references((): AnyPgColumn => trainingRuns.id, { onDelete: "restrict" }),
+    profile: text("profile").notNull(),
+    status: text("status").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    seed: integer("seed").notNull(),
+    attempt: integer("attempt").notNull(),
+    maxAttempts: integer("max_attempts").notNull(),
+    config: jsonb("config").$type<Record<string, unknown>>().notNull(),
+    approvedBy: text("approved_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    error: text("error"),
+    cancelRequested: boolean("cancel_requested").notNull().default(false),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("training_runs_idempotency_key_unique").on(table.idempotencyKey),
+    index("training_runs_status_idx").on(table.status, table.createdAt),
+    check("training_runs_status_check", textIn("status", TRAINING_RUN_STATUSES)),
+    check("training_runs_attempt_check", sql`${table.attempt} >= 1 and ${table.attempt} <= ${table.maxAttempts}`),
+    check("training_runs_seed_check", sql`${table.seed} >= 0`),
+  ],
+);
+
+export const trainingRunMetrics = pgTable(
+  "training_run_metrics",
+  {
+    id: uuid("id").primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => trainingRuns.id, { onDelete: "restrict" }),
+    step: integer("step").notNull(),
+    trainLoss: doublePrecision("train_loss"),
+    validationLoss: doublePrecision("validation_loss"),
+    learningRate: doublePrecision("learning_rate"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("training_run_metrics_run_step_idx").on(table.runId, table.step),
+    check("training_run_metrics_step_check", sql`${table.step} >= 0`),
+  ],
+);
+
+export const trainingArtifacts = pgTable(
+  "training_artifacts",
+  {
+    id: uuid("id").primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => trainingRuns.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    relativePath: text("relative_path").notNull(),
+    sha256: text("sha256").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    format: text("format").notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("training_artifacts_run_sha_unique").on(table.runId, table.sha256),
+    check("training_artifacts_kind_check", textIn("kind", ARTIFACT_KINDS)),
+    check("training_artifacts_format_check", textIn("format", ARTIFACT_FORMATS)),
+    check("training_artifacts_size_check", sql`${table.byteSize} > 0 and ${table.byteSize} <= 200000000`),
+    check("training_artifacts_sha_check", sql`char_length(${table.sha256}) = 64`),
+  ],
+);
+
+export const modelAdapters = pgTable(
+  "model_adapters",
+  {
+    id: uuid("id").primaryKey(),
+    artifactId: uuid("artifact_id")
+      .notNull()
+      .references(() => trainingArtifacts.id, { onDelete: "restrict" }),
+    baseTrainableModelId: uuid("base_trainable_model_id")
+      .notNull()
+      .references(() => trainableModels.id, { onDelete: "restrict" }),
+    rank: integer("rank").notNull(),
+    alpha: doublePrecision("alpha").notNull(),
+    dropout: doublePrecision("dropout").notNull(),
+    targetModules: jsonb("target_modules").$type<string[]>().notNull(),
+    trainableParameters: bigint("trainable_parameters", { mode: "number" }).notNull(),
+    framework: text("framework").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("model_adapters_artifact_unique").on(table.artifactId),
+    check("model_adapters_rank_check", sql`${table.rank} >= 1 and ${table.rank} <= 16`),
+    check("model_adapters_parameters_check", sql`${table.trainableParameters} > 0`),
+  ],
+);
+
+export const modelCandidates = pgTable(
+  "model_candidates",
+  {
+    id: uuid("id").primaryKey(),
+    adapterId: uuid("adapter_id")
+      .notNull()
+      .references(() => modelAdapters.id, { onDelete: "restrict" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => trainingRuns.id, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("model_candidates_run_unique").on(table.runId),
+    index("model_candidates_status_idx").on(table.status),
+    check("model_candidates_status_check", textIn("status", CANDIDATE_STATUSES)),
+  ],
+);
+
+export const candidateEvaluations = pgTable(
+  "candidate_evaluations",
+  {
+    id: uuid("id").primaryKey(),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => modelCandidates.id, { onDelete: "restrict" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => trainingRuns.id, { onDelete: "restrict" }),
+    baseline: jsonb("baseline").$type<Record<string, unknown>>().notNull(),
+    candidate: jsonb("candidate").$type<Record<string, unknown>>().notNull(),
+    acceptanceMet: boolean("acceptance_met").notNull(),
+    criteria: jsonb("criteria").$type<Record<string, unknown>>().notNull(),
+    report: jsonb("report").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("candidate_evaluations_candidate_unique").on(table.candidateId)],
+);
+
+export const modelPromotionRequests = pgTable(
+  "model_promotion_requests",
+  {
+    id: uuid("id").primaryKey(),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => modelCandidates.id, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    proposedBy: text("proposed_by").notNull(),
+    decidedBy: text("decided_by"),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("model_promotion_requests_candidate_idx").on(table.candidateId, table.createdAt),
+    check("model_promotion_requests_status_check", textIn("status", PROMOTION_STATUSES)),
+  ],
+);
+
+export const modelVersionEvents = pgTable(
+  "model_version_events",
+  {
+    id: uuid("id").primaryKey(),
+    trainableModelId: uuid("trainable_model_id").references(() => trainableModels.id, { onDelete: "restrict" }),
+    candidateId: uuid("candidate_id").references(() => modelCandidates.id, { onDelete: "restrict" }),
+    runId: uuid("run_id").references(() => trainingRuns.id, { onDelete: "restrict" }),
+    eventType: text("event_type").notNull(),
+    actorId: text("actor_id").notNull(),
+    detail: jsonb("detail").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("model_version_events_run_idx").on(table.runId, table.createdAt)],
+);
+
+const BENCHMARK_STATUSES = ["draft", "published", "retired"] as const;
+const GATE_DECISIONS = ["PASS", "FAIL", "INCONCLUSIVE", "QUARANTINED"] as const;
+const ROUTE_KINDS = ["baseline", "candidate"] as const;
+const ROLLBACK_STATUSES = ["requested", "approved", "completed", "failed"] as const;
+const FORGETTING_STATUSES = ["requested", "approved", "completed", "rejected", "failed"] as const;
+const LINEAGE_USES = ["definitely_used", "potentially_used", "not_used"] as const;
+
+export const benchmarkSuites = pgTable("benchmark_suites", {
+  id: uuid("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const benchmarkVersions = pgTable(
+  "benchmark_versions",
+  {
+    id: uuid("id").primaryKey(),
+    suiteId: uuid("suite_id")
+      .notNull()
+      .references(() => benchmarkSuites.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    description: text("description").notNull(),
+    domain: text("domain").notNull(),
+    source: text("source").notNull(),
+    license: text("license").notNull(),
+    protocol: text("protocol").notNull(),
+    scorerId: text("scorer_id").notNull(),
+    scorerVersion: text("scorer_version").notNull(),
+    contentHash: text("content_hash").notNull(),
+    promptTemplateHash: text("prompt_template_hash").notNull(),
+    decoding: jsonb("decoding").$type<Record<string, unknown>>().notNull(),
+    thresholds: jsonb("thresholds").$type<Record<string, unknown>>().notNull(),
+    status: text("status").notNull(),
+    sealed: boolean("sealed").notNull(),
+    createdBy: text("created_by").notNull(),
+    approvedBy: text("approved_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("benchmark_versions_suite_version_unique").on(table.suiteId, table.version),
+    check("benchmark_versions_status_check", textIn("status", BENCHMARK_STATUSES)),
+  ],
+);
+
+export const benchmarkItems = pgTable(
+  "benchmark_items",
+  {
+    id: uuid("id").primaryKey(),
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => benchmarkVersions.id, { onDelete: "restrict" }),
+    ordinal: integer("ordinal").notNull(),
+    domain: text("domain").notNull(),
+    prompt: text("prompt").notNull(),
+    expected: text("expected").notNull(),
+    promptHash: text("prompt_hash").notNull(),
+    sealed: boolean("sealed").notNull(),
+  },
+  (table) => [unique("benchmark_items_version_ordinal_unique").on(table.versionId, table.ordinal)],
+);
+
+export const evaluationRuns = pgTable(
+  "evaluation_runs",
+  {
+    id: uuid("id").primaryKey(),
+    benchmarkVersionId: uuid("benchmark_version_id")
+      .notNull()
+      .references(() => benchmarkVersions.id, { onDelete: "restrict" }),
+    candidateId: uuid("candidate_id").references(() => modelCandidates.id, { onDelete: "restrict" }),
+    trainableModelId: uuid("trainable_model_id").references(() => trainableModels.id, { onDelete: "restrict" }),
+    baseSha256: text("base_sha256").notNull(),
+    adapterSha256: text("adapter_sha256"),
+    source: text("source").notNull(),
+    status: text("status").notNull(),
+    decoding: jsonb("decoding").$type<Record<string, unknown>>().notNull(),
+    createdBy: text("created_by").notNull(),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  () => [check("evaluation_runs_status_check", textIn("status", ["completed", "failed"])), check("evaluation_runs_source_check", textIn("source", ["live", "historical"]))],
+);
+
+export const evaluationItemResults = pgTable(
+  "evaluation_item_results",
+  {
+    id: uuid("id").primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => evaluationRuns.id, { onDelete: "restrict" }),
+    ordinal: integer("ordinal").notNull(),
+    role: text("role").notNull(),
+    rawOutput: text("raw_output").notNull(),
+    taskCorrect: boolean("task_correct").notNull(),
+    formatValid: boolean("format_valid").notNull(),
+    strictIntegerMatch: boolean("strict_integer_match").notNull(),
+    ambiguous: boolean("ambiguous").notNull(),
+    equationValue: text("equation_value"),
+  },
+  (table) => [
+    unique("evaluation_item_results_run_ordinal_role_unique").on(table.runId, table.ordinal, table.role),
+    check("evaluation_item_results_role_check", textIn("role", ["baseline", "candidate"])),
+  ],
+);
+
+export const evaluationReports = pgTable("evaluation_reports", {
+  id: uuid("id").primaryKey(),
+  runId: uuid("run_id")
+    .notNull()
+    .unique()
+    .references(() => evaluationRuns.id, { onDelete: "restrict" }),
+  summary: jsonb("summary").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const candidateGateDecisions = pgTable(
+  "candidate_gate_decisions",
+  {
+    id: uuid("id").primaryKey(),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => modelCandidates.id, { onDelete: "restrict" }),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => evaluationReports.id, { onDelete: "restrict" }),
+    decision: text("decision").notNull(),
+    rationale: text("rationale").notNull(),
+    policyHash: text("policy_hash").notNull(),
+    decidedBy: text("decided_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("candidate_gate_decisions_decision_check", textIn("decision", GATE_DECISIONS))],
+);
+
+export const experimentalRoutes = pgTable("experimental_routes", {
+  id: uuid("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  currentVersion: integer("current_version"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const experimentalRouteVersions = pgTable(
+  "experimental_route_versions",
+  {
+    id: uuid("id").primaryKey(),
+    routeId: uuid("route_id")
+      .notNull()
+      .references(() => experimentalRoutes.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    kind: text("kind").notNull(),
+    candidateId: uuid("candidate_id").references(() => modelCandidates.id, { onDelete: "restrict" }),
+    trainableModelId: uuid("trainable_model_id")
+      .notNull()
+      .references(() => trainableModels.id, { onDelete: "restrict" }),
+    adapterSha256: text("adapter_sha256"),
+    baseSha256: text("base_sha256").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("experimental_route_versions_route_version_unique").on(table.routeId, table.version),
+    check("experimental_route_versions_kind_check", textIn("kind", ROUTE_KINDS)),
+  ],
+);
+
+export const rollbackRequests = pgTable(
+  "rollback_requests",
+  {
+    id: uuid("id").primaryKey(),
+    routeId: uuid("route_id")
+      .notNull()
+      .references(() => experimentalRoutes.id, { onDelete: "restrict" }),
+    fromVersion: integer("from_version").notNull(),
+    toVersion: integer("to_version").notNull(),
+    status: text("status").notNull(),
+    reason: text("reason").notNull(),
+    requestedBy: text("requested_by").notNull(),
+    approvedBy: text("approved_by"),
+    error: text("error"),
+    verification: jsonb("verification").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  () => [check("rollback_requests_status_check", textIn("status", ROLLBACK_STATUSES))],
+);
+
+export const retentionPolicies = pgTable(
+  "retention_policies",
+  {
+    id: uuid("id").primaryKey(),
+    name: text("name").notNull(),
+    version: integer("version").notNull(),
+    scope: text("scope"),
+    provenance: text("provenance"),
+    maxAgeDays: integer("max_age_days"),
+    status: text("status").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("retention_policies_name_version_unique").on(table.name, table.version),
+    check("retention_policies_status_check", textIn("status", ["published"])),
+  ],
+);
+
+export const forgettingRequests = pgTable(
+  "forgetting_requests",
+  {
+    id: uuid("id").primaryKey(),
+    memoryId: uuid("memory_id")
+      .notNull()
+      .references(() => memories.id, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    impact: jsonb("impact").$type<Record<string, unknown>>().notNull(),
+    requestedBy: text("requested_by").notNull(),
+    approvedBy: text("approved_by"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  () => [check("forgetting_requests_status_check", textIn("status", FORGETTING_STATUSES))],
+);
+
+export const lineageEdges = pgTable(
+  "lineage_edges",
+  {
+    id: uuid("id").primaryKey(),
+    fromType: text("from_type").notNull(),
+    fromId: text("from_id").notNull(),
+    toType: text("to_type").notNull(),
+    toId: text("to_id").notNull(),
+    relation: text("relation").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("lineage_edges_identity_unique").on(table.fromType, table.fromId, table.toType, table.toId, table.relation),
+    check("lineage_edges_relation_check", textIn("relation", LINEAGE_USES)),
+  ],
+);
+
+export const artifactContamination = pgTable(
+  "artifact_contamination",
+  {
+    id: uuid("id").primaryKey(),
+    artifactId: uuid("artifact_id")
+      .notNull()
+      .references(() => trainingArtifacts.id, { onDelete: "restrict" }),
+    forgettingRequestId: uuid("forgetting_request_id")
+      .notNull()
+      .references(() => forgettingRequests.id, { onDelete: "restrict" }),
+    relation: text("relation").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("artifact_contamination_artifact_request_unique").on(table.artifactId, table.forgettingRequestId)],
+);
+
+const CAPABILITY_STATUSES = ["proposed", "experimental", "evaluated", "approved", "rejected", "revoked", "superseded"] as const;
+const GAP_STATUSES = ["observed", "validated", "rejected", "aggregated"] as const;
+const LEARNING_MECHANISMS = ["memory_acquisition", "memory_consolidation", "workflow", "retrieval", "lora", "knowledge_transfer", "no_action"] as const;
+const CYCLE_STATUSES = ["OBSERVED", "GAP_VALIDATED", "OBJECTIVE_CREATED", "METHOD_SELECTED", "PROPOSAL_PENDING", "AWAITING_APPROVAL", "APPROVED", "EXECUTING", "EVALUATING", "AWAITING_PROMOTION", "ADOPTED", "REJECTED", "INCONCLUSIVE", "FAILED", "CANCELLED"] as const;
+const OUTCOME_KINDS = ["MEMORY_IMPROVEMENT", "RETRIEVAL_IMPROVEMENT", "WORKFLOW_IMPROVEMENT", "TOOL_IMPROVEMENT", "MODEL_WEIGHT_IMPROVEMENT", "NO_VERIFIED_IMPROVEMENT"] as const;
+const ASSIGNMENT_ROLES = ["shared_base", "experimental_adapter", "capability_adapter", "fallback"] as const;
+const ASSIGNMENT_STATUSES = ["active", "superseded", "rejected"] as const;
+const TRANSFER_STATUSES = ["pending", "accepted", "rejected"] as const;
+
+export const departmentCapabilities = pgTable(
+  "department_capabilities",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    slug: text("slug").notNull(),
+    domain: text("domain").notNull(),
+    taskType: text("task_type").notNull(),
+    description: text("description").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("department_capabilities_slug_unique").on(table.departmentId, table.slug)],
+);
+
+export const departmentCapabilityVersions = pgTable(
+  "department_capability_versions",
+  {
+    id: uuid("id").primaryKey(),
+    capabilityId: uuid("capability_id").notNull().references(() => departmentCapabilities.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    status: text("status").notNull(),
+    toolNames: jsonb("tool_names").$type<string[]>().notNull(),
+    requiredPermissions: jsonb("required_permissions").$type<string[]>().notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
+    evaluationRunId: uuid("evaluation_run_id").references(() => evaluationRuns.id, { onDelete: "restrict" }),
+    benchmarkVersionId: uuid("benchmark_version_id").references(() => benchmarkVersions.id, { onDelete: "restrict" }),
+    reliability: jsonb("reliability").$type<Record<string, unknown>>().notNull(),
+    resources: jsonb("resources").$type<Record<string, unknown>>().notNull(),
+    improvementKind: text("improvement_kind").notNull(),
+    approvedBy: text("approved_by"),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("department_capability_versions_unique").on(table.capabilityId, table.version),
+    check("department_capability_versions_status_check", textIn("status", CAPABILITY_STATUSES)),
+    check("department_capability_versions_kind_check", textIn("improvement_kind", OUTCOME_KINDS)),
+  ],
+);
+
+export const capabilityGaps = pgTable(
+  "capability_gaps",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    capabilityId: uuid("capability_id").references(() => departmentCapabilities.id, { onDelete: "restrict" }),
+    taskCategory: text("task_category").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
+    failureCount: integer("failure_count").notNull(),
+    severity: text("severity").notNull(),
+    impact: text("impact").notNull(),
+    baseline: jsonb("baseline").$type<Record<string, unknown>>().notNull(),
+    proposedMethod: text("proposed_method").notNull(),
+    resources: jsonb("resources").$type<Record<string, unknown>>().notNull(),
+    status: text("status").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("capability_gaps_fingerprint_unique").on(table.departmentId, table.fingerprint),
+    check("capability_gaps_status_check", textIn("status", GAP_STATUSES)),
+    check("capability_gaps_method_check", textIn("proposed_method", LEARNING_MECHANISMS)),
+    check("capability_gaps_severity_check", textIn("severity", ["low", "medium", "high"])),
+  ],
+);
+
+export const learningObjectives = pgTable(
+  "learning_objectives",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    gapId: uuid("gap_id").notNull().references(() => capabilityGaps.id, { onDelete: "restrict" }),
+    capabilityId: uuid("capability_id").references(() => departmentCapabilities.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    weakness: text("weakness").notNull(),
+    mechanism: text("mechanism").notNull(),
+    criteria: jsonb("criteria").$type<Record<string, unknown>>().notNull(),
+    benchmarkVersionId: uuid("benchmark_version_id").references(() => benchmarkVersions.id, { onDelete: "restrict" }),
+    baselineRef: text("baseline_ref"),
+    budget: jsonb("budget").$type<Record<string, unknown>>().notNull(),
+    status: text("status").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("learning_objectives_version_unique").on(table.gapId, table.version),
+    check("learning_objectives_mechanism_check", textIn("mechanism", LEARNING_MECHANISMS)),
+  ],
+);
+
+export const learningCycles = pgTable(
+  "learning_cycles",
+  {
+    id: uuid("id").primaryKey(),
+    objectiveId: uuid("objective_id").references(() => learningObjectives.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    method: text("method").notNull(),
+    outcomeKind: text("outcome_kind"),
+    trainingRunId: uuid("training_run_id").references(() => trainingRuns.id, { onDelete: "restrict" }),
+    evaluationRunId: uuid("evaluation_run_id").references(() => evaluationRuns.id, { onDelete: "restrict" }),
+    gateDecision: text("gate_decision"),
+    transferId: uuid("transfer_id"),
+    memoryId: uuid("memory_id").references(() => memories.id, { onDelete: "restrict" }),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    correlationId: text("correlation_id").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("learning_cycles_status_check", textIn("status", CYCLE_STATUSES)),
+    check("learning_cycles_method_check", textIn("method", LEARNING_MECHANISMS)),
+    index("learning_cycles_department_idx").on(table.departmentId, table.status),
+  ],
+);
+
+export const learningCycleEvents = pgTable("learning_cycle_events", {
+  id: uuid("id").primaryKey(),
+  cycleId: uuid("cycle_id").notNull().references(() => learningCycles.id, { onDelete: "restrict" }),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  actorId: text("actor_id").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const departmentModelAssignments = pgTable(
+  "department_model_assignments",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    role: text("role").notNull(),
+    registryModelId: uuid("registry_model_id").notNull().references(() => models.id, { onDelete: "restrict" }),
+    trainableModelId: uuid("trainable_model_id").references(() => trainableModels.id, { onDelete: "restrict" }),
+    candidateId: uuid("candidate_id").references(() => modelCandidates.id, { onDelete: "restrict" }),
+    adapterSha256: text("adapter_sha256"),
+    modelFamily: text("model_family").notNull(),
+    version: integer("version").notNull(),
+    status: text("status").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("department_model_assignments_version_unique").on(table.departmentId, table.version),
+    check("department_model_assignments_role_check", textIn("role", ASSIGNMENT_ROLES)),
+    check("department_model_assignments_status_check", textIn("status", ASSIGNMENT_STATUSES)),
+  ],
+);
+
+export const knowledgeTransfers = pgTable(
+  "knowledge_transfers",
+  {
+    id: uuid("id").primaryKey(),
+    originDepartmentId: uuid("origin_department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    destinationDepartmentId: uuid("destination_department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    sourceMemoryId: uuid("source_memory_id").references(() => memories.id, { onDelete: "restrict" }),
+    summary: text("summary").notNull(),
+    provenance: text("provenance").notNull(),
+    trust: text("trust").notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
+    status: text("status").notNull(),
+    version: integer("version").notNull(),
+    restrictions: text("restrictions").notNull(),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    cycleId: uuid("cycle_id").references(() => learningCycles.id, { onDelete: "restrict" }),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("knowledge_transfers_status_check", textIn("status", TRANSFER_STATUSES))],
+);
+
+export const knowledgeValidations = pgTable(
+  "knowledge_validations",
+  {
+    id: uuid("id").primaryKey(),
+    transferId: uuid("transfer_id").notNull().unique().references(() => knowledgeTransfers.id, { onDelete: "restrict" }),
+    decision: text("decision").notNull(),
+    decidedBy: text("decided_by").notNull(),
+    reason: text("reason").notNull(),
+    acceptedMemoryId: uuid("accepted_memory_id").references(() => memories.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("knowledge_validations_decision_check", textIn("decision", ["accept", "reject"]))],
+);
+
+export const learningOutcomes = pgTable(
+  "learning_outcomes",
+  {
+    id: uuid("id").primaryKey(),
+    cycleId: uuid("cycle_id").notNull().unique().references(() => learningCycles.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    verified: boolean("verified").notNull(),
+    summary: text("summary").notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("learning_outcomes_kind_check", textIn("kind", OUTCOME_KINDS))],
+);
+
+export const learningBudgets = pgTable("learning_budgets", {
+  id: uuid("id").primaryKey(),
+  cycleId: uuid("cycle_id").notNull().unique().references(() => learningCycles.id, { onDelete: "restrict" }),
+  maxInferenceCalls: integer("max_inference_calls").notNull(),
+  maxTrainingSteps: integer("max_training_steps").notNull(),
+  maxRuntimeMs: integer("max_runtime_ms").notNull(),
+  usedInferenceCalls: integer("used_inference_calls").notNull(),
+  usedTrainingSteps: integer("used_training_steps").notNull(),
+  usedRuntimeMs: integer("used_runtime_ms").notNull(),
+});
+
+const IMPROVEMENT_CLASSES = ["VERIFIED_IMPROVEMENT", "NO_VERIFIED_IMPROVEMENT", "VERIFIED_REGRESSION", "INCONCLUSIVE", "EVALUATION_INVALID"] as const;
+const DEPLOYMENT_ELIGIBILITY = ["eligible", "ineligible", "exceptional"] as const;
+const DEPLOYMENT_PURPOSES = ["improvement", "exceptional"] as const;
+const COLLABORATION_CLASSES = ["consultation", "specialist", "joint"] as const;
+const COLLABORATION_STATUSES = ["open", "closed", "expired"] as const;
+const PARTICIPANT_ROLES = ["owner", "contributor"] as const;
+const PARTICIPANT_STATUSES = ["invited", "active", "removed"] as const;
+const ENTRY_KINDS = ["request_context", "answer", "contribution", "shared_decision"] as const;
+const ENTRY_STATUSES = ["active", "expired", "archived", "promoted"] as const;
+
+export const improvementDecisions = pgTable(
+  "improvement_decisions",
+  {
+    id: uuid("id").primaryKey(),
+    evaluationRunId: uuid("evaluation_run_id").references(() => evaluationRuns.id, { onDelete: "restrict" }),
+    cycleId: uuid("cycle_id").references(() => learningCycles.id, { onDelete: "restrict" }),
+    policyVersion: text("policy_version").notNull(),
+    policyHash: text("policy_hash").notNull(),
+    safetyGate: text("safety_gate").notNull(),
+    safetyGateVersion: text("safety_gate_version").notNull(),
+    classification: text("classification").notNull(),
+    deploymentEligibility: text("deployment_eligibility").notNull(),
+    baselineRef: text("baseline_ref"),
+    candidateId: uuid("candidate_id").references(() => modelCandidates.id, { onDelete: "restrict" }),
+    sampleCount: integer("sample_count").notNull(),
+    effectSize: doublePrecision("effect_size").notNull(),
+    uncertainty: jsonb("uncertainty").$type<Record<string, unknown>>().notNull(),
+    retention: jsonb("retention").$type<Record<string, unknown>>().notNull(),
+    evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull(),
+    rationale: text("rationale").notNull(),
+    decidedBy: text("decided_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("improvement_decisions_run_policy_unique").on(table.evaluationRunId, table.policyVersion).where(sql`${table.evaluationRunId} is not null`),
+    check("improvement_decisions_class_check", textIn("classification", IMPROVEMENT_CLASSES)),
+    check("improvement_decisions_eligibility_check", textIn("deployment_eligibility", DEPLOYMENT_ELIGIBILITY)),
+  ],
+);
+
+export const deploymentDecisions = pgTable(
+  "deployment_decisions",
+  {
+    id: uuid("id").primaryKey(),
+    cycleId: uuid("cycle_id").notNull().references(() => learningCycles.id, { onDelete: "restrict" }),
+    improvementDecisionId: uuid("improvement_decision_id").references(() => improvementDecisions.id, { onDelete: "restrict" }),
+    purpose: text("purpose").notNull(),
+    eligibility: text("eligibility").notNull(),
+    adopted: boolean("adopted").notNull(),
+    rationale: text("rationale").notNull(),
+    decidedBy: text("decided_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("deployment_decisions_cycle_purpose_unique").on(table.cycleId, table.purpose),
+    check("deployment_decisions_purpose_check", textIn("purpose", DEPLOYMENT_PURPOSES)),
+    check("deployment_decisions_eligibility_check", textIn("eligibility", DEPLOYMENT_ELIGIBILITY)),
+  ],
+);
+
+export const collaborationContexts = pgTable(
+  "collaboration_contexts",
+  {
+    id: uuid("id").primaryKey(),
+    classification: text("classification").notNull(),
+    ownerDepartmentId: uuid("owner_department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    purpose: text("purpose").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+  },
+  () => [
+    check("collaboration_contexts_class_check", textIn("classification", COLLABORATION_CLASSES)),
+    check("collaboration_contexts_status_check", textIn("status", COLLABORATION_STATUSES)),
+  ],
+);
+
+export const collaborationParticipants = pgTable(
+  "collaboration_participants",
+  {
+    id: uuid("id").primaryKey(),
+    contextId: uuid("context_id").notNull().references(() => collaborationContexts.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    role: text("role").notNull(),
+    status: text("status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("collaboration_participants_context_department_unique").on(table.contextId, table.departmentId),
+    check("collaboration_participants_role_check", textIn("role", PARTICIPANT_ROLES)),
+    check("collaboration_participants_status_check", textIn("status", PARTICIPANT_STATUSES)),
+  ],
+);
+
+export const collaborationEntries = pgTable(
+  "collaboration_entries",
+  {
+    id: uuid("id").primaryKey(),
+    contextId: uuid("context_id").notNull().references(() => collaborationContexts.id, { onDelete: "restrict" }),
+    authorDepartmentId: uuid("author_department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    content: text("content").notNull(),
+    provenance: text("provenance").notNull(),
+    status: text("status").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    promotedMemoryId: uuid("promoted_memory_id").references(() => memories.id, { onDelete: "restrict" }),
+    sourceMemoryId: uuid("source_memory_id").references(() => memories.id, { onDelete: "restrict" }),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("collaboration_entries_context_idx").on(table.contextId, table.status),
+    check("collaboration_entries_kind_check", textIn("kind", ENTRY_KINDS)),
+    check("collaboration_entries_status_check", textIn("status", ENTRY_STATUSES)),
+    check("collaboration_entries_provenance_check", sql`${table.provenance} in ('model_generated', 'system_observed', 'user_provided', 'externally_verified')`),
+  ],
+);
+
+export const memoryOwnership = pgTable(
+  "memory_ownership",
+  {
+    memoryId: uuid("memory_id").primaryKey().references(() => memories.id, { onDelete: "restrict" }),
+    originatingDepartmentId: uuid("originating_department_id").references(() => departments.id, { onDelete: "restrict" }),
+    primaryOwnerDepartmentId: uuid("primary_owner_department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    recipientDepartmentId: uuid("recipient_department_id").references(() => departments.id, { onDelete: "restrict" }),
+    classification: text("classification").notNull(),
+    collaborationId: uuid("collaboration_id").references(() => collaborationContexts.id, { onDelete: "restrict" }),
+    retentionPolicy: text("retention_policy").notNull(),
+    promotionReason: text("promotion_reason").notNull(),
+    validationStatus: text("validation_status").notNull(),
+    sourceMessageId: uuid("source_message_id").references(() => iacpMessages.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [
+    check("memory_ownership_class_check", textIn("classification", COLLABORATION_CLASSES)),
+    check("memory_ownership_validation_check", textIn("validation_status", ["validated", "unverified"])),
+  ],
+);

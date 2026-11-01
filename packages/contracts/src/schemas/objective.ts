@@ -150,6 +150,26 @@ export const monitoringOverviewSchema = z.object({
     unavailableUsage: z.number().int().nonnegative(),
     estimatedCostUsdMicros: z.number().int().nonnegative().nullable(),
   }),
+  training: z.object({
+    queued: z.number().int().nonnegative(),
+    active: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    cancelled: z.number().int().nonnegative(),
+    datasets: z.number().int().nonnegative(),
+    examples: z.number().int().nonnegative(),
+    artifactBytes: z.number().int().nonnegative(),
+    candidatesApproved: z.number().int().nonnegative(),
+    candidatesRejected: z.number().int().nonnegative(),
+  }),
+  safeguards: z.object({
+    failedRuns: z.number().int().nonnegative(),
+    gateFailures: z.number().int().nonnegative(),
+    quarantined: z.number().int().nonnegative(),
+    contaminatedArtifacts: z.number().int().nonnegative(),
+    forgettingOpen: z.number().int().nonnegative(),
+    rollbackFailures: z.number().int().nonnegative(),
+  }),
   findings: z.array(
     z.object({
       code: z.string(),

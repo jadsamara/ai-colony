@@ -7,7 +7,12 @@ import type {
   DepartmentService,
   IdentityService,
   MessagingService,
+  EvaluationService,
+  CollaborationService,
+  DepartmentLearningService,
+  MemoryService,
   ModelService,
+  TrainingService,
   InferenceRoute,
   ObjectiveService,
 } from "@ai-colony/core";
@@ -22,6 +27,11 @@ export interface AppServices {
   audit: AuditQueryService;
   messages: MessagingService;
   objectives: ObjectiveService;
+  memories: MemoryService;
+  training: TrainingService;
+  evaluation: EvaluationService;
+  learning: DepartmentLearningService;
+  collaboration: CollaborationService;
   inference: {
     baseUrl: string;
     apiKey: string | null;

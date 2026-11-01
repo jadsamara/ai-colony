@@ -1,12 +1,13 @@
 import "dotenv/config";
 import { hostname } from "node:os";
 import type { Message } from "@ai-colony/contracts";
-import { Authorizer, MessagingService, ObjectiveService } from "@ai-colony/core";
+import { Authorizer, DEFAULT_MEMORY_LIMITS, MemoryService, MessagingService, ObjectiveService } from "@ai-colony/core";
 import { createDatabase, createPersistence } from "@ai-colony/database";
-import { loadInferenceConfig, OpenAICompatibleProvider, routeFromConfig } from "@ai-colony/inference";
+import { loadInferenceConfig, OllamaEmbeddingProvider, OpenAICompatibleProvider, routeFromConfig } from "@ai-colony/inference";
 import { loadWorkerConfig, RabbitMessageTransport, runMessageConsumer } from "@ai-colony/messaging";
 import { openCheckpointer } from "./checkpoint.js";
 import { compileCeoGraph, compileMonitoringGraph, compileOrchestrationGraph } from "./graphs.js";
+import { createObjectiveMemory } from "./objective-memory.js";
 import { objectiveMessageHandler } from "./runtime.js";
 import { loop, runCeoPass, runMonitoringPass, runOrchestrationPass } from "./worker.js";
 
@@ -58,6 +59,22 @@ const messages = new MessagingService(
     : undefined,
 );
 const service = new ObjectiveService(persistence, new Authorizer(), messages);
+const embeddings = new OllamaEmbeddingProvider({
+  baseUrl: inference.embeddingBaseUrl,
+  model: inference.embeddingModel,
+  dimensions: inference.embeddingDimensions,
+  timeoutMs: inference.embeddingTimeoutMs,
+  maxConcurrency: inference.embeddingConcurrency,
+  transportRetries: inference.embeddingRetries,
+});
+const memories = new MemoryService(persistence, new Authorizer(), embeddings, {
+  ...DEFAULT_MEMORY_LIMITS,
+  topK: inference.memoryTopK,
+  contextTokens: inference.memoryContextTokens,
+  maxWritesPerObjective: inference.memoryMaxWritesPerObjective,
+  dimensions: inference.embeddingDimensions,
+});
+service.attachMemory(createObjectiveMemory(persistence, memories));
 runtime.service = service;
 
 try {
@@ -105,6 +122,7 @@ try {
       staleAfterMs: Number(process.env.RUNTIME_STALE_AFTER_MS ?? 30_000),
       allowRecovery: process.env.MONITORING_ALLOW_RECOVERY === "true",
       checkpointer,
+      noteOperational: (finding) => memories.noteOperational(finding.code, finding.summary),
     });
     await loop(controller.signal, 5000, async () => {
       await service.heartbeat(workerId, role, "inference-configured");

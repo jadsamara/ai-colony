@@ -1,0 +1,54 @@
+{
+  "startedAt": "2026-11-01T16:14:31.491Z",
+  "demonstration": "completed",
+  "evaluation": {
+    "cycleId": "f96ff49d-2258-4d65-800f-37263d25ec26",
+    "evaluationRunId": "396efaba-7bf4-4949-b571-8611d9f70515",
+    "safetyGate": "PASS",
+    "safetyGateVersion": "m6-gate-v1",
+    "classification": "NO_VERIFIED_IMPROVEMENT",
+    "deploymentEligibility": "ineligible",
+    "effectSize": 0,
+    "sampleCount": 30,
+    "historicalStatus": "REJECTED",
+    "historicalGate": "PASS",
+    "historicalOutcome": "NO_VERIFIED_IMPROVEMENT",
+    "preserved": true,
+    "candidateId": "90e946d9-1f73-416a-b48d-fb34e5492494",
+    "candidateStatus": "experimental"
+  },
+  "consultation": {
+    "contextId": "5b2c6c49-7f5e-4972-85c0-d0d89d579735",
+    "scienceSawRequest": true,
+    "researchDenied": true,
+    "retainedMemoryId": "e0c5be25-e62a-465f-b520-6e89fa19e3d5",
+    "retainedProvenance": "user_provided",
+    "scienceSearchHits": 4,
+    "scienceSawPrivateObjective": false,
+    "closedContentEmpty": true
+  },
+  "joint": {
+    "contextId": "412fe6af-479c-4d8b-a498-8403a53f7e8a",
+    "earlyRejected": true,
+    "scienceSawShared": true,
+    "researchDenied": true,
+    "promotedMemoryId": "b374d4ce-32e6-429f-abc5-24983e7b91a4",
+    "closed": "closed",
+    "closedContentEmpty": true
+  },
+  "recovery": {
+    "cycleId": "7ea0bd98-46da-4a95-a62e-942471905590",
+    "resumeBeforeApproval": "approve",
+    "trainingRunId": "4c7ebe3b-4ace-47af-9a43-5f81263e3238",
+    "duplicateRun": true,
+    "duplicateApprovalRejected": true,
+    "executionBlocked": "The learning cycle runtime budget is exhausted",
+    "runStatus": "queued",
+    "candidateCreated": false,
+    "retrained": false,
+    "mlExecuted": false,
+    "finalStatus": "CANCELLED"
+  },
+  "productionUnchanged": true,
+  "finishedAt": "2026-11-01T16:14:32.522Z"
+}

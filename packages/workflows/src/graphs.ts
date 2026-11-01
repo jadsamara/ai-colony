@@ -1,6 +1,6 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
-import { MessageHandlingError, type InferenceProvider, type InferenceRoute, type ObjectiveService } from "@ai-colony/core";
+import { MessageHandlingError, type DepartmentLearningService, type InferenceProvider, type InferenceRoute, type ObjectiveService, type RequestContext } from "@ai-colony/core";
 import { executePrepared } from "./runtime.js";
 
 const WorkflowState = Annotation.Root({
@@ -57,6 +57,7 @@ export function compileMonitoringGraph(input: {
   staleAfterMs: number;
   allowRecovery: boolean;
   checkpointer: BaseCheckpointSaver;
+  noteOperational?: (finding: { code: string; summary: string }) => Promise<boolean>;
 }) {
   return new StateGraph(WorkflowState)
     .addNode("monitor", async () => {
@@ -78,7 +79,13 @@ export function compileMonitoringGraph(input: {
         if (finding.severity === "info") {
           continue;
         }
-        await input.service.alert(finding, null);
+        const recurring = input.noteOperational ? await input.noteOperational(finding) : false;
+        await input.service.alert(
+          recurring
+            ? { ...finding, summary: `${finding.summary} This condition was recorded in operational memory before.` }
+            : finding,
+          null,
+        );
       }
       if (input.allowRecovery) {
         await input.service.schedule(
@@ -100,6 +107,17 @@ export function compileMonitoringGraph(input: {
     })
     .addEdge(START, "monitor")
     .addEdge("monitor", END)
+    .compile({ checkpointer: input.checkpointer });
+}
+
+export function compileLearningGraph(input: { service: DepartmentLearningService; ctx: RequestContext; cycleId: string; checkpointer: BaseCheckpointSaver }) {
+  return new StateGraph(WorkflowState)
+    .addNode("resume", async () => {
+      const resumed = await input.service.resume(input.ctx, input.cycleId);
+      return { status: resumed.next === "none" ? "done" as const : "wait" as const, objectiveId: input.cycleId };
+    })
+    .addEdge(START, "resume")
+    .addEdge("resume", END)
     .compile({ checkpointer: input.checkpointer });
 }
 

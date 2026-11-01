@@ -28,6 +28,9 @@ import type {
   TaskType,
 } from "@ai-colony/contracts";
 import type { DecodedCursor } from "../pagination.js";
+import type { EvaluationRepository } from "../evaluation/repository.js";
+import type { LearningRepository } from "../learning/repository.js";
+import type { TrainingRepository } from "../training/repository.js";
 
 export interface PageQuery {
   limit: number;
@@ -691,6 +694,142 @@ export interface ObjectiveRepository {
   findAgent(id: string): Promise<EligibleAgent | null>;
 }
 
+export interface MemoryRow {
+  id: string;
+  scope: "agent" | "department" | "colony";
+  category: "episodic" | "semantic" | "procedural" | "failure" | "operational";
+  ownerAgentId: string | null;
+  departmentId: string | null;
+  title: string;
+  summary: string;
+  content: string;
+  provenance: "model_generated" | "system_observed" | "user_provided" | "externally_verified";
+  status: "candidate" | "validated" | "disputed" | "superseded" | "archived" | "expired" | "forgetting_requested" | "forgotten";
+  qualityScore: number | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
+  contentHash: string;
+  idempotencyKey: string;
+  supersededBy: string | null;
+  originAgentId: string | null;
+  createdBy: string;
+  embeddingError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemorySourceRow {
+  id: string;
+  memoryId: string;
+  objectiveId: string | null;
+  taskId: string | null;
+  messageId: string | null;
+  sourceMemoryId: string | null;
+  note: string | null;
+}
+
+export interface MemoryRevisionRow {
+  id: string;
+  memoryId: string;
+  revision: number;
+  status: MemoryRow["status"];
+  summary: string;
+  createdAt: string;
+}
+
+export interface MemoryPromotionRow {
+  id: string;
+  memoryId: string;
+  fromScope: MemoryRow["scope"];
+  toScope: MemoryRow["scope"];
+  status: "pending" | "approved" | "rejected";
+  reason: string;
+  proposedBy: string;
+  decidedBy: string | null;
+  decisionReason: string | null;
+  createdMemoryId: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export interface MemorySearchRow extends MemoryRow {
+  vectorScore: number | null;
+  keywordScore: number;
+}
+
+export interface MemoryVisibility {
+  admin: boolean;
+  agentId: string | null;
+  departmentId: string | null;
+  canReadOwn: boolean;
+  canReadDepartment: boolean;
+  canReadColony: boolean;
+}
+
+export interface MemoryRepository {
+  insert(input: Omit<MemoryRow, "embeddingModel" | "embeddingDimensions" | "embeddingError" | "supersededBy" | "createdAt" | "updatedAt"> & {
+    createdAt: Date;
+  }): Promise<"created" | "exists">;
+  findById(id: string): Promise<MemoryRow | null>;
+  tombstone(id: string, at: Date): Promise<void>;
+  retentionIds(input: { scope: string | null; provenance: string | null; olderThan: Date }): Promise<string[]>;
+  findByKey(key: string): Promise<MemoryRow | null>;
+  update(
+    id: string,
+    patch: Partial<Pick<MemoryRow, "title" | "summary" | "content" | "status" | "contentHash" | "supersededBy" | "embeddingError">> & {
+      updatedAt: Date;
+    },
+  ): Promise<void>;
+  insertRevision(input: Omit<MemoryRevisionRow, "createdAt"> & { createdAt: Date }): Promise<void>;
+  listRevisions(memoryId: string): Promise<MemoryRevisionRow[]>;
+  insertSource(input: MemorySourceRow): Promise<void>;
+  listSources(memoryId: string): Promise<MemorySourceRow[]>;
+  countObjectiveSources(objectiveId: string): Promise<number>;
+  saveEmbedding(input: { memoryId: string; model: string; dimensions: number; values: number[] }): Promise<void>;
+  getEmbedding(memoryId: string): Promise<number[] | null>;
+  search(input: {
+    query: string;
+    vector: number[] | null;
+    embeddingModel: string;
+    visibility: MemoryVisibility;
+    scopes?: MemoryRow["scope"][];
+    categories?: MemoryRow["category"][];
+    statuses: MemoryRow["status"][];
+    limit: number;
+  }): Promise<MemorySearchRow[]>;
+  list(input: {
+    visibility: MemoryVisibility;
+    scope?: MemoryRow["scope"];
+    category?: MemoryRow["category"];
+    status?: MemoryRow["status"];
+    cursor?: { createdAt: Date; id: string };
+    limit: number;
+  }): Promise<MemoryRow[]>;
+  exactGroup(hash: string, scope: MemoryRow["scope"], category: MemoryRow["category"], ownerAgentId: string | null, departmentId: string | null): Promise<MemoryRow[]>;
+  insertPromotion(input: Omit<MemoryPromotionRow, "decidedBy" | "decisionReason" | "createdMemoryId" | "decidedAt" | "createdAt"> & { createdAt: Date }): Promise<void>;
+  findPromotion(id: string): Promise<MemoryPromotionRow | null>;
+  listPromotions(limit: number): Promise<MemoryPromotionRow[]>;
+  decidePromotion(id: string, decision: { status: "approved" | "rejected"; decidedBy: string; decisionReason: string; createdMemoryId: string | null; decidedAt: Date }): Promise<void>;
+  insertConsolidation(input: { id: string; keeperId: string; mergedIds: string[]; kind: "exact" | "near"; createdAt: Date }): Promise<void>;
+  linkContradiction(leftId: string, rightId: string, createdAt: Date): Promise<void>;
+  contradicts(leftId: string, rightId: string): Promise<boolean>;
+  recordRetrieval(input: { id: string; objectiveId: string | null; taskId: string | null; actorId: string; queryHash: string; mode: "hybrid" | "keyword"; hitCount: number; latencyMs: number; createdAt: Date; hits: Array<{ memoryId: string; rank: number; score: number }> }): Promise<void>;
+  recordEmbeddingUse(input: { id: string; model: string; vectorCount: number; latencyMs: number; success: boolean; error: string | null; createdAt: Date }): Promise<void>;
+  metrics(): Promise<{
+    byScope: Record<MemoryRow["scope"], number>;
+    byCategory: Record<MemoryRow["category"], number>;
+    byStatus: Record<MemoryRow["status"], number>;
+    embeddingFailures: number;
+    meanEmbeddingLatencyMs: number | null;
+    retrievals: number;
+    retrievalHits: number;
+    meanRetrievalLatencyMs: number | null;
+    promotions: { pending: number; approved: number; rejected: number };
+    consolidations: number;
+  }>;
+  findAgentByRole(role: string): Promise<{ id: string; departmentId: string; role: string } | null>;
+}
+
 export interface Repositories {
   departments: DepartmentRepository;
   agents: AgentRepository;
@@ -701,6 +840,10 @@ export interface Repositories {
   lifecycle: LifecycleRepository;
   messages: MessageRepository;
   objectives: ObjectiveRepository;
+  memories: MemoryRepository;
+  training: TrainingRepository;
+  evaluation: EvaluationRepository;
+  learning: LearningRepository;
 }
 
 export interface Persistence {

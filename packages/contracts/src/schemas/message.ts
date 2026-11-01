@@ -126,6 +126,80 @@ export const evolutionProposalPayloadSchema = z
   })
   .strict();
 
+export const capabilityGapPayloadSchema = z
+  .object({
+    cycleId: uuidSchema,
+    gapId: uuidSchema,
+    departmentId: uuidSchema,
+    taskCategory: text(80),
+    severity: z.enum(["low", "medium", "high"]),
+    failureCount: z.number().int().positive().max(10_000),
+  })
+  .strict();
+
+export const learningObjectivePayloadSchema = z
+  .object({
+    cycleId: uuidSchema,
+    objectiveId: uuidSchema,
+    mechanism: z.enum(["memory_acquisition", "memory_consolidation", "workflow", "retrieval", "lora", "knowledge_transfer", "no_action"]),
+  })
+  .strict();
+
+export const knowledgeTransferPayloadSchema = z
+  .object({
+    transferId: uuidSchema,
+    originDepartmentId: uuidSchema,
+    destinationDepartmentId: uuidSchema,
+    trust: z.enum(["model_generated", "system_observed", "user_provided", "externally_verified"]),
+  })
+  .strict();
+
+export const knowledgeValidationPayloadSchema = z
+  .object({
+    transferId: uuidSchema,
+    decision: z.enum(["accept", "reject"]),
+  })
+  .strict();
+
+export const learningCycleResultPayloadSchema = z
+  .object({
+    cycleId: uuidSchema,
+    status: z.enum([
+      "OBSERVED",
+      "GAP_VALIDATED",
+      "OBJECTIVE_CREATED",
+      "METHOD_SELECTED",
+      "PROPOSAL_PENDING",
+      "AWAITING_APPROVAL",
+      "APPROVED",
+      "EXECUTING",
+      "EVALUATING",
+      "AWAITING_PROMOTION",
+      "ADOPTED",
+      "REJECTED",
+      "INCONCLUSIVE",
+      "FAILED",
+      "CANCELLED",
+    ]),
+    outcomeKind: z.enum([
+      "MEMORY_IMPROVEMENT",
+      "RETRIEVAL_IMPROVEMENT",
+      "WORKFLOW_IMPROVEMENT",
+      "TOOL_IMPROVEMENT",
+      "MODEL_WEIGHT_IMPROVEMENT",
+      "NO_VERIFIED_IMPROVEMENT",
+    ]),
+  })
+  .strict();
+
+export const capabilityUpdatePayloadSchema = z
+  .object({
+    capabilityId: uuidSchema,
+    version: z.number().int().positive().max(10_000),
+    status: z.enum(["proposed", "experimental", "evaluated", "approved", "rejected", "revoked", "superseded"]),
+  })
+  .strict();
+
 export const payloadSchemaByType = {
   TASK_REQUEST: taskRequestPayloadSchema,
   TASK_RESULT: taskResultPayloadSchema,
@@ -137,6 +211,12 @@ export const payloadSchemaByType = {
   RESOURCE_REQUEST: resourceRequestPayloadSchema,
   HEALTH_ALERT: healthAlertPayloadSchema,
   EVOLUTION_PROPOSAL: evolutionProposalPayloadSchema,
+  CAPABILITY_GAP: capabilityGapPayloadSchema,
+  LEARNING_OBJECTIVE: learningObjectivePayloadSchema,
+  KNOWLEDGE_TRANSFER: knowledgeTransferPayloadSchema,
+  KNOWLEDGE_VALIDATION: knowledgeValidationPayloadSchema,
+  LEARNING_CYCLE_RESULT: learningCycleResultPayloadSchema,
+  CAPABILITY_UPDATE: capabilityUpdatePayloadSchema,
 } as const;
 
 const messageFields = {
@@ -179,6 +259,12 @@ export const messageSchema = z.discriminatedUnion("messageType", [
   envelope("RESOURCE_REQUEST", resourceRequestPayloadSchema),
   envelope("HEALTH_ALERT", healthAlertPayloadSchema),
   envelope("EVOLUTION_PROPOSAL", evolutionProposalPayloadSchema),
+  envelope("CAPABILITY_GAP", capabilityGapPayloadSchema),
+  envelope("LEARNING_OBJECTIVE", learningObjectivePayloadSchema),
+  envelope("KNOWLEDGE_TRANSFER", knowledgeTransferPayloadSchema),
+  envelope("KNOWLEDGE_VALIDATION", knowledgeValidationPayloadSchema),
+  envelope("LEARNING_CYCLE_RESULT", learningCycleResultPayloadSchema),
+  envelope("CAPABILITY_UPDATE", capabilityUpdatePayloadSchema),
 ]);
 
 export const messagePublishSchema = z

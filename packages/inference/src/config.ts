@@ -17,6 +17,15 @@ const schema = z.object({
   INFERENCE_OUTPUT_USD_PER_MILLION: z.coerce.number().nonnegative().optional(),
   OBJECTIVE_GLOBAL_CONCURRENCY: z.coerce.number().int().positive().max(2).default(1),
   OBJECTIVE_DEPARTMENT_CONCURRENCY: z.coerce.number().int().positive().max(2).default(1),
+  EMBEDDING_BASE_URL: z.string().url().default("http://127.0.0.1:11434"),
+  EMBEDDING_MODEL: z.string().min(1).default("embeddinggemma"),
+  EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().max(4096).default(768),
+  EMBEDDING_TIMEOUT_MS: z.coerce.number().int().positive().max(120_000).default(30_000),
+  EMBEDDING_MAX_CONCURRENCY: z.coerce.number().int().positive().max(2).default(1),
+  EMBEDDING_TRANSPORT_RETRIES: z.coerce.number().int().min(0).max(3).default(2),
+  MEMORY_TOP_K: z.coerce.number().int().positive().max(20).default(5),
+  MEMORY_CONTEXT_TOKENS: z.coerce.number().int().positive().max(4000).default(800),
+  MEMORY_MAX_WRITES_PER_OBJECTIVE: z.coerce.number().int().positive().max(50).default(12),
 });
 
 export interface InferenceConfig {
@@ -36,6 +45,15 @@ export interface InferenceConfig {
   outputUsdPerMillion: number | null;
   globalConcurrency: number;
   departmentConcurrency: number;
+  embeddingBaseUrl: string;
+  embeddingModel: string;
+  embeddingDimensions: number;
+  embeddingTimeoutMs: number;
+  embeddingConcurrency: number;
+  embeddingRetries: number;
+  memoryTopK: number;
+  memoryContextTokens: number;
+  memoryMaxWritesPerObjective: number;
 }
 
 export function loadInferenceConfig(env: NodeJS.ProcessEnv): InferenceConfig {
@@ -57,6 +75,15 @@ export function loadInferenceConfig(env: NodeJS.ProcessEnv): InferenceConfig {
     outputUsdPerMillion: parsed.INFERENCE_OUTPUT_USD_PER_MILLION ?? null,
     globalConcurrency: parsed.OBJECTIVE_GLOBAL_CONCURRENCY,
     departmentConcurrency: parsed.OBJECTIVE_DEPARTMENT_CONCURRENCY,
+    embeddingBaseUrl: parsed.EMBEDDING_BASE_URL,
+    embeddingModel: parsed.EMBEDDING_MODEL,
+    embeddingDimensions: parsed.EMBEDDING_DIMENSIONS,
+    embeddingTimeoutMs: parsed.EMBEDDING_TIMEOUT_MS,
+    embeddingConcurrency: parsed.EMBEDDING_MAX_CONCURRENCY,
+    embeddingRetries: parsed.EMBEDDING_TRANSPORT_RETRIES,
+    memoryTopK: parsed.MEMORY_TOP_K,
+    memoryContextTokens: parsed.MEMORY_CONTEXT_TOKENS,
+    memoryMaxWritesPerObjective: parsed.MEMORY_MAX_WRITES_PER_OBJECTIVE,
   };
 }
 

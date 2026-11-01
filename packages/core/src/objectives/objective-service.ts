@@ -19,6 +19,7 @@ import { snapshot, type RequestContext } from "../context.js";
 import { DomainError, notFound } from "../errors/domain-error.js";
 import type { Authorizer } from "../governance/authorizer.js";
 import { ROLE_PERMISSIONS } from "../governance/permissions.js";
+import type { ChatMessage } from "../inference/provider.js";
 import {
   estimateCostUsdMicros,
   estimateTokens,
@@ -34,7 +35,7 @@ import type {
   Persistence,
 } from "../ports/repositories.js";
 import { extractJsonObject, validatePlan } from "./plan.js";
-import { planPrompt, RESEARCH_EVIDENCE_FOOTER, specialistPrompt, synthesisPrompt } from "./prompts.js";
+import { planPrompt, RESEARCH_EVIDENCE_FOOTER, specialistPrompt, synthesisPrompt, withMemory } from "./prompts.js";
 import { blockedTaskIds, chooseDispatch, readyTaskIds } from "./schedule.js";
 import { assertObjectiveTransition, assertTaskTransition, isTerminalObjective, isTerminalTask } from "./transitions.js";
 
@@ -82,13 +83,41 @@ export type PreparedGeneration =
 const WORKER_ACTOR = "system:workflow";
 const SPECIALIST_SLUGS = ["math", "science", "research", "reasoning"] as const;
 
+export interface ObjectiveMemory {
+  contextFor(input: { purpose: string; objectiveId: string; taskId: string | null; query: string }): Promise<string>;
+  capture(input: { purpose: string; objectiveId: string; taskId: string | null; text: string }): Promise<void>;
+}
+
 export class ObjectiveService {
+  private memory: ObjectiveMemory | null = null;
+
   constructor(
     private readonly persistence: Persistence,
     private readonly authorizer: Authorizer,
     private readonly messages: MessagingService,
     private readonly now: () => Date = () => new Date(),
   ) {}
+
+  attachMemory(memory: ObjectiveMemory | null): void {
+    this.memory = memory;
+  }
+
+  async memoryMessages(prepared: PreparedGeneration): Promise<ChatMessage[] | null> {
+    if (!this.memory || prepared.action !== "generate" || prepared.cachedText || prepared.messages.length === 0) {
+      return null;
+    }
+    try {
+      const context = await this.memory.contextFor({
+        purpose: prepared.purpose,
+        objectiveId: prepared.objectiveId,
+        taskId: prepared.taskId,
+        query: prepared.messages.map((message) => message.content).join("\n").slice(0, 2000),
+      });
+      return context.trim() ? withMemory(prepared.messages, context) : null;
+    } catch {
+      return null;
+    }
+  }
 
   async submit(ctx: RequestContext, input: ObjectiveCreate): Promise<ObjectiveRecord> {
     this.authorizer.assert(ctx.actor, "objective:submit");
@@ -333,12 +362,37 @@ export class ObjectiveService {
     });
     if (stored.purpose === "synthesize") {
       await this.finishSynthesis(stored.objectiveId, input.text);
+      await this.remember(stored, input.text);
       return "completed";
     }
     if (stored.purpose === "plan" || stored.purpose === "correct") {
-      return this.acceptPlan(stored.objectiveId, input.text);
+      const outcome = await this.acceptPlan(stored.objectiveId, input.text);
+      if (outcome === "accepted") {
+        await this.remember(stored, input.text);
+      }
+      return outcome;
     }
+    await this.remember(stored, input.text);
     return "accepted";
+  }
+
+  private async remember(
+    stored: { purpose: string; objectiveId: string; taskId: string | null },
+    text: string,
+  ): Promise<void> {
+    if (!this.memory) {
+      return;
+    }
+    try {
+      await this.memory.capture({
+        purpose: stored.purpose,
+        objectiveId: stored.objectiveId,
+        taskId: stored.taskId,
+        text,
+      });
+    } catch {
+      // Memory capture must not fail an objective that already finished its model call.
+    }
   }
 
   async failGeneration(requestId: string, error: string): Promise<void> {
@@ -635,6 +689,8 @@ export class ObjectiveService {
         unavailableUsage: counts.unavailableUsage,
         estimatedCostUsdMicros: counts.estimatedCostUsdMicros,
       },
+      training: await this.persistence.repos.training.summary(),
+      safeguards: await this.persistence.repos.evaluation.summary(),
       findings,
     };
   }
