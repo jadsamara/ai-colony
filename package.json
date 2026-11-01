@@ -1,0 +1,53 @@
+{
+  "name": "ai-colony",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Colony V1 control plane. Milestone 2 adds the IACP messaging protocol, transactional outbox, and RabbitMQ workers.",
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "packageManager": "pnpm@10.18.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b && tsx watch apps/api/src/server.ts",
+    "dev:publisher": "tsx watch packages/messaging/src/publisher-cli.ts",
+    "dev:consumer": "tsx watch packages/messaging/src/consumer-cli.ts",
+    "start": "node apps/api/dist/server.js",
+    "start:publisher": "node packages/messaging/dist/publisher-cli.js",
+    "start:consumer": "node packages/messaging/dist/consumer-cli.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit --pretty false",
+    "test": "vitest run --config vitest.unit.config.ts && vitest run --config vitest.integration.config.ts",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsc -b && node packages/database/dist/migrate-cli.js",
+    "db:seed": "tsc -b && node packages/database/dist/seed-cli.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^22.19.1",
+    "drizzle-kit": "^0.31.6",
+    "eslint": "^9.39.1",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "vitest": "^3.2.4",
+    "drizzle-orm": "^0.44.6",
+    "fastify": "^5.6.1",
+    "postgres": "^3.4.7",
+    "amqplib": "^0.10.8",
+    "@types/amqplib": "^0.10.7"
+  }
+}

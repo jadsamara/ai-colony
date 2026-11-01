@@ -1,0 +1,25 @@
+{
+  "name": "@ai-colony/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-colony/contracts": "workspace:*",
+    "@ai-colony/core": "workspace:*",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.44.6",
+    "postgres": "^3.4.7"
+  }
+}

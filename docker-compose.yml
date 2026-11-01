@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai-colony-postgres
+    environment:
+      POSTGRES_USER: colony
+      POSTGRES_PASSWORD: colony
+      POSTGRES_DB: ai_colony
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - ai_colony_postgres:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U colony -d ai_colony"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+    networks:
+      - ai-colony
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: ai-colony-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-colony}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-colony-dev-password}
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - ai_colony_rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 1.0
+    restart: unless-stopped
+    networks:
+      - ai-colony
+
+networks:
+  ai-colony:
+    name: ai-colony
+
+volumes:
+  ai_colony_postgres:
+  ai_colony_rabbitmq:

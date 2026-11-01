@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@ai-colony/contracts": ["./packages/contracts/src/index.ts"],
+      "@ai-colony/core": ["./packages/core/src/index.ts"],
+      "@ai-colony/database": ["./packages/database/src/index.ts"],
+      "@ai-colony/messaging": ["./packages/messaging/src/index.ts"]
+    }
+  },
+  "include": [
+    "apps/**/*.ts",
+    "packages/**/*.ts",
+    "tests/**/*.ts",
+    "drizzle.config.ts",
+    "vitest.unit.config.ts",
+    "vitest.integration.config.ts"
+  ],
+  "exclude": ["**/dist/**", "**/node_modules/**"]
+}
