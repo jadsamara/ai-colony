@@ -1,0 +1,12 @@
+{
+  "experiment": "m75b",
+  "generator": "arith-m75-v1",
+  "scorer": "answer-extract-m75-v1",
+  "cell": "asm3-30",
+  "sealedSeed": 21005,
+  "devSeed": 21004,
+  "m8Started": false,
+  "qwenModified": false,
+  "status": "ENGINEERING_PASS / SCIENTIFIC_FAIL",
+  "tests": { "unit": "82 passed, 18 files", "integration": "51 passed, 15 files" }
+}

@@ -137,6 +137,18 @@ CREATE TRIGGER deployment_decisions_no_update
 BEFORE UPDATE ON deployment_decisions
 FOR EACH ROW
 EXECUTE FUNCTION colony_reject_training_mutation();
+
+DROP TRIGGER IF EXISTS training_experiments_no_update ON training_experiments;
+CREATE TRIGGER training_experiments_no_update
+BEFORE UPDATE ON training_experiments
+FOR EACH ROW
+EXECUTE FUNCTION colony_reject_training_mutation();
+
+DROP TRIGGER IF EXISTS training_experiments_no_delete ON training_experiments;
+CREATE TRIGGER training_experiments_no_delete
+BEFORE DELETE ON training_experiments
+FOR EACH ROW
+EXECUTE FUNCTION colony_reject_training_mutation();
 `;
 
 export function migrationsFolder(): string {

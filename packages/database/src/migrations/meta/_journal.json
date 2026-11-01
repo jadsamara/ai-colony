@@ -57,6 +57,13 @@
       "when": 1793549256995,
       "tag": "0007_m7h_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793549300000,
+      "tag": "0008_training_experiments",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,15 @@
+{
+  "name": "zero-step",
+  "sha256": "ece860814833cc738f4576cb9e522d067662348bfe6ce8134068ca0b1df096ab",
+  "path": "/Users/jad/Desktop/ai-colony/services/training/research-artifacts/m75b/zero-step",
+  "steps": 0,
+  "learningRate": 0,
+  "datasetSize": 0,
+  "exposures": 0,
+  "target": "answer",
+  "seed": 0,
+  "durationMs": 769,
+  "peakMemoryBytes": 916087040,
+  "trainableParameters": 458752,
+  "trainableL2": 6.529663562774658
+}

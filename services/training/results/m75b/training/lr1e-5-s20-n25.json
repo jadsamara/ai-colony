@@ -1,0 +1,193 @@
+{
+  "name": "lr1e-5-s20-n25",
+  "sha256": "0de81c181c29c62bda182b0341b7fddef7d94a36ee9151e00a4325330317ccd7",
+  "path": "/Users/jad/Desktop/ai-colony/services/training/research-artifacts/m75b/runs/lr1e-5-s20-n25",
+  "steps": 20,
+  "learningRate": 0.00001,
+  "datasetSize": 25,
+  "exposures": 0.8,
+  "target": "answer",
+  "seed": 101,
+  "durationMs": 2648,
+  "peakMemoryBytes": 1247210336,
+  "trainableParameters": 458752,
+  "trainableL2": 6.5715436935424805,
+  "metrics": [
+    {
+      "step": 0,
+      "trainLoss": null,
+      "validationLoss": 12.486534118652344,
+      "learningRate": null,
+      "trainedTokens": null,
+      "peakMemoryGb": null
+    },
+    {
+      "step": 1,
+      "trainLoss": 9.102246284484863,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 5,
+      "peakMemoryGb": 1.24096016
+    },
+    {
+      "step": 2,
+      "trainLoss": 11.25274658203125,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 9,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 3,
+      "trainLoss": 10.98828125,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 15,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 4,
+      "trainLoss": 13.756274223327637,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 20,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 5,
+      "trainLoss": 15.6875,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 24,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 6,
+      "trainLoss": 12.408203125,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 28,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 7,
+      "trainLoss": 10.385937690734863,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 33,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 8,
+      "trainLoss": 11.048829078674316,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 37,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 9,
+      "trainLoss": 10.446710586547852,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 42,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 10,
+      "trainLoss": 11.431249618530273,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 47,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 11,
+      "trainLoss": 7.767024993896484,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 53,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 12,
+      "trainLoss": 11.837499618530273,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 58,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 13,
+      "trainLoss": 11.0625,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 62,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 14,
+      "trainLoss": 12.4151611328125,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 66,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 15,
+      "trainLoss": 11.949999809265137,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 71,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 16,
+      "trainLoss": 7.250650882720947,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 77,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 17,
+      "trainLoss": 7.6982421875,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 83,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 18,
+      "trainLoss": 7.311425685882568,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 88,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 19,
+      "trainLoss": 12.90234375,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 92,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 19,
+      "trainLoss": null,
+      "validationLoss": 9.515366554260254,
+      "learningRate": null,
+      "trainedTokens": null,
+      "peakMemoryGb": null
+    },
+    {
+      "step": 20,
+      "trainLoss": 6.211338043212891,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 99,
+      "peakMemoryGb": 1.247210336
+    }
+  ]
+}

@@ -48,6 +48,9 @@ export {
 export { AuditQueryService } from "./audit/audit-query-service.js";
 export { ModelService } from "./models/model-service.js";
 export { TrainingService } from "./training/training-service.js";
+export { ExperimentService } from "./training/experiment-service.js";
+export { TRAINING_METHODS, assertMethodExecutable, assertSafeConfig, isHighRisk, planExperiments, selectDevelopmentCandidate } from "./training/experiment-planner.js";
+export { meanExposures, outputDisagreement, stopDecision } from "./training/stability.js";
 export { EvaluationService } from "./evaluation/evaluation-service.js";
 export { DepartmentLearningService } from "./learning/learning-service.js";
 export { CollaborationService } from "./learning/collaboration-service.js";
@@ -205,6 +208,8 @@ export type {
   ProcessingRow,
   ProcessingStatus,
   Persistence,
+  ExperimentRepository,
+  StoredExperiment,
   PrincipalRecord,
   PrincipalRepository,
   StoredMessage,

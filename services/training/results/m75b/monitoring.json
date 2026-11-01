@@ -1,0 +1,16 @@
+{
+  "stopped": [
+    {
+      "id": "lr3e-5-s40-n25-longer",
+      "reason": "Development accuracy regressed beyond the stop tolerance."
+    },
+    {
+      "id": "lr1e-4-s10-n25-longer",
+      "reason": "Development accuracy regressed beyond the stop tolerance."
+    }
+  ],
+  "budgetStop": {
+    "stop": true,
+    "reason": "The step budget is exhausted."
+  }
+}

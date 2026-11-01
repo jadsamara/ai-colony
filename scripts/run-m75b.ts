@@ -1,0 +1,6 @@
+import { main } from "../research/m75b/run.js";
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});

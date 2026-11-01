@@ -27,6 +27,7 @@ import {
   MlxTrainingProvider,
   ObjectiveService,
   ScriptedTrainingProvider,
+  ExperimentService,
   TrainingService,
   type EmbeddingProvider,
   type Persistence,
@@ -47,6 +48,7 @@ import { registerMemoryRoutes } from "./routes/memories.js";
 import { registerModelRoutes } from "./routes/models.js";
 import { registerEvaluationRoutes } from "./routes/evaluation.js";
 import { registerLearningRoutes } from "./routes/learning.js";
+import { registerExperimentRoutes } from "./routes/experiments.js";
 import { registerTrainingRoutes } from "./routes/training.js";
 import { registerObjectiveRoutes } from "./routes/objectives.js";
 import "./types.js";
@@ -112,6 +114,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     },
   );
   const training = new TrainingService(options.persistence, authorizer, trainingProvider, messages, trainingRoots);
+  const experiments = new ExperimentService(options.persistence, authorizer);
   const evaluation = new EvaluationService(options.persistence, authorizer, trainingProvider, messages, trainingRoots);
   const learning = new DepartmentLearningService(options.persistence, authorizer, messages, training, evaluation, memories);
   const collaboration = new CollaborationService(options.persistence, authorizer, memories, messages);
@@ -138,6 +141,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       route: routeFromConfig(inferenceConfig),
     },
     training,
+    experiments,
     evaluation,
     learning,
     collaboration,
@@ -187,6 +191,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await registerDepartmentRoutes(app);
   await registerAgentRoutes(app);
   await registerTrainingRoutes(app);
+  await registerExperimentRoutes(app);
   await registerEvaluationRoutes(app);
   await registerLearningRoutes(app);
   await registerModelRoutes(app);

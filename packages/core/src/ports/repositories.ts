@@ -830,6 +830,38 @@ export interface MemoryRepository {
   findAgentByRole(role: string): Promise<{ id: string; departmentId: string; role: string } | null>;
 }
 
+export interface StoredExperiment {
+  id: string;
+  idempotencyKey: string;
+  methodId: string;
+  modelId: string;
+  modelRevision: string;
+  adapterSha256: string | null;
+  problem: string;
+  datasetSize: number;
+  learningRate: number;
+  steps: number;
+  exposures: number;
+  target: "answer" | "structured";
+  seed: number;
+  devAccuracy: number | null;
+  baselineAccuracy: number | null;
+  sealedAccuracy: number | null;
+  retentionOk: boolean | null;
+  failureClass: string | null;
+  recommendation: string;
+  evidencePath: string;
+  stopped: boolean;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ExperimentRepository {
+  insert(input: StoredExperiment): Promise<StoredExperiment>;
+  findByKey(key: string): Promise<StoredExperiment | null>;
+  list(): Promise<StoredExperiment[]>;
+}
+
 export interface Repositories {
   departments: DepartmentRepository;
   agents: AgentRepository;
@@ -844,6 +876,7 @@ export interface Repositories {
   training: TrainingRepository;
   evaluation: EvaluationRepository;
   learning: LearningRepository;
+  experiments: ExperimentRepository;
 }
 
 export interface Persistence {

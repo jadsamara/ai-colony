@@ -1,0 +1,6 @@
+{
+  "baseSha256": "4d461171f280e0e4c925764d9805d83b9cd0930a7d2b237213ae7ae3fda23dcd",
+  "fileSha256": "42e688d626b3e144bf721af7517a82f3ea7e97bb5764fef1c89942bf9165072a",
+  "modelId": "Qwen/Qwen3-1.7B-MLX-4bit",
+  "revision": "21457c6f51ed54a7c16e988c0844db973815c137"
+}

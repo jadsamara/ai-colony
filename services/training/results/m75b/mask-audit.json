@@ -1,0 +1,50 @@
+{
+  "answer": {
+    "renderedPrompt": "<|im_start|>user\nCompute the value of the expression. Reply with the integer result only.\nExpression: 19 * 16 * 2<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+    "promptTokenCount": 38,
+    "fullTokenCount": 42,
+    "lossTokenCount": 4,
+    "offset": 38,
+    "decodedLossSpan": "608<|im_end|>",
+    "promptLeaksIntoLoss": false,
+    "inferencePromptMatchesTrainingPrefix": true,
+    "lossTokenPreview": [
+      21,
+      15,
+      23,
+      151645
+    ],
+    "target": "answer",
+    "baseSha256": "4d461171f280e0e4c925764d9805d83b9cd0930a7d2b237213ae7ae3fda23dcd"
+  },
+  "structured": {
+    "renderedPrompt": "<|im_start|>user\nCompute the value of the expression. Reply with the integer result only.\nExpression: 19 * 16 * 2<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+    "promptTokenCount": 38,
+    "fullTokenCount": 62,
+    "lossTokenCount": 24,
+    "offset": 38,
+    "decodedLossSpan": "19 * 16 = 304\n304 * 2 = 608<|im_end|>",
+    "promptLeaksIntoLoss": false,
+    "inferencePromptMatchesTrainingPrefix": true,
+    "lossTokenPreview": [
+      16,
+      24,
+      353,
+      220,
+      16,
+      21,
+      284,
+      220,
+      18,
+      15,
+      19,
+      198,
+      18,
+      15,
+      19,
+      353
+    ],
+    "target": "structured",
+    "baseSha256": "4d461171f280e0e4c925764d9805d83b9cd0930a7d2b237213ae7ae3fda23dcd"
+  }
+}

@@ -71,7 +71,7 @@ def load_job(argv: list[str]) -> dict:
     if "gemma" in json.dumps(job).lower():
         raise WorkerError("the research worker cannot target Gemma")
     command = job.get("command")
-    if command not in {"validate", "probe", "generate", "train"}:
+    if command not in {"validate", "probe", "generate", "train", "init", "audit"}:
         raise WorkerError("command is not allowlisted")
     model_dir = Path(str(job.get("modelPath", ""))).resolve()
     if not inside(model_dir, CHECKPOINTS) or model_dir.name not in ALLOWED_MODELS:
@@ -84,6 +84,10 @@ def load_job(argv: list[str]) -> dict:
         assert_generate_job(job)
     if command == "probe":
         assert_probe_job(job)
+    if command in {"init", "audit"}:
+        output = Path(str(job.get("outputDir", job.get("outputPath", "")))).resolve()
+        if not inside(output, ARTIFACTS):
+            raise WorkerError("research output escapes the artifact root")
     return job
 
 
@@ -178,10 +182,61 @@ def render_prompt(tokenizer, user: str) -> str:
     return str(base) + THINK_PREFIX
 
 
+def eval_expr(canonical: str) -> int:
+    parts = canonical.split()
+    values = []
+    operators = []
+    expect_value = True
+    for part in parts:
+        if expect_value:
+            if not part.lstrip("-").isdigit():
+                raise WorkerError("structured step is not an arithmetic expression")
+            values.append(int(part))
+            expect_value = False
+        else:
+            if part not in {"+", "-", "*"}:
+                raise WorkerError("structured step is not an arithmetic expression")
+            operators.append(part)
+            expect_value = True
+    if expect_value or not values:
+        raise WorkerError("structured step is incomplete")
+    terms = []
+    additive = []
+    current = values[0]
+    for operator, value in zip(operators, values[1:], strict=True):
+        if operator == "*":
+            current *= value
+        else:
+            terms.append(current)
+            additive.append(operator)
+            current = value
+    terms.append(current)
+    result = terms[0]
+    for operator, term in zip(additive, terms[1:], strict=True):
+        result = result + term if operator == "+" else result - term
+    return result
+
+
+def verify_structured(text: str, expected: int) -> None:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        raise WorkerError("structured target is empty")
+    for line in lines:
+        if "=" not in line:
+            raise WorkerError("structured target contains a line without an equation")
+        left, right = line.rsplit("=", 1)
+        if eval_expr(left.strip()) != int(right.strip()):
+            raise WorkerError("structured step does not recompute")
+    final = int(lines[-1].rsplit("=", 1)[1].strip())
+    if final != expected:
+        raise WorkerError("structured target does not match the verified answer")
+
+
 class AnswerDataset:
-    def __init__(self, rows: list[dict], tokenizer) -> None:
+    def __init__(self, rows: list[dict], tokenizer, mode: str = "answer") -> None:
         self._data = rows
         self.tokenizer = tokenizer
+        self.mode = mode
 
     def __len__(self) -> int:
         return len(self._data)
@@ -192,7 +247,9 @@ class AnswerDataset:
     def process(self, row: dict) -> tuple[list[int], int]:
         user = row["messages"][0]["content"]
         assistant = row["messages"][1]["content"]
-        if not isinstance(assistant, str) or not assistant.lstrip("-").isdigit():
+        if self.mode == "structured":
+            verify_structured(assistant, int(row["expected"]))
+        elif not isinstance(assistant, str) or not assistant.lstrip("-").isdigit():
             raise WorkerError("training target must be a verified integer")
         prompt = render_prompt(self.tokenizer, user)
         eos = self.tokenizer.eos_token or ""
@@ -217,6 +274,68 @@ def run_mlx(job: dict) -> None:
     started = time.perf_counter()
     if hasattr(mx, "reset_peak_memory"):
         mx.reset_peak_memory()
+
+    if job["command"] == "audit":
+        model, tokenizer = load(str(model_dir), tokenizer_config={"trust_remote_code": False}, trust_remote_code=False)
+        example = job["example"]
+        mode = job.get("target", "answer")
+        dataset = AnswerDataset([{"messages": [{"role": "user", "content": example["user"]}, {"role": "assistant", "content": example["assistant"]}], "expected": example.get("expected")}], tokenizer, mode)
+        tokens, offset = dataset.process(dataset[0])
+        prompt = render_prompt(tokenizer, example["user"])
+        prompt_ids = list(tokenizer.encode(prompt, add_special_tokens=False))
+        target = tokenizer.decode(tokens[offset:])
+        destination = Path(job["outputPath"]).resolve()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps({
+            "renderedPrompt": prompt,
+            "promptTokenCount": len(prompt_ids),
+            "fullTokenCount": len(tokens),
+            "lossTokenCount": len(tokens) - offset,
+            "offset": offset,
+            "decodedLossSpan": target,
+            "promptLeaksIntoLoss": "Expression" in target,
+            "inferencePromptMatchesTrainingPrefix": tokens[: len(prompt_ids)] == prompt_ids,
+            "lossTokenPreview": tokens[offset:offset + 16],
+            "target": mode,
+            "baseSha256": before,
+        }))
+        return
+
+    if job["command"] == "init":
+        from mlx_lm.tuner.utils import linear_to_lora_layers
+
+        model, tokenizer = load(str(model_dir), tokenizer_config={"trust_remote_code": False}, trust_remote_code=False)
+        keys = projection_keys(model)
+        model.freeze()
+        linear_to_lora_layers(model, int(job["numLayers"]), {"rank": int(job["rank"]), "dropout": 0.0, "scale": 2.0, "keys": keys})
+        output = Path(job["outputDir"]).resolve()
+        output.mkdir(parents=True, exist_ok=True)
+        weights = dict(tree_flatten(model.trainable_parameters()))
+        artifact = output / "adapters.safetensors"
+        mx.save_safetensors(str(artifact), weights)
+        (output / "adapter_config.json").write_text(json.dumps({
+            "fine_tune_type": "lora",
+            "num_layers": int(job["numLayers"]),
+            "lora_parameters": {"rank": int(job["rank"]), "dropout": 0.0, "scale": 2.0, "keys": keys},
+            "model": str(model_dir),
+            "adapter_path": str(output),
+            "iters": 0,
+        }))
+        if base_weight_hash(model_dir) != before:
+            raise WorkerError("base checkpoint changed while initializing an adapter")
+        (output / "result.json").write_text(json.dumps({
+            "cancelled": False,
+            "artifactPath": str(artifact),
+            "adapterSha256": sha256_file(artifact),
+            "durationMs": int((time.perf_counter() - started) * 1000),
+            "peakMemoryBytes": int(mx.get_peak_memory()) if hasattr(mx, "get_peak_memory") else None,
+            "trainableParameters": int(sum(value.size for _name, value in tree_flatten(model.trainable_parameters()))),
+            "trainableL2": adapter_l2(model),
+            "baseSha256": before,
+            "baseUnchanged": True,
+            "steps": 0,
+        }))
+        return
 
     if job["command"] == "generate":
         adapter = job.get("adapterPath")
@@ -354,8 +473,9 @@ def run_mlx(job: dict) -> None:
     keys = sorted({name for name, _module in model.layers[0].named_modules() if name.endswith("q_proj") or name.endswith("v_proj")})
     if "self_attn.q_proj" not in keys or "self_attn.v_proj" not in keys:
         raise WorkerError(f"allowlisted projections were not found: {keys}")
-    train_set = AnswerDataset(rows, tokenizer)
-    valid_set = AnswerDataset(valid_rows, tokenizer)
+    mode = str(job.get("target", "answer"))
+    train_set = AnswerDataset(rows, tokenizer, mode)
+    valid_set = AnswerDataset(valid_rows, tokenizer, mode)
     # Fail before the first optimizer step if the mask is wrong.
     _tokens, _offset = train_set.process(train_set[0])
     decoded = tokenizer.decode(_tokens[_offset:])
@@ -391,9 +511,29 @@ def run_mlx(job: dict) -> None:
                 "baseUnchanged": True,
                 "maskedTarget": decoded,
                 "exampleCount": len(rows),
+                "trainableL2": adapter_l2(model),
+                "target": job.get("target", "answer"),
             }
         )
     )
+
+
+def adapter_l2(model) -> float:
+    import mlx.core as mx
+    from mlx.utils import tree_flatten
+
+    total = mx.array(0.0)
+    for _name, value in tree_flatten(model.trainable_parameters()):
+        cast = value.astype(mx.float32)
+        total = total + (cast * cast).sum()
+    return float(mx.sqrt(total))
+
+
+def projection_keys(model) -> list[str]:
+    keys = sorted({name for name, _module in model.layers[0].named_modules() if name.endswith("q_proj") or name.endswith("v_proj")})
+    if "self_attn.q_proj" not in keys or "self_attn.v_proj" not in keys:
+        raise WorkerError(f"allowlisted projections were not found: {keys}")
+    return keys
 
 
 def train_args(job: dict, data: Path, output: Path, keys: list[str], steps: int, seed: int):
@@ -411,7 +551,7 @@ def train_args(job: dict, data: Path, output: Path, keys: list[str], steps: int,
         iters=steps,
         val_batches=4,
         learning_rate=float(job["learningRate"]),
-        steps_per_report=10,
+        steps_per_report=1,
         steps_per_eval=max(steps, 1),
         adapter_path=str(output),
         save_every=10_000,

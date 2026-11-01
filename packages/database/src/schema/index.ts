@@ -1789,3 +1789,33 @@ export const memoryOwnership = pgTable(
     check("memory_ownership_validation_check", textIn("validation_status", ["validated", "unverified"])),
   ],
 );
+
+export const trainingExperiments = pgTable(
+  "training_experiments",
+  {
+    id: uuid("id").primaryKey(),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    methodId: text("method_id").notNull(),
+    modelId: text("model_id").notNull(),
+    modelRevision: text("model_revision").notNull(),
+    adapterSha256: text("adapter_sha256"),
+    problem: text("problem").notNull(),
+    datasetSize: integer("dataset_size").notNull(),
+    learningRate: doublePrecision("learning_rate").notNull(),
+    steps: integer("steps").notNull(),
+    exposures: doublePrecision("exposures").notNull(),
+    target: text("target").notNull(),
+    seed: integer("seed").notNull(),
+    devAccuracy: doublePrecision("dev_accuracy"),
+    baselineAccuracy: doublePrecision("baseline_accuracy"),
+    sealedAccuracy: doublePrecision("sealed_accuracy"),
+    retentionOk: boolean("retention_ok"),
+    failureClass: text("failure_class"),
+    recommendation: text("recommendation").notNull(),
+    evidencePath: text("evidence_path").notNull(),
+    stopped: boolean("stopped").notNull().default(false),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("training_experiments_target_check", textIn("target", ["answer", "structured"]))],
+);

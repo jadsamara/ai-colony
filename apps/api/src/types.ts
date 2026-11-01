@@ -12,6 +12,7 @@ import type {
   DepartmentLearningService,
   MemoryService,
   ModelService,
+  ExperimentService,
   TrainingService,
   InferenceRoute,
   ObjectiveService,
@@ -29,6 +30,7 @@ export interface AppServices {
   objectives: ObjectiveService;
   memories: MemoryService;
   training: TrainingService;
+  experiments: ExperimentService;
   evaluation: EvaluationService;
   learning: DepartmentLearningService;
   collaboration: CollaborationService;

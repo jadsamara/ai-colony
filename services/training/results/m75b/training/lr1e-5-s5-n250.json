@@ -1,0 +1,73 @@
+{
+  "name": "lr1e-5-s5-n250",
+  "sha256": "5d9553bef58e1dfb64118a52088f6d64e3d7202ad5ff04ab5f4ae1251bc5635e",
+  "path": "/Users/jad/Desktop/ai-colony/services/training/research-artifacts/m75b/runs/lr1e-5-s5-n250",
+  "steps": 5,
+  "learningRate": 0.00001,
+  "datasetSize": 250,
+  "exposures": 0.02,
+  "target": "answer",
+  "seed": 101,
+  "durationMs": 1557,
+  "peakMemoryBytes": 1247210336,
+  "trainableParameters": 458752,
+  "trainableL2": 6.534894943237305,
+  "metrics": [
+    {
+      "step": 0,
+      "trainLoss": null,
+      "validationLoss": 12.2223482131958,
+      "learningRate": null,
+      "trainedTokens": null,
+      "peakMemoryGb": null
+    },
+    {
+      "step": 1,
+      "trainLoss": 14.3603515625,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 4,
+      "peakMemoryGb": 1.24354027
+    },
+    {
+      "step": 2,
+      "trainLoss": 11.34375,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 10,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 3,
+      "trainLoss": 9.1689453125,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 15,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 4,
+      "trainLoss": 8.771875381469727,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 20,
+      "peakMemoryGb": 1.247210336
+    },
+    {
+      "step": 4,
+      "trainLoss": null,
+      "validationLoss": 11.688151359558105,
+      "learningRate": null,
+      "trainedTokens": null,
+      "peakMemoryGb": null
+    },
+    {
+      "step": 5,
+      "trainLoss": 7.678906440734863,
+      "validationLoss": null,
+      "learningRate": 0.000009999999747378752,
+      "trainedTokens": 25,
+      "peakMemoryGb": 1.247210336
+    }
+  ]
+}

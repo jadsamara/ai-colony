@@ -372,6 +372,7 @@ export async function seed(db: Database): Promise<SeedResult> {
 export async function truncateColony(db: Database): Promise<void> {
   await db.execute(sql`
     TRUNCATE TABLE
+      training_experiments,
       deployment_decisions,
       improvement_decisions,
       memory_ownership,

@@ -1,0 +1,126 @@
+{
+  "recommendations": [
+    {
+      "action": "reject-configuration",
+      "methodId": "lora-supervised",
+      "executable": false,
+      "reason": "Historical runs with about 25 examples, 40 or more steps, and learning rate 0.0001 regressed the base model. That configuration is high-risk and is not proposed again.",
+      "config": {
+        "learningRate": 0.0001,
+        "steps": 80,
+        "datasetSize": 25,
+        "target": "answer"
+      },
+      "deployment": "ineligible",
+      "citedExperimentIds": [
+        "self-101-r1-sealed",
+        "supervised-101-sealed",
+        "self-202-r1-sealed",
+        "supervised-202-sealed",
+        "self-303-r1-sealed",
+        "supervised-303-sealed"
+      ]
+    },
+    {
+      "action": "zero-step-control",
+      "methodId": "lora-supervised",
+      "executable": true,
+      "reason": "An initialized adapter with no optimizer steps checks whether loading LoRA weights changes answers before any update is blamed.",
+      "config": {
+        "learningRate": 0.00001,
+        "steps": 0,
+        "datasetSize": 25,
+        "target": "answer"
+      },
+      "deployment": "ineligible",
+      "citedExperimentIds": [
+        "self-101-r1-sealed",
+        "supervised-101-sealed",
+        "self-202-r1-sealed",
+        "supervised-202-sealed",
+        "self-303-r1-sealed",
+        "supervised-303-sealed"
+      ]
+    },
+    {
+      "action": "smaller-update",
+      "methodId": "lora-supervised",
+      "executable": true,
+      "reason": "Start at learning rate 1e-5 for 5 steps, two orders of magnitude less update budget than the M7.5 runs.",
+      "config": {
+        "learningRate": 0.00001,
+        "steps": 5,
+        "datasetSize": 25,
+        "target": "answer"
+      },
+      "deployment": "ineligible",
+      "citedExperimentIds": [
+        "self-101-r1-sealed",
+        "supervised-101-sealed",
+        "self-202-r1-sealed",
+        "supervised-202-sealed",
+        "self-303-r1-sealed",
+        "supervised-303-sealed"
+      ]
+    },
+    {
+      "action": "more-data",
+      "methodId": "lora-supervised",
+      "executable": true,
+      "reason": "A 250-example set at the same 5 steps has mean exposure 0.020, versus 0.200 for 25 examples. Compare those exposures before claiming a dataset-size effect.",
+      "config": {
+        "learningRate": 0.00001,
+        "steps": 5,
+        "datasetSize": 250,
+        "target": "answer"
+      },
+      "deployment": "ineligible",
+      "citedExperimentIds": [
+        "self-101-r1-sealed",
+        "supervised-101-sealed",
+        "self-202-r1-sealed",
+        "supervised-202-sealed",
+        "self-303-r1-sealed",
+        "supervised-303-sealed"
+      ]
+    },
+    {
+      "action": "structured-target",
+      "methodId": "structured-solution-sft",
+      "executable": true,
+      "reason": "Train on programmatically checked intermediate equations and still score the final integer. Do not train on unverified model reasoning.",
+      "config": {
+        "learningRate": 0.00001,
+        "steps": 5,
+        "datasetSize": 25,
+        "target": "structured"
+      },
+      "deployment": "ineligible",
+      "citedExperimentIds": [
+        "self-101-r1-sealed",
+        "supervised-101-sealed",
+        "self-202-r1-sealed",
+        "supervised-202-sealed",
+        "self-303-r1-sealed",
+        "supervised-303-sealed"
+      ]
+    },
+    {
+      "action": "no-promotion",
+      "methodId": null,
+      "executable": false,
+      "reason": "A lower training loss, a development gain, or this plan does not authorize deployment. Evaluation and approval stay outside Weight Optimization.",
+      "config": null,
+      "deployment": "ineligible",
+      "citedExperimentIds": [
+        "self-101-r1-sealed",
+        "supervised-101-sealed",
+        "self-202-r1-sealed",
+        "supervised-202-sealed",
+        "self-303-r1-sealed",
+        "supervised-303-sealed"
+      ]
+    }
+  ],
+  "deployment": "ineligible"
+}
