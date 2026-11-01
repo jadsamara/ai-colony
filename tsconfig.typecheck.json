@@ -16,6 +16,8 @@
     "apps/**/*.ts",
     "packages/**/*.ts",
     "tests/**/*.ts",
+    "research/**/*.ts",
+    "scripts/run-m75-phase1.ts",
     "drizzle.config.ts",
     "vitest.unit.config.ts",
     "vitest.integration.config.ts"

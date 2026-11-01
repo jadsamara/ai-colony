@@ -1,0 +1,81 @@
+{
+  "startedAt": "2026-11-01T19:00:37.889Z",
+  "hardware": {
+    "cpu": "Apple M4 Pro",
+    "totalMemBytes": 25769803776,
+    "freeMemBytes": 1610563584,
+    "platform": "darwin"
+  },
+  "qwenBefore": "not_deployed|null",
+  "dockerBefore": "null",
+  "ollama": {
+    "listed": "Error: could not connect to ollama server, run 'ollama serve' to start it",
+    "stopped": [],
+    "freeMemBytes": 1591476224
+  },
+  "policies": {
+    "gate": {
+      "version": "m6-gate-v1",
+      "minSampleForPass": 30,
+      "criticalDomains": [
+        "arithmetic"
+      ],
+      "formatCannotOffsetTaskLoss": true
+    },
+    "gateHash": "82a3257e47c49f2a28a7c3bdd83806eebbc56c20824883f455fa35827895b7c7",
+    "improvement": {
+      "version": "m7h-improvement-v1",
+      "minSample": 30,
+      "minAbsoluteTaskGain": 0.1,
+      "alpha": 0.05,
+      "objective": "task_correctness"
+    },
+    "improvementHash": "c73976ddc5259e9b8810ffc3d9056da7a522495e3d1179a44ced427cabbf605c"
+  },
+  "qwenAfter": "not_deployed|null",
+  "dockerAfter": "null",
+  "finishedAt": "2026-11-01T19:06:24.526Z",
+  "phase2": "not started",
+  "engineering": "PASS",
+  "scientific": "FAIL",
+  "phase": "phase-1-complete",
+  "report": "REPORT.md",
+  "fileHashes": {
+    "evals/baseline-dev.jsonl": "2d3b1972203fa82dc414dec658eda9eb19139dfbc66b40fdfc7d8f3e0bbdf8c3",
+    "evals/baseline-ood.jsonl": "6423ef2ec3eb4e2cb7408f87e36dbe121c4632cec3766c79d3864bab943926e6",
+    "evals/baseline-retention-dev.jsonl": "d05f843769a4fe0e5ca35aed9784dd0ee6b067e633c7216fe26253f500a542b9",
+    "evals/baseline-retention.jsonl": "816867677d46624289b7662a1a6c26ae22ce080ee297a028b57d1eefdbd063f7",
+    "evals/baseline-sealed.jsonl": "18c6e315016b2b166ba409f5f45dae7513ee5b52b5cd8a0e733227309baa72a2",
+    "evals/calibration-add2-20.jsonl": "c1f3f9fd79f72dcb1f119c012bd76c27486e993fbfeea1537b079a846bf0de44",
+    "evals/calibration-as2-50.jsonl": "b9677543f67086ce9d46bea73c97e0cb34825c7aa867e7b434a9dd00eb753361",
+    "evals/calibration-as3-30.jsonl": "2b86a0e4aa50582657672baaf764e14de537532a3b75362fb2861333522f2698",
+    "evals/calibration-as3-99.jsonl": "ce362443d3ccc16cad16ac1af426c09532a35563dca5440dd2416acc590a1514",
+    "evals/calibration-as4-20.jsonl": "b589d884879f20240ee3f3aa4493b55c4b58709a7487528be07fa5e9ced301ee",
+    "evals/calibration-as4-200.jsonl": "893d6bd113f15898773c05db31043e644beb840d2e75b112c658093b4e88ec9b",
+    "evals/calibration-as4-30.jsonl": "6bc4fc1874991fcd875b28a4c086b33da94e5021b9afd7c33319add933861652",
+    "evals/calibration-as4-50.jsonl": "332238a54f280c1878df73dbbc9d6eaaf442afeb1b959023e23d1826cd757730",
+    "evals/calibration-asm3-12.jsonl": "fd40ddf0f6d705420a70c47b5dfa5b50183ef4347196d3bfb802dba2a57a0eb1",
+    "evals/calibration-asm3-30.jsonl": "2c65d64c1e56ec7f027be1dedf9f69be746f5f4af040219d9a54d194ffe22c34",
+    "evals/calibration-asm4-20.jsonl": "037bf848be72e6eddbaa9b1f0f264b863e2c99eee3526507f5d3d31a1129830f",
+    "evals/self-101-r1-dev.jsonl": "062b86de2df39bb97352a6f78e878ba91cccc78320bf2efe30f4c7dd4f2c27d7",
+    "evals/self-101-r1-ood.jsonl": "7ba5b52140fc26dce94264806b03d3a03790e44abc655eec8d1f1860a06cb3ff",
+    "evals/self-101-r1-retention-dev.jsonl": "626fc1e3b4758452f7747faa0c84daaeaf1514479b74a7c4cbe9d84690ac4883",
+    "evals/self-101-r1-retention.jsonl": "64c755b806d314f1b9f8a2c146d3ca2c605a320141270cb65ee6fbb7bb8242ef",
+    "evals/self-101-r1-sealed.jsonl": "3535d2724d55c615848a12e9cc4aaa39460d7d7de6dd99831eece67f36141572",
+    "evals/self-202-r1-ood.jsonl": "0bf081de13104435e966c87a8f842f71a4134950353195b7ea59d64a1606faba",
+    "evals/self-202-r1-retention.jsonl": "e4bd8712c2e3f12a815547f6ce163eaa81ff4171a7ee9e7884fe5b771866774f",
+    "evals/self-202-r1-sealed.jsonl": "c173d3109c17825153b79103d46ece5edea92ef34e326c5e6d380c7f65dd7940",
+    "evals/self-303-r1-ood.jsonl": "949d90c825bb35ed2ec6402bad9e85f646a890d22e11c802df2ce0544ea20093",
+    "evals/self-303-r1-retention.jsonl": "4ead4988a97b419427e134058d9229096d20116782d4ddd99f11a7eff267b6e6",
+    "evals/self-303-r1-sealed.jsonl": "eab4f173cf5921f9d7493f45acb72da8c6b9e49c596abbc0c8578bd28c7b183b",
+    "evals/supervised-101-ood.jsonl": "47c5fbbf4742aa1e9f961f1f62a9677fcee18918f826fc7213fcc032331c8b7e",
+    "evals/supervised-101-retention.jsonl": "3b493100da2c045ae1c4a7495e956d66cd7f6742ac55ac5679e100c96fb03971",
+    "evals/supervised-101-sealed.jsonl": "79ae8b94e99faedfc9feb5883861aa663e9fc842f635e0d2c6fc76afdf1124b4",
+    "evals/supervised-202-ood.jsonl": "c687472adc001fd11f3114a024d36ef6bc70dbcbdaa83a4dc2bbd3a98a59386c",
+    "evals/supervised-202-retention.jsonl": "c2db9ba80e2c5fce93ad32d61d7e3456bd4b2c5b54ade75900f059135c69c348",
+    "evals/supervised-202-sealed.jsonl": "dceb29d0e88d8c533e9c79c0a19fb122d63b90d568051d135293d0adce3ee481",
+    "evals/supervised-303-ood.jsonl": "6343ed97f2d03a1d7cddee818a78fcca4d7927af9dac4d09e0d29c5bc17e2ddc",
+    "evals/supervised-303-retention.jsonl": "4bb21207caafe9c61bd267557e52992d3f74f695e52c265f1a630ce1ac501439",
+    "evals/supervised-303-sealed.jsonl": "2179595fa4b89b4611e09b55985c6f5b23f6093af60233a68ae151e2735d156b"
+  }
+}

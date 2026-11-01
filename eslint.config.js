@@ -11,6 +11,7 @@ export default tseslint.config(
       "services/training/.venv/**",
       "services/training/checkpoints/**",
       "services/training/artifacts/**",
+      "services/training/research-artifacts/**",
     ],
   },
   eslint.configs.recommended,

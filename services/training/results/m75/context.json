@@ -1,0 +1,35 @@
+{
+  "startedAt": "2026-11-01T19:00:37.889Z",
+  "hardware": {
+    "cpu": "Apple M4 Pro",
+    "totalMemBytes": 25769803776,
+    "freeMemBytes": 1610563584,
+    "platform": "darwin"
+  },
+  "qwenBefore": "not_deployed|null",
+  "dockerBefore": "null",
+  "ollama": {
+    "listed": "Error: could not connect to ollama server, run 'ollama serve' to start it",
+    "stopped": [],
+    "freeMemBytes": 1591476224
+  },
+  "policies": {
+    "gate": {
+      "version": "m6-gate-v1",
+      "minSampleForPass": 30,
+      "criticalDomains": [
+        "arithmetic"
+      ],
+      "formatCannotOffsetTaskLoss": true
+    },
+    "gateHash": "82a3257e47c49f2a28a7c3bdd83806eebbc56c20824883f455fa35827895b7c7",
+    "improvement": {
+      "version": "m7h-improvement-v1",
+      "minSample": 30,
+      "minAbsoluteTaskGain": 0.1,
+      "alpha": 0.05,
+      "objective": "task_correctness"
+    },
+    "improvementHash": "c73976ddc5259e9b8810ffc3d9056da7a522495e3d1179a44ced427cabbf605c"
+  }
+}

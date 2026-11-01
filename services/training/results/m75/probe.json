@@ -1,0 +1,27 @@
+{
+  "baseSha256": "4d461171f280e0e4c925764d9805d83b9cd0930a7d2b237213ae7ae3fda23dcd",
+  "baseUnchanged": true,
+  "adapterSha256": "56bfaeffc9a0082d072ab95116881e6d4cf66bc1b0d3d19dbd87943b40cbbc36",
+  "maskedTarget": "1000008<|im_end|>",
+  "layers": 28,
+  "projections": [
+    "self_attn.q_proj",
+    "self_attn.v_proj"
+  ],
+  "quantization": {
+    "group_size": 128,
+    "bits": 4
+  },
+  "modelType": "qwen3",
+  "architectures": [
+    "Qwen3ForCausalLM"
+  ],
+  "vocabSize": 151936,
+  "hiddenSize": 2048,
+  "peakMemoryBytes": 1197825330,
+  "durationMs": 2246,
+  "tokenizerSha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+  "thinkingPrefix": "<think>\n\n</think>\n\n",
+  "renderedPrompt": "<|im_start|>user\nCompute the value of the expression. Reply with the integer result only.\nExpression: 1000003 + 5<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "sampleResponse": "1000008"
+}

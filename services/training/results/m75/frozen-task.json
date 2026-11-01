@@ -1,0 +1,114 @@
+{
+  "cell": {
+    "id": "asm3-30",
+    "termCount": 3,
+    "operandMin": 2,
+    "operandMax": 30,
+    "operators": [
+      "+",
+      "-",
+      "*"
+    ]
+  },
+  "allocation": {
+    "sealed": 300,
+    "experience": 144,
+    "supervisedPool": 128,
+    "devEval": 48,
+    "ood": 80,
+    "validation": 24,
+    "samplesPerProblem": 3,
+    "note": "Combinatorial space 219501 supports the pre-registered 300-item holdout."
+  },
+  "selection": {
+    "id": "asm3-30",
+    "inBand": true,
+    "bandMissed": false
+  },
+  "measurements": [
+    {
+      "id": "add2-20",
+      "accuracy": 1,
+      "sampleSize": 16
+    },
+    {
+      "id": "as2-50",
+      "accuracy": 1,
+      "sampleSize": 16
+    },
+    {
+      "id": "as3-30",
+      "accuracy": 0.8125,
+      "sampleSize": 16
+    },
+    {
+      "id": "as3-99",
+      "accuracy": 0.8125,
+      "sampleSize": 16
+    },
+    {
+      "id": "as4-50",
+      "accuracy": 0.0625,
+      "sampleSize": 16
+    },
+    {
+      "id": "as4-200",
+      "accuracy": 0,
+      "sampleSize": 16
+    },
+    {
+      "id": "asm3-12",
+      "accuracy": 0.6875,
+      "sampleSize": 16
+    },
+    {
+      "id": "asm4-20",
+      "accuracy": 0,
+      "sampleSize": 16
+    },
+    {
+      "id": "as4-20",
+      "accuracy": 0,
+      "sampleSize": 16
+    },
+    {
+      "id": "asm3-30",
+      "accuracy": 0.3125,
+      "sampleSize": 16
+    },
+    {
+      "id": "as4-30",
+      "accuracy": 0,
+      "sampleSize": 16
+    }
+  ],
+  "decoding": {
+    "temperature": 0,
+    "topP": 1,
+    "maxTokens": 32,
+    "thinking": "closed-empty-prefill"
+  },
+  "sampleDecoding": {
+    "temperature": 0.7,
+    "topP": 0.9,
+    "maxTokens": 32,
+    "thinking": "closed-empty-prefill"
+  },
+  "train": {
+    "rank": 8,
+    "scale": 2,
+    "dropout": 0,
+    "learningRate": 0.0001,
+    "batchSize": 1,
+    "gradAccum": 1,
+    "maxSeq": 192,
+    "steps": 80,
+    "numLayers": 8,
+    "targetModules": [
+      "q_proj",
+      "v_proj"
+    ],
+    "optimizer": "adamw"
+  },
+  "sealedEvaluated": false
+}

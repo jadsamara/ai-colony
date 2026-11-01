@@ -9,3 +9,4 @@ coverage/
 services/training/.venv/
 services/training/artifacts/
 services/training/checkpoints/
+services/training/research-artifacts/
