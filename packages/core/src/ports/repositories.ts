@@ -687,6 +687,7 @@ export interface ObjectiveRepository {
     probedAt: Date | null;
   }): Promise<void>;
   listRuntimes(): Promise<RuntimeRow[]>;
+  latestCompletedInferenceAt(): Promise<Date | null>;
   heartbeat(input: { workerId: string; role: string; beatAt: Date; detail: string | null }): Promise<void>;
   listHeartbeats(): Promise<HeartbeatRow[]>;
   findDepartmentBySlug(slug: string): Promise<{ id: string; slug: string; status: string } | null>;

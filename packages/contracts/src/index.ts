@@ -202,7 +202,10 @@ export type {
 } from "./schemas/message.js";
 
 export {
+  colonyHealthSchema,
+  componentHealthSchema,
   inferenceHealthSchema,
+  liveModelHealthSchema,
   monitoringOverviewSchema,
   objectiveCancelResponseSchema,
   objectiveCreateSchema,
@@ -220,7 +223,9 @@ export {
   workflowEventSchema,
 } from "./schemas/objective.js";
 export type {
+  ColonyHealth,
   InferenceHealth,
+  LiveModelHealth,
   MonitoringOverview,
   ObjectiveCreate,
   ObjectiveLimits,

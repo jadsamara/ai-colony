@@ -39,6 +39,9 @@ export interface AppServices {
     apiKey: string | null;
     primaryModelId: string;
     staleAfterMs: number;
+    probeTimeoutMs: number;
+    probeFreshnessMs: number;
+    probeMinIntervalMs: number;
     route: InferenceRoute;
   };
 }

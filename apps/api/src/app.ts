@@ -43,6 +43,7 @@ import { registerAgentRoutes } from "./routes/agents.js";
 import { registerDepartmentRoutes } from "./routes/departments.js";
 import { registerGovernanceRoutes } from "./routes/governance.js";
 import { registerHealthRoutes } from "./routes/health.js";
+import { registerRuntimeHealthRoutes } from "./routes/runtime-health.js";
 import { registerMessageRoutes } from "./routes/messages.js";
 import { registerMemoryRoutes } from "./routes/memories.js";
 import { registerModelRoutes } from "./routes/models.js";
@@ -138,6 +139,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       apiKey: inferenceConfig.apiKey,
       primaryModelId: QWEN3_8B_MODEL_ID,
       staleAfterMs: options.config.runtimeStaleAfterMs,
+      probeTimeoutMs: inferenceConfig.probeTimeoutMs,
+      probeFreshnessMs: inferenceConfig.probeFreshnessMs,
+      probeMinIntervalMs: inferenceConfig.probeMinIntervalMs,
       route: routeFromConfig(inferenceConfig),
     },
     training,
@@ -176,6 +180,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   registerCorrelation(app);
   registerErrors(app);
   registerAuth(app, options.config);
+  await registerRuntimeHealthRoutes(app);
   await registerHealthRoutes(
     app,
     options.checkReady ??

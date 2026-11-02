@@ -118,6 +118,34 @@ export { AgentRuntime } from "./runtime/agent-runtime.js";
 export { LifecycleOnlyExecutor } from "./runtime/lifecycle-only-executor.js";
 export { assembleAgentStatus, type AgentExecutor, type RuntimeSession } from "./runtime/status.js";
 export { isStaleRuntime } from "./runtime/stale.js";
+export {
+  artifactPresence,
+  describeModelHealth,
+  inferenceReadiness,
+  ollamaManifestPath,
+  type ModelObservation,
+  type PersistedRuntimeStatus,
+} from "./runtime/model-health.js";
+export {
+  assessApi,
+  assessDispatcher,
+  assessPostgres,
+  assessRegistry,
+  assessTraining,
+  assessWorkers,
+  buildRuntimeReport,
+  type ComponentHealth,
+} from "./runtime/colony-health.js";
+export {
+  API_PROCESS,
+  DISPATCHER_PROCESS,
+  TRAINING_PROCESS,
+  WORKER_PROCESS,
+  commandLines,
+  processSeen,
+  tcpReachable,
+} from "./runtime/local-signals.js";
+export { summarizeOutbox, type OutboxObservation, type OutboxSummary } from "./messaging/outbox-summary.js";
 export type { InferenceWorkerPort, TrainingWorkerPort } from "./runtime/worker-ports.js";
 export {
   assertRecipientAgentEligible,

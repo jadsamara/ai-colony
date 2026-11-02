@@ -13,6 +13,9 @@ const schema = z.object({
   INFERENCE_TIMEOUT_MS: z.coerce.number().int().positive().max(600_000).default(120_000),
   INFERENCE_MAX_CONCURRENCY: z.coerce.number().int().positive().max(2).default(1),
   INFERENCE_TRANSPORT_RETRIES: z.coerce.number().int().min(0).max(3).default(2),
+  OLLAMA_PROBE_TIMEOUT_MS: z.coerce.number().int().positive().max(10_000).default(3_000),
+  OLLAMA_PROBE_FRESHNESS_MS: z.coerce.number().int().positive().max(600_000).default(60_000),
+  OLLAMA_PROBE_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().max(600_000).default(10_000),
   INFERENCE_INPUT_USD_PER_MILLION: z.coerce.number().nonnegative().optional(),
   INFERENCE_OUTPUT_USD_PER_MILLION: z.coerce.number().nonnegative().optional(),
   OBJECTIVE_GLOBAL_CONCURRENCY: z.coerce.number().int().positive().max(2).default(1),
@@ -41,6 +44,9 @@ export interface InferenceConfig {
   timeoutMs: number;
   maxConcurrency: number;
   transportRetries: number;
+  probeTimeoutMs: number;
+  probeFreshnessMs: number;
+  probeMinIntervalMs: number;
   inputUsdPerMillion: number | null;
   outputUsdPerMillion: number | null;
   globalConcurrency: number;
@@ -71,6 +77,9 @@ export function loadInferenceConfig(env: NodeJS.ProcessEnv): InferenceConfig {
     timeoutMs: parsed.INFERENCE_TIMEOUT_MS,
     maxConcurrency: parsed.INFERENCE_MAX_CONCURRENCY,
     transportRetries: parsed.INFERENCE_TRANSPORT_RETRIES,
+    probeTimeoutMs: parsed.OLLAMA_PROBE_TIMEOUT_MS,
+    probeFreshnessMs: parsed.OLLAMA_PROBE_FRESHNESS_MS,
+    probeMinIntervalMs: parsed.OLLAMA_PROBE_MIN_INTERVAL_MS,
     inputUsdPerMillion: parsed.INFERENCE_INPUT_USD_PER_MILLION ?? null,
     outputUsdPerMillion: parsed.INFERENCE_OUTPUT_USD_PER_MILLION ?? null,
     globalConcurrency: parsed.OBJECTIVE_GLOBAL_CONCURRENCY,

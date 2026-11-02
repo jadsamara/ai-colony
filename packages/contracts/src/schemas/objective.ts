@@ -123,10 +123,63 @@ export const runtimeModelSchema = z.object({
   probedAt: z.string().datetime().nullable(),
 });
 
+export const liveModelHealthSchema = z.object({
+  alias: z.string(),
+  persisted_status: z
+    .object({
+      runtimeStatus: z.string(),
+      expectedAlias: z.string().nullable(),
+      loadedModelId: z.string().nullable(),
+      endpointUrl: z.string().nullable(),
+      lastError: z.string().nullable(),
+      probedAt: z.string().datetime().nullable(),
+    })
+    .nullable(),
+  live_status: z.object({
+    registered: z.boolean(),
+    artifacts_present: z.enum(["present", "absent", "unknown"]),
+    reachable: z.boolean(),
+    installed: z.boolean(),
+    loaded: z.boolean(),
+    unavailable: z.boolean(),
+  }),
+  checked_at: z.string().datetime(),
+  stale: z.boolean(),
+  inference_ready: z.enum(["verified", "unavailable", "unknown"]),
+  evidence: z.object({
+    version: z.string().nullable(),
+    installed_models: z.array(z.string()),
+    loaded_models: z.array(z.string()),
+    errors: z.array(z.object({ endpoint: z.string(), message: z.string() })),
+    last_successful_inference_at: z.string().datetime().nullable(),
+  }),
+});
+
+export const componentHealthSchema = z.object({
+  component: z.string(),
+  state: z.enum(["configured", "running", "stopped", "unavailable", "unknown", "stale"]),
+  evidence: z.string(),
+});
+
+export const colonyHealthSchema = z.object({
+  checked_at: z.string().datetime(),
+  components: z.array(componentHealthSchema),
+  model: liveModelHealthSchema,
+  outbox: z.object({
+    pending: z.number().int().nonnegative(),
+    publishing: z.number().int().nonnegative(),
+    published: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    oldest_pending_age_ms: z.number().int().nullable(),
+    delivery_guarantee: z.literal("at-least-once"),
+  }),
+});
+
 export const inferenceHealthSchema = z.object({
   models: z.array(runtimeModelSchema),
   memoryProfile: z.enum(["shared", "split"]),
   concurrency: z.number().int().positive(),
+  live: liveModelHealthSchema.optional(),
 });
 
 export const monitoringOverviewSchema = z.object({
@@ -177,6 +230,7 @@ export const monitoringOverviewSchema = z.object({
       summary: z.string(),
     }),
   ),
+  live: liveModelHealthSchema.optional(),
 });
 
 export const objectiveResponseSchema = z.object({ objective: objectiveSchema });
@@ -200,4 +254,6 @@ export type ObjectiveRecord = z.infer<typeof objectiveSchema>;
 export type ObjectiveTask = z.infer<typeof objectiveTaskSchema>;
 export type WorkflowEvent = z.infer<typeof workflowEventSchema>;
 export type InferenceHealth = z.infer<typeof inferenceHealthSchema>;
+export type LiveModelHealth = z.infer<typeof liveModelHealthSchema>;
+export type ColonyHealth = z.infer<typeof colonyHealthSchema>;
 export type MonitoringOverview = z.infer<typeof monitoringOverviewSchema>;

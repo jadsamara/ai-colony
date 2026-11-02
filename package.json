@@ -36,6 +36,7 @@
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit --pretty false",
     "test": "vitest run --config vitest.unit.config.ts && vitest run --config vitest.integration.config.ts",
     "test:unit": "vitest run --config vitest.unit.config.ts",
+    "health": "tsc -b packages/contracts packages/core packages/database packages/inference --pretty false && tsx apps/api/src/runtime-health-cli.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",

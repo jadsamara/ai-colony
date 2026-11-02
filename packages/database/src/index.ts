@@ -1,4 +1,5 @@
 export { createDatabase, type Database, type DbExecutor, type DbTransaction } from "./client.js";
+export { assertDisposableDatabaseUrl, assertReadOnlyInspectionUrl, createReadOnlyInspection } from "./inspection.js";
 export { createPersistence } from "./persistence.js";
 export { migrateDatabase, migrationsFolder } from "./migrate.js";
 export {

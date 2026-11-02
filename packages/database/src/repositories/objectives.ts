@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, lt, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, max, or, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import type {
   AgentStatus,
   ObjectiveStatus,
@@ -515,6 +515,13 @@ export function createObjectiveRepository(db: DbExecutor): ObjectiveRepository {
         lastError: row.runtime?.lastError ?? null,
         probedAt: iso(row.runtime?.probedAt ?? null),
       }));
+    },
+    async latestCompletedInferenceAt() {
+      const [row] = await db
+        .select({ completedAt: max(inferenceRequests.completedAt) })
+        .from(inferenceRequests)
+        .where(eq(inferenceRequests.status, "completed"));
+      return row?.completedAt ?? null;
     },
     async heartbeat(input) {
       await db

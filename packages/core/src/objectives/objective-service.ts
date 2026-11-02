@@ -606,6 +606,7 @@ export class ObjectiveService {
     });
   }
 
+  // The stored runtime status is the last explicit /v1/models probe. Live health does not write it.
   async recordProbe(input: {
     modelId: string;
     endpointUrl: string;
@@ -634,6 +635,28 @@ export class ObjectiveService {
       models: await this.persistence.repos.objectives.listRuntimes(),
       memoryProfile: route.memoryProfile,
       concurrency: route.globalConcurrency,
+    };
+  }
+
+  async latestCompletedInferenceAt(ctx: RequestContext): Promise<string | null> {
+    this.authorizer.assertAny(ctx.actor, ["inference:read", "monitoring:read"]);
+    const value = await this.persistence.repos.objectives.latestCompletedInferenceAt();
+    return value ? value.toISOString() : null;
+  }
+
+  async runtimeEvidence(ctx: RequestContext) {
+    this.authorizer.assertAny(ctx.actor, ["inference:read", "monitoring:read"]);
+    const [models, heartbeats, metrics, latest] = await Promise.all([
+      this.persistence.repos.objectives.listRuntimes(),
+      this.persistence.repos.objectives.listHeartbeats(),
+      this.persistence.repos.messages.metrics(),
+      this.persistence.repos.objectives.latestCompletedInferenceAt(),
+    ]);
+    return {
+      models,
+      heartbeats,
+      metrics,
+      latestCompletedInferenceAt: latest ? latest.toISOString() : null,
     };
   }
 
