@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ComparisonResult } from "./compare.js";
 import type { PairedCounts } from "./stats.js";
 
 export const GATE_POLICY = {
@@ -12,6 +13,21 @@ export type GateDecision = "PASS" | "FAIL" | "INCONCLUSIVE" | "QUARANTINED";
 
 export function gatePolicyHash(): string {
   return createHash("sha256").update(JSON.stringify(GATE_POLICY)).digest("hex");
+}
+
+export function applyGateIfComparable(
+  comparison: ComparisonResult,
+  input: Parameters<typeof decideGate>[0],
+): { decision: GateDecision; rationale: string; critical: string[]; warnings: string[] } {
+  if (!comparison.comparable) {
+    return {
+      decision: "INCONCLUSIVE",
+      rationale: `No deployment or regression verdict was calculated. ${comparison.reasons.join(" ")}`.trim(),
+      critical: [],
+      warnings: [`comparison ${comparison.design}`],
+    };
+  }
+  return decideGate(input);
 }
 
 export function decideGate(input: {

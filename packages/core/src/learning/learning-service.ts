@@ -448,6 +448,7 @@ export class DepartmentLearningService {
       sampleSize?: number;
       paired?: { bothCorrect: number; baselineOnly: number; candidateOnly: number };
       candidateId?: string;
+      contract?: { comparison?: { comparable?: boolean } };
     };
     const paired = summary.paired;
     const candidate = cycle.trainingRunId ? await this.persistence.repos.training.findCandidateByRun(cycle.trainingRunId) : null;
@@ -468,6 +469,7 @@ export class DepartmentLearningService {
       benchmarkValid: (summary.sampleSize ?? 0) > 0,
       retentionPresent: false,
       retentionPassed: false,
+      comparisonEligible: summary.contract?.comparison?.comparable === true,
     });
     const preview = assessDeployment({
       classification: verdict.classification,

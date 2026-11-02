@@ -36,6 +36,7 @@ export interface ImprovementEvidence {
   benchmarkValid: boolean;
   retentionPresent: boolean;
   retentionPassed: boolean;
+  comparisonEligible?: boolean;
 }
 
 export interface ImprovementVerdict {
@@ -58,6 +59,9 @@ export function verifyImprovement(input: ImprovementEvidence): ImprovementVerdic
   const effectSize = input.taskCandidate - input.taskBaseline;
   const uncertainty = intervals(input);
   const paired = pairedP(input);
+  if (input.comparisonEligible === false) {
+    return verdict("EVALUATION_INVALID", effectSize, paired.pValue, false, "The evaluation contract is missing or the runs are not comparable, so no improvement or regression was calculated.", uncertainty);
+  }
   if (!input.evaluationPresent || !input.benchmarkValid || !input.checksumsMatch || input.contaminated || !input.familyCompatible) {
     return verdict("EVALUATION_INVALID", effectSize, paired.pValue, false, "The evaluation is missing, invalid, contaminated, or incompatible with the candidate.", uncertainty);
   }

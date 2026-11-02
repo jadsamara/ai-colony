@@ -42,6 +42,25 @@ export async function registerEvaluationRoutes(app: FastifyInstance): Promise<vo
     schema: { tags: ["evaluation"], params: idParams, response: { 200: json, ...errorResponses } },
   }, async (request) => app.services.evaluation.getVersion(requestContext(request), request.params.id));
 
+  route.post("/api/v1/evaluations/compare", {
+    schema: {
+      tags: ["evaluation"],
+      body: z.object({
+        baseline: z.record(z.string(), z.unknown()),
+        candidate: z.record(z.string(), z.unknown()),
+        items: z.array(z.object({
+          itemId: z.string().min(1).max(80),
+          contentDigest: z.string().regex(/^[a-f0-9]{64}$/),
+          baselineCorrect: z.boolean().nullable(),
+          candidateCorrect: z.boolean().nullable(),
+          baselineValid: z.boolean(),
+          candidateValid: z.boolean(),
+        }).strict()).max(2000).optional(),
+      }).strict(),
+      response: { 200: json, ...errorResponses },
+    },
+  }, async (request) => app.services.evaluation.compare(requestContext(request), request.body));
+
   route.post("/api/v1/evaluations/runs", {
     schema: {
       tags: ["evaluation"],

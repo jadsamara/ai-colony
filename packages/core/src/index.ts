@@ -91,7 +91,19 @@ export type {
 } from "./evaluation/repository.js";
 export { gradeArithmetic } from "./evaluation/score.js";
 export { claimSignificance, mcnemarExact, pairedCounts, wilsonInterval } from "./evaluation/stats.js";
-export { decideGate, GATE_POLICY, gatePolicyHash } from "./evaluation/gate.js";
+export { applyGateIfComparable, decideGate, GATE_POLICY, gatePolicyHash } from "./evaluation/gate.js";
+export { compareManifests } from "./evaluation/compare.js";
+export { classifyItem, summarizeItems } from "./evaluation/classify.js";
+export {
+  configurationFingerprint,
+  contentDigest,
+  EVALUATION_CONTRACT_VERSION,
+  itemSetFingerprint,
+  parseEvaluationManifest,
+  type EvaluationManifest,
+} from "./evaluation/manifest.js";
+export { colonyRunContract, legacyManifest } from "./evaluation/colony-manifest.js";
+export { analyzePairedRuns } from "./evaluation/paired.js";
 export { assessDeployment, improvementPolicyHash, verifyImprovement, IMPROVEMENT_POLICY } from "./evaluation/improvement.js";
 export type { DeploymentEligibility, ImprovementClass, ImprovementEvidence, ImprovementVerdict } from "./evaluation/improvement.js";
 export { ScriptedTrainingProvider, type ScriptedTrainingOptions } from "./training/scripted-provider.js";
