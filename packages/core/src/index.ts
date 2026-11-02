@@ -104,6 +104,27 @@ export {
 } from "./evaluation/manifest.js";
 export { colonyRunContract, legacyManifest } from "./evaluation/colony-manifest.js";
 export { analyzePairedRuns } from "./evaluation/paired.js";
+export { CapabilityLedgerService, separateModelIdentity } from "./capability/service.js";
+export { MemoryCapabilityRepository, type CapabilityRepository } from "./capability/repository.js";
+export { holmAdjust, applyHolm } from "./capability/holm.js";
+export { pairedScoreInterval } from "./capability/interval.js";
+export { validateTaxonomyGraph, reconstructTaxonomy } from "./capability/taxonomy.js";
+export { compareCertifiedSnapshots } from "./capability/compare.js";
+export { SNAPSHOT_SCHEMA_VERSION } from "./capability/types.js";
+export type {
+  LedgerDecision,
+  LedgerEdge,
+  LedgerMapping,
+  LedgerMappingVersion,
+  LedgerProposal,
+  LedgerRetentionEvent,
+  LedgerSnapshot,
+  LedgerTaxonomyVersion,
+  LedgerTopic,
+  LedgerTopicEvent,
+  ModelIdentitySeparation,
+  TaxonomyNode,
+} from "./capability/types.js";
 export { assessDeployment, improvementPolicyHash, verifyImprovement, IMPROVEMENT_POLICY } from "./evaluation/improvement.js";
 export type { DeploymentEligibility, ImprovementClass, ImprovementEvidence, ImprovementVerdict } from "./evaluation/improvement.js";
 export { ScriptedTrainingProvider, type ScriptedTrainingOptions } from "./training/scripted-provider.js";

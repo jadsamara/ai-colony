@@ -28,6 +28,7 @@ import type {
   TaskType,
 } from "@ai-colony/contracts";
 import type { DecodedCursor } from "../pagination.js";
+import type { CapabilityRepository } from "../capability/repository.js";
 import type { EvaluationRepository } from "../evaluation/repository.js";
 import type { LearningRepository } from "../learning/repository.js";
 import type { TrainingRepository } from "../training/repository.js";
@@ -878,6 +879,7 @@ export interface Repositories {
   evaluation: EvaluationRepository;
   learning: LearningRepository;
   experiments: ExperimentRepository;
+  capability: CapabilityRepository;
 }
 
 export interface Persistence {

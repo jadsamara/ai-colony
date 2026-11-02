@@ -64,6 +64,13 @@
       "when": 1793549300000,
       "tag": "0008_training_experiments",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793551000000,
+      "tag": "0009_department_capability_ledger",
+      "breakpoints": true
     }
   ]
 }

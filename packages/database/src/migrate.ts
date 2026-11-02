@@ -149,6 +149,30 @@ CREATE TRIGGER training_experiments_no_delete
 BEFORE DELETE ON training_experiments
 FOR EACH ROW
 EXECUTE FUNCTION colony_reject_training_mutation();
+
+DO $$
+DECLARE
+  ledger_table text;
+BEGIN
+  FOREACH ledger_table IN ARRAY ARRAY[
+    'ledger_topics',
+    'ledger_topic_events',
+    'ledger_proposals',
+    'ledger_decisions',
+    'ledger_taxonomy_versions',
+    'ledger_taxonomy_edges',
+    'ledger_mapping_versions',
+    'ledger_topic_mappings',
+    'ledger_snapshots',
+    'ledger_retention_events'
+  ]
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', ledger_table || '_no_update', ledger_table);
+    EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION colony_reject_training_mutation()', ledger_table || '_no_update', ledger_table);
+    EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', ledger_table || '_no_delete', ledger_table);
+    EXECUTE format('CREATE TRIGGER %I BEFORE DELETE ON %I FOR EACH ROW EXECUTE FUNCTION colony_reject_training_mutation()', ledger_table || '_no_delete', ledger_table);
+  END LOOP;
+END $$;
 `;
 
 export function migrationsFolder(): string {

@@ -8,6 +8,7 @@ import type {
   IdentityService,
   MessagingService,
   EvaluationService,
+  CapabilityLedgerService,
   CollaborationService,
   DepartmentLearningService,
   MemoryService,
@@ -32,6 +33,7 @@ export interface AppServices {
   training: TrainingService;
   experiments: ExperimentService;
   evaluation: EvaluationService;
+  ledger: CapabilityLedgerService;
   learning: DepartmentLearningService;
   collaboration: CollaborationService;
   inference: {
