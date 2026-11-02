@@ -1,0 +1,1494 @@
+{
+  "seed": 7501,
+  "adapter": "self-101-r1",
+  "selection": "sorted item ids, mulberry32 Fisher-Yates, first 20",
+  "itemIds": [
+    "f49edd5fb304cdd81149588cb23c13bb199540da35aa21c14f7300e40c2bdd8e",
+    "1b68a5b1351584471acf9343fe93301ac422c9422ecdeede389706081042e1c7",
+    "221f70313a2f18f19a34646417a4583d385e2a6dd6ac02d038eb3998a62bd19d",
+    "52d6e333bc7e8b822784f5375e6822143d4eab6ba3023de086d270ebd277eb18",
+    "fa22d6f6a421f6315699adb0a327846e06f207f687090d0d56f3b59c75829055",
+    "06b8c9bfe581b7f91962c10c8dcd47bd26870d2279c1298d566e5928af4c4396",
+    "8b462eacea8eb433a9361ead2596be434c217b01075d6159bcefb3ffd1782a89",
+    "6e0107a28c35de130bd41a2ba121a4c7213e69732ede3754782712df932dd2d6",
+    "ce0e04c3d3bcd72909268784d60668d5a5f65a8168278695c4f5491ca1752566",
+    "7554e573d9e0e3717af5f5ee64a5cd3f9c55ffa91aa93d19b525188ce87735c1",
+    "76842d946b7ab9c3d47a4aaa8cd243545160b507d3f7bb6b54b934946e70bb67",
+    "4238272a5bf00b8334d0c90562cfa05655c35a371901ed167aeff1c726f52019",
+    "6724b287ae3a600e5f2772b697dfdf72f06320d2cf50a7a256193b274bfa8716",
+    "0a900dc745b40b4bfd1fa55543bd9509adfca320eba08b4eb0a7e45a067034a2",
+    "ad598c126bd33cdb27a03751b4048ec9ac5be69a9d1d7685caa5c0c975d3fe38",
+    "fbd15a7f08b4a848767338e412e2d00085272a63fc491f46bc84dd17b38d73cb",
+    "4f61c422b69d35ac046715a89a8e3339b4af9f81c1ec058be30e959fcc3bba84",
+    "41a8aa419e38671c893d8323cc05344200335354553c7f8540826712e2eb063d",
+    "a31c5abb2afbbd75aaf3987300a3d2c9eb5a634faae5b131a42e27400fdab25e",
+    "82ab7b61600aaaf0751d6108ea5010d87db00004cca849574900cc4fd0180d22"
+  ],
+  "examples": [
+    {
+      "itemId": "f49edd5fb304cdd81149588cb23c13bb199540da35aa21c14f7300e40c2bdd8e",
+      "expectedAnswer": -26,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n$ 22 - 26 - 22 $\n\nFirst, compute $ 22 - 26 $:\n\n$ 22 - 26 = -4 $\n\nThen subtract 22:\n\n$ -4 - 22 = -26 $\n\nSo the final result is:\n\n$\\boxed{-26}$",
+        "extracted": -26,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first subtraction:  \n   $ 22 - 26 = -4 $\n\n2. Subtract the next number:  \n   $ -4 - 22 = -26 $\n\nFinal answer:  \n`Final answer: -26`",
+        "extracted": -26,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "-16",
+        "extracted": -16,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 22 - 26  \n-11\n\n2. Next operation: -11 - 22  \n-33\n\nFinal answer: -33",
+        "extracted": -33,
+        "correct": false,
+        "responseClass": "worked",
+        "working": "missing-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "1b68a5b1351584471acf9343fe93301ac422c9422ecdeede389706081042e1c7",
+      "expectedAnswer": 7200,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n15 × 30 = 450  \n450 × 16 = 7200\n\nThe integer result is **7200**.",
+        "extracted": 7200,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply 15 and 30:  \n   $ 15 \\times 30 = 450 $\n\n2. Multiply the result by 16:  \n   $ 450 \\times 16 = 7200 $\n\nFinal answer: `7200`",
+        "extracted": 7200,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "2400",
+        "extracted": 2400,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, calculate $15 \\times 30$:\n   $$\n   15 \\times 30 = 450\n   $$\n\n2. Next, multiply the result by 16:\n   $$\n   450 \\times 16 = 7200\n   $$\n\nFinal answer: `7200`",
+        "extracted": 7200,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "221f70313a2f18f19a34646417a4583d385e2a6dd6ac02d038eb3998a62bd19d",
+      "expectedAnswer": 56,
+      "basePromptA": {
+        "response": "11 + 27 + 18 = 56\n\nThe integer result is **56**.",
+        "extracted": 56,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Add 11 and 27:  \n   $ 11 + 27 = 38 $\n\n2. Add the result to 18:  \n   $ 38 + 18 = 56 $\n\nFinal answer:  \n`Final answer: 56`",
+        "extracted": 56,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "36",
+        "extracted": 36,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "11 + 27 = 38  \n38 + 18 = 56  \n\nFinal answer: 56",
+        "extracted": 56,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "52d6e333bc7e8b822784f5375e6822143d4eab6ba3023de086d270ebd277eb18",
+      "expectedAnswer": 608,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n$ 8 \\times 19 = 152 $\n\n$ 152 \\times 4 = 608 $\n\n**Integer result: 608**",
+        "extracted": 608,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "We are given the expression:  \n**8 * 19 * 4**\n\nWe will compute it step by step.\n\n1. First, compute $ 8 \\times 19 $:  \n   $$\n   8 \\times 19 = 152\n   $$\n\n2. Next, multiply the result by 4:  \n   $$\n   152 \\times 4 = 608\n   $$\n\nFinal answer:  \n**608**",
+        "extracted": 608,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "272",
+        "extracted": 272,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, calculate $ 8 \\times 19 $:  \n   $ 8 \\times 19 = 152 $\n\n2. Next, multiply the result by 4:  \n   $ 152 \\times 4 = 608 $\n\nFinal answer: 608",
+        "extracted": 608,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "fa22d6f6a421f6315699adb0a327846e06f207f687090d0d56f3b59c75829055",
+      "expectedAnswer": 37,
+      "basePromptA": {
+        "response": "2 + 12 + 23 = 37\n\nInteger result: 37",
+        "extracted": 37,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first term:  \n   $ 2 $\n\n2. Add the second term:  \n   $ 2 + 12 = 14 $\n\n3. Add the third term:  \n   $ 14 + 23 = 37 $\n\nFinal answer:  \n`Final answer: 37`",
+        "extracted": 37,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "25",
+        "extracted": 25,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1.111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+        "extracted": null,
+        "correct": false,
+        "responseClass": "other",
+        "working": "missing-working",
+        "truncated": true
+      }
+    },
+    {
+      "itemId": "06b8c9bfe581b7f91962c10c8dcd47bd26870d2279c1298d566e5928af4c4396",
+      "expectedAnswer": 96,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n14 * 7 = 98  \n98 - 2 = 96\n\nThe integer result is: **96**",
+        "extracted": 96,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "First, multiply 14 by 7:\n\n$$\n14 \\times 7 = 98\n$$\n\nNext, subtract 2 from the result:\n\n$$\n98 - 2 = 96\n$$\n\nFinal answer:  \n`Final answer: 96`",
+        "extracted": 96,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "28-2=26",
+        "extracted": 26,
+        "correct": false,
+        "responseClass": "worked",
+        "working": "incorrect-arithmetic",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication:  \n300.11111111111111 (but since we are dealing with integers, it's 14 * 7 = 98)\n\n2. Then, subtract 2:  \n98 - 2 = 96\n\nFinal answer: 96",
+        "extracted": 96,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "ambiguous",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "8b462eacea8eb433a9361ead2596be434c217b01075d6159bcefb3ffd1782a89",
+      "expectedAnswer": -143,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n1. Multiply: $8 \\times 21 = 168$\n2. Subtract: $25 - 168 = -143$\n\nThe integer result is:  \n$\\boxed{-143}$",
+        "extracted": -143,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "We are given the arithmetic expression:  \n**25 - 8 * 21**\n\nWe follow the order of operations (PEMDAS/BODMAS):\n\n1. **Multiplication first**:  \n   $ 8 * 21 = 168 $\n\n2. **Subtraction next**:  \n   $ 25 - 168 = -143 $\n\nFinal answer:  \n`Final answer: -143`",
+        "extracted": -143,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "117",
+        "extracted": 117,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1.1111111111111112",
+        "extracted": 1111111111111112,
+        "correct": false,
+        "responseClass": "other",
+        "working": "missing-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "6e0107a28c35de130bd41a2ba121a4c7213e69732ede3754782712df932dd2d6",
+      "expectedAnswer": 96,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n1. Multiply: $4 \\times 25 = 100$\n2. Subtract: $100 - 4 = 96$\n\nFinal result: $\\boxed{96}$",
+        "extracted": 96,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply: $ 4 \\times 25 = 100 $\n2. Subtract: $ 100 - 4 = 96 $\n\nFinal answer: `96`",
+        "extracted": 96,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "200",
+        "extracted": 200,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication:  \n   $ 4 \\times 25 = 100 $\n\n2. Then, subtract 4 from the result:  \n   $ 100 - 4 = 96 $\n\nFinal answer: `96`",
+        "extracted": 96,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "ce0e04c3d3bcd72909268784d60668d5a5f65a8168278695c4f5491ca1752566",
+      "expectedAnswer": 161,
+      "basePromptA": {
+        "response": "First, compute $ 8 \\times 22 $:\n\n$$\n8 \\times 22 = 176\n$$\n\nThen subtract 15:\n\n$$\n176 - 15 = 161\n$$\n\nThe integer result is:\n\n$$\n\\boxed{161}\n$$",
+        "extracted": 161,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply: $ 8 \\times 22 $\n   $$\n   8 \\times 22 = 176\n   $$\n\n2. Subtract: $ 176 - 15 $\n   $$\n   176 - 15 = 161\n   $$\n\nFinal answer:  \n`Final answer: 161`",
+        "extracted": 161,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "200",
+        "extracted": 200,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication:  \n321 (100) * 22 = 2200  \n2. Then, subtract 15:  \n2200 - 15 = 2185\n\nFinal answer: 2185",
+        "extracted": 2185,
+        "correct": false,
+        "responseClass": "worked",
+        "working": "ambiguous",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "7554e573d9e0e3717af5f5ee64a5cd3f9c55ffa91aa93d19b525188ce87735c1",
+      "expectedAnswer": -3,
+      "basePromptA": {
+        "response": "16 - 8 - 11 = 16 - 19 = -3\n\nInteger result: -3",
+        "extracted": -3,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 16 - 8 = 8 $\n\n2. Subtract the next number:  \n   $ 8 - 11 = -3 $\n\nFinal answer:  \n`Final answer: -3`",
+        "extracted": -3,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "10",
+        "extracted": 10,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 16 - 8  \n2. 16 - 8 = 8  \n3. Next operation: 8 - 11  \n4. 8 - 11 = -3  \n\nFinal answer: -3",
+        "extracted": -3,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "76842d946b7ab9c3d47a4aaa8cd243545160b507d3f7bb6b54b934946e70bb67",
+      "expectedAnswer": 125,
+      "basePromptA": {
+        "response": "20 * 6 + 5 = 120 + 5 = 125\n\nInteger result: 125",
+        "extracted": 125,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply: $ 20 \\times 6 = 120 $\n2. Add: $ 120 + 5 = 125 $\n\nFinal answer: `125`",
+        "extracted": 125,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "155",
+        "extracted": 155,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication:  \n300 (since 20 × 6 = 120)  \n2. Then, add 5:  \n300 + 5 = 305\n\nFinal answer: 305",
+        "extracted": 305,
+        "correct": false,
+        "responseClass": "worked",
+        "working": "ambiguous",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "4238272a5bf00b8334d0c90562cfa05655c35a371901ed167aeff1c726f52019",
+      "expectedAnswer": -8,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n28 - 27 = 1  \n1 - 9 = -8\n\nThe integer result is: **-8**.",
+        "extracted": -8,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first subtraction:  \n   $ 28 - 27 = 1 $\n\n2. Subtract the next number:  \n   $ 1 - 9 = -8 $\n\nFinal answer:  \n`Final answer: -8`",
+        "extracted": -8,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "10",
+        "extracted": 10,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 28 - 27  \n2. 28 - 27 = 1  \n3. Next operation: 1 - 9  \n4. 1 - 9 = -8  \n\nFinal answer: -8",
+        "extracted": -8,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "6724b287ae3a600e5f2772b697dfdf72f06320d2cf50a7a256193b274bfa8716",
+      "expectedAnswer": 3150,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n$ 21 \\times 5 = 105 $\n\n$ 105 \\times 30 = 3150 $\n\n**Integer result: 3150**",
+        "extracted": 3150,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply 21 and 5:  \n   $ 21 \\times 5 = 105 $\n\n2. Multiply the result by 30:  \n   $ 105 \\times 30 = 3150 $\n\nFinal answer: `3150`",
+        "extracted": 3150,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "1050",
+        "extracted": 1050,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, calculate $ 21 \\times 5 $:  \n   $ 21 \\times 5 = 105 $\n\n2. Next, multiply the result by 30:  \n   $ 105 \\times 30 = 3150 $\n\nFinal answer: `3150`",
+        "extracted": 3150,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "0a900dc745b40b4bfd1fa55543bd9509adfca320eba08b4eb0a7e45a067034a2",
+      "expectedAnswer": 43,
+      "basePromptA": {
+        "response": "17 + 30 - 4 = 43\n\nThe integer result is 43.",
+        "extracted": 43,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 17 + 30 = 47 $\n\n2. Subtract the next number:  \n   $ 47 - 4 = 43 $\n\nFinal answer:  \n`Final answer: 43`",
+        "extracted": 43,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "33",
+        "extracted": 33,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 19  \n2. Add 30: 19 + 30 = 49  \n3. Subtract 4: 49 - 4 = 45  \n\nFinal answer: 45",
+        "extracted": 45,
+        "correct": false,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "ad598c126bd33cdb27a03751b4048ec9ac5be69a9d1d7685caa5c0c975d3fe38",
+      "expectedAnswer": 19,
+      "basePromptA": {
+        "response": "13 + 29 - 23 = 29",
+        "extracted": 29,
+        "correct": false,
+        "responseClass": "worked",
+        "working": "incorrect-arithmetic",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first two numbers:  \n   $ 13 + 29 = 42 $\n\n2. Subtract the next number:  \n   $ 42 - 23 = 19 $\n\nFinal answer:  \n`Final answer: 19`",
+        "extracted": 19,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "20",
+        "extracted": 20,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 15 + 29  \n2. Add 15 and 29: 15 + 29 = 44  \n3. Subtract 23 from the result: 44 - 23 = 21  \n\nFinal answer: 21",
+        "extracted": 21,
+        "correct": false,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "fbd15a7f08b4a848767338e412e2d00085272a63fc491f46bc84dd17b38d73cb",
+      "expectedAnswer": -6,
+      "basePromptA": {
+        "response": "12 + 8 - 26 = 12 + 8 = 20; 20 - 26 = -6\n\nInteger result: -6",
+        "extracted": -6,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 12 + 8 = 20 $\n\n2. Next, subtract 26:  \n   $ 20 - 26 = -6 $\n\nFinal answer: `<integer>-6`",
+        "extracted": -6,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "16",
+        "extracted": 16,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 15  \n2. Next, subtract 26: 15 - 26 = -11  \n3. Final result: -11  \n\nFinal answer: -11",
+        "extracted": -11,
+        "correct": false,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "4f61c422b69d35ac046715a89a8e3339b4af9f81c1ec058be30e959fcc3bba84",
+      "expectedAnswer": 422,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n$ 21 \\times 19 + 23 $\n\nFirst, compute $ 21 \\times 19 $:\n\n$$\n21 \\times 19 = 399\n$$\n\nThen add 23:\n\n$$\n399 + 23 = 422\n$$\n\nFinal result: $\\boxed{422}$",
+        "extracted": 422,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "First, calculate $ 21 \\times 19 $:\n\n$$\n21 \\times 19 = 399\n$$\n\nNext, add 23 to the result:\n\n$$\n399 + 23 = 422\n$$\n\nFinal answer:  \n`Final answer: 422`",
+        "extracted": 422,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "21*19 + 23 = 399 + 23 = 422",
+        "extracted": 422,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, calculate $21 \\times 19$:\n   $$\n   21 \\times 19 = 399\n   $$\n\n2. Then add 23 to the result:\n   $$\n   399 + 23 = 422\n   $$\n\nFinal answer: `422`",
+        "extracted": 422,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "41a8aa419e38671c893d8323cc05344200335354553c7f8540826712e2eb063d",
+      "expectedAnswer": -24,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n14 - 15 = -1  \n-1 - 23 = -24\n\nThe integer result is:  \n**-24**",
+        "extracted": -24,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first subtraction:  \n   $ 14 - 15 = -1 $\n\n2. Subtract the next number:  \n   $ -1 - 23 = -24 $\n\nFinal answer:  \n`Final answer: -24`",
+        "extracted": -24,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "26",
+        "extracted": 26,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 14 - 15  \n2. 14 - 15 = -1  \n3. Next operation: -1 - 23  \n4. -1 - 23 = -24  \n\nFinal answer: -24",
+        "extracted": -24,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "a31c5abb2afbbd75aaf3987300a3d2c9eb5a634faae5b131a42e27400fdab25e",
+      "expectedAnswer": 3,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n27 - 19 = 8  \n8 - 5 = 3\n\nThe integer result is **3**.",
+        "extracted": 3,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first subtraction:  \n   $ 27 - 19 = 8 $\n\n2. Subtract the next number:  \n   $ 8 - 5 = 3 $\n\nFinal answer:  \n`Final answer: 3`",
+        "extracted": 3,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "10",
+        "extracted": 10,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first subtraction: 27 - 19 = 8  \n2. Subtract the next number: 8 - 5 = 3  \n\nFinal answer: 3",
+        "extracted": 3,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "82ab7b61600aaaf0751d6108ea5010d87db00004cca849574900cc4fd0180d22",
+      "expectedAnswer": 29,
+      "basePromptA": {
+        "response": "22 + 22 - 15 = 29\n\nInteger result: 29",
+        "extracted": 29,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 22 + 22 = 44 $\n\n2. Next, subtract 15:  \n   $ 44 - 15 = 29 $\n\nFinal answer:  \n`Final answer: 29`",
+        "extracted": 29,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "19",
+        "extracted": 19,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1.111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+        "extracted": null,
+        "correct": false,
+        "responseClass": "other",
+        "working": "missing-working",
+        "truncated": true
+      }
+    }
+  ],
+  "promptFlipCount": 170,
+  "promptFlipItemIds": [
+    "d728914776e45dca1c69c8e64d919bdea7eafa994ca418c8d8ff20359f815bfc",
+    "20652faa03d6dc4080baa3c441b3556274e1896081239dc7032ea40271cda36c",
+    "eb4e2fe435b9d4ca665afb87030ad6e19f0d15b6f7e52854c4c14335cc062a2d",
+    "53b09b3c2ba3ec0529c1b0bad4bf27b0572e64a0cac51da59754d160e112d40e",
+    "6025c73414ec3a1590a582f88424acd5e8e65d810c972ab8db68ce53e4fc8d08",
+    "657ef3592fb6c34556f85e9329b25856b5642899e3cb549a7fef55340498b078",
+    "00f04df5743a133a4e786160bb8ecf0b0716c873bf8cf36675bb8a7c23919817",
+    "ff4d370cdbfe0f67f14f514f46f7dc09456487daade99a81de1c1af76f88f61e",
+    "aa694373cf172cba64537bc6af55db7ee3b85a60d157db258700a876e8333f6c",
+    "d9fbe9ee50243a4fa070052549260045fe28186a241fadc708346cc25abd0550",
+    "3923ea1ec88fddf55a4120e9c222428bdbabbb191fc3975bf5aa3026eb2a6ec7",
+    "eefed216a5d3b781ab7d9e765ca77693bbcea5d6c788f06841a38a4b545ecc28",
+    "d0ab1353182f4d30f5e012b403494216c55bcba574535f7552c415ec27589d37",
+    "bced3346f3c4bd8f2d3040173654b54ee363a3ca27cc8642e28c5ad222ef69ab",
+    "fe23778e32fa392b0722b3736173d6c3efc7cdca5d99605674c10fbbc04a8d37",
+    "1b68a5b1351584471acf9343fe93301ac422c9422ecdeede389706081042e1c7",
+    "cd40f425a33a24bb18dafe4a2f26fbe51c417eeda8c254d1423027057c987eda",
+    "de0d10b923dac7407e1de5f028700bb5056da76a9eba8c0055476e6e61f991ba",
+    "3a58070c3dda17375511502e7819be89c6cfe3c092c8ea138cfd385bdd2275cd",
+    "757141394cb8ab926b3ae3f1fc8d077b9db3c25daedf23401f86bc500cca50b5"
+  ],
+  "promptFlipExamples": [
+    {
+      "itemId": "d728914776e45dca1c69c8e64d919bdea7eafa994ca418c8d8ff20359f815bfc",
+      "expectedAnswer": 181,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n1. Multiply: $ 11 \\times 15 = 165 $\n2. Add: $ 165 + 16 = 181 $\n\nFinal result: $ \\boxed{181} $",
+        "extracted": 181,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply: $ 11 \\times 15 $\n   - $ 11 \\times 15 = 165 $\n\n2. Add: $ 165 + 16 $\n\nFinal answer: $ 165 + 16 = 181 $\n\nFinal answer: `<integer>181`",
+        "extracted": 181,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "incorrect-arithmetic",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "236",
+        "extracted": 236,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication:  \n   11 * 15 = 165\n\n2. Then, add 16 to the result:  \n   165 + 16 = 181\n\nFinal answer: 181",
+        "extracted": 181,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "20652faa03d6dc4080baa3c441b3556274e1896081239dc7032ea40271cda36c",
+      "expectedAnswer": -17,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n16 - 12 = 4  \n4 - 21 = -17\n\nThe integer result is: **-17**.",
+        "extracted": -17,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 16 - 12 = 4 $\n\n2. Subtract the next number:  \n   $ 4 - 21 = -17 $\n\nFinal answer:  \n`Final answer: -17`",
+        "extracted": -17,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "15",
+        "extracted": 15,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 16 - 12  \n2. 16 - 12 = 4  \n3. Next operation: 4 - 21  \n4. 4 - 21 = -17  \n\nFinal answer: -17",
+        "extracted": -17,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "eb4e2fe435b9d4ca665afb87030ad6e19f0d15b6f7e52854c4c14335cc062a2d",
+      "expectedAnswer": 28,
+      "basePromptA": {
+        "response": "26 + 24 - 22 = 28\n\nThe integer result is **28**.",
+        "extracted": 28,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first two numbers:  \n   $ 26 + 24 = 50 $\n\n2. Subtract the next number:  \n   $ 50 - 22 = 28 $\n\nFinal answer:  \n`Final answer: 28`",
+        "extracted": 28,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "28",
+        "extracted": 28,
+        "correct": true,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1.111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+        "extracted": null,
+        "correct": false,
+        "responseClass": "other",
+        "working": "missing-working",
+        "truncated": true
+      }
+    },
+    {
+      "itemId": "53b09b3c2ba3ec0529c1b0bad4bf27b0572e64a0cac51da59754d160e112d40e",
+      "expectedAnswer": 34,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n29 - 13 = 16  \n16 + 18 = 34\n\nThe integer result is **34**.",
+        "extracted": 34,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 29 - 13 = 16 $\n\n2. Next, add the result to 18:  \n   $ 16 + 18 = 34 $\n\nFinal answer:  \n`Final answer: 34`",
+        "extracted": 34,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "14",
+        "extracted": 14,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 29 - 13  \n2. 29 - 13 = 16  \n3. Next operation: 16 + 18  \n4. 16 + 18 = 34  \n\nFinal answer: 34",
+        "extracted": 34,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "6025c73414ec3a1590a582f88424acd5e8e65d810c972ab8db68ce53e4fc8d08",
+      "expectedAnswer": 386,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n16 * 23 = 368  \n368 + 18 = 386\n\nThe integer result is:  \n**386**",
+        "extracted": 386,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply: $ 16 \\times 23 $\n   - $ 16 \\times 20 = 320 $\n   - $ 16 \\times 3 = 48 $\n   - $ 320 + 48 = 368 $\n\n2. Add: $ 368 + 18 $\n\nFinal answer: $ 368 + 18 = 386 $\n\nFinal answer: `<integer>386`",
+        "extracted": 386,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "incorrect-arithmetic",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "208",
+        "extracted": 208,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication:  \n320 (since 16 × 23 = 368, but wait, let's do it step by step)  \n- 16 × 20 = 320  \n- 16 × 3 = 48  \n- 320 + 48 = 368\n\n2. Now add the remaining term:  \n368 + 18 = 386\n\nFinal answer: 386",
+        "extracted": 386,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "ambiguous",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "657ef3592fb6c34556f85e9329b25856b5642899e3cb549a7fef55340498b078",
+      "expectedAnswer": -486,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n1. First, perform the multiplication:\n   $ 19 \\times 27 = 513 $\n\n2. Then subtract from 27:\n   $ 27 - 513 = -486 $\n\nThe integer result is:\n\n**-486**",
+        "extracted": -486,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "We are given the arithmetic expression:\n\n**27 - 19 * 27**\n\nTo solve this, we follow the **order of operations** (PEMDAS/BODMAS):\n\n1. **Parentheses** (none here)\n2. **Exponents** (none here)\n3. **Multiplication and Division** (from left to right)\n4. **Addition and Subtraction** (from left to right)\n\nSo, we first compute the multiplication:\n\n**19 * 27**\n\nLet's calculate that:\n\n**19 * 27 = 513**\n\nNow substitute back into the original",
+        "extracted": 513,
+        "correct": false,
+        "responseClass": "worked",
+        "working": "incorrect-arithmetic",
+        "truncated": true
+      },
+      "adapterPromptA": {
+        "response": "110",
+        "extracted": 110,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication operation:  \n   19 × 27 = 513\n\n2. Then, subtract the result from 27:  \n   27 - 513 = -486\n\nFinal answer: -486",
+        "extracted": -486,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "00f04df5743a133a4e786160bb8ecf0b0716c873bf8cf36675bb8a7c23919817",
+      "expectedAnswer": -23,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n12 - 15 = -3  \n-3 - 20 = -23\n\nThe integer result is: **-23**.",
+        "extracted": -23,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 12 - 15 = -3 $\n\n2. Subtract the next number:  \n   $ -3 - 20 = -23 $\n\nFinal answer:  \n`Final answer: -23`",
+        "extracted": -23,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "-13",
+        "extracted": -13,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 12 - 15  \n-15 is less than 12, so the result is -3.  \n-3 is the result of 12 - 15.\n\n2. Next, subtract 20 from the result: -3 - 20  \n-3 - 20 = -23\n\nFinal answer: -23",
+        "extracted": -23,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "ff4d370cdbfe0f67f14f514f46f7dc09456487daade99a81de1c1af76f88f61e",
+      "expectedAnswer": 219,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n$ 22 \\times 9 = 198 $\n\nThen add 21:\n\n$ 198 + 21 = 219 $\n\nFinal result: $ \\boxed{219} $",
+        "extracted": 219,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply: $ 22 \\times 9 $\n   $$\n   22 \\times 9 = 198\n   $$\n\n2. Add: $ 198 + 21 $\n   $$\n   198 + 21 = 219\n   $$\n\nFinal answer:  \n`Final answer: 219`",
+        "extracted": 219,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "231",
+        "extracted": 231,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication:  \n318 (since 22 * 9 = 198)  \n2. Then, add 21 to the result:  \n198 + 21 = 219\n\nFinal answer: 219",
+        "extracted": 219,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "ambiguous",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "aa694373cf172cba64537bc6af55db7ee3b85a60d157db258700a876e8333f6c",
+      "expectedAnswer": 12,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n4 - 12 + 20  \n= (4 - 12) + 20  \n= (-8) + 20  \n= 12\n\nThe integer result is: **12**.",
+        "extracted": 12,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\nStart with the given expression:  \n**4 - 12 + 20**\n\nWe perform the operations from left to right:\n\n1. $ 4 - 12 = -8 $\n2. $ -8 + 20 = 12 $\n\nFinal answer:  \n**Final answer: 12**",
+        "extracted": 12,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "16",
+        "extracted": 16,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 4 - 12 = -8  \n2. Next, add 20: -8 + 20 = 12  \n\nFinal answer: 12",
+        "extracted": 12,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "d9fbe9ee50243a4fa070052549260045fe28186a241fadc708346cc25abd0550",
+      "expectedAnswer": -36,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n8 - 23 - 21  \n= (8 - 23) - 21  \n= (-15) - 21  \n= -36\n\nThe integer result is:  \n**-36**",
+        "extracted": -36,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 8 - 23 = -15 $\n\n2. Subtract the next number:  \n   $ -15 - 21 = -36 $\n\nFinal answer:  \n`Final answer: -36`",
+        "extracted": -36,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "10",
+        "extracted": 10,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 8 - 23  \n2. -15 is the result of 8 - 23.  \n3. Now subtract 21: -15 - 21 = -36\n\nFinal answer: -36",
+        "extracted": -36,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "3923ea1ec88fddf55a4120e9c222428bdbabbb191fc3975bf5aa3026eb2a6ec7",
+      "expectedAnswer": 18,
+      "basePromptA": {
+        "response": "10 + 29 - 21 = 18",
+        "extracted": 18,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 10 + 29 = 39 $\n\n2. Next, subtract 21:  \n   $ 39 - 21 = 18 $\n\nFinal answer:  \n`Final answer: 18`",
+        "extracted": 18,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "28",
+        "extracted": 28,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 10 + 29  \n2. Add 10 and 29: 39  \n3. Subtract 21 from the result: 39 - 21 = 18  \n\nFinal answer: 18",
+        "extracted": 18,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "eefed216a5d3b781ab7d9e765ca77693bbcea5d6c788f06841a38a4b545ecc28",
+      "expectedAnswer": -8,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n13 + 2 = 15  \n15 - 23 = -8\n\nThe integer result is:  \n**-8**",
+        "extracted": -8,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first operation:  \n   $ 13 + 2 = 15 $\n\n2. Next, subtract 23:  \n   $ 15 - 23 = -8 $\n\nFinal answer: `-8`",
+        "extracted": -8,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "24",
+        "extracted": 24,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 15  \n2. Next, subtract 23: 15 - 23 = -8  \n3. Final result: -8  \n\nFinal answer: -8",
+        "extracted": -8,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "d0ab1353182f4d30f5e012b403494216c55bcba574535f7552c415ec27589d37",
+      "expectedAnswer": 62,
+      "basePromptA": {
+        "response": "29 + 13 + 20 = 62  \n\nInteger result: 62",
+        "extracted": 62,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Add 29 and 13:  \n   $ 29 + 13 = 42 $\n\n2. Add the result to 20:  \n   $ 42 + 20 = 62 $\n\nFinal answer: `62`",
+        "extracted": 62,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "36",
+        "extracted": 36,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first addition: 29 + 13 = 42  \n2. Add the next number: 42 + 20 = 62  \n\nFinal answer: 62",
+        "extracted": 62,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "bced3346f3c4bd8f2d3040173654b54ee363a3ca27cc8642e28c5ad222ef69ab",
+      "expectedAnswer": -2,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n9 - 27 + 16  \n= (9 - 27) + 16  \n= (-18) + 16  \n= -2\n\nThe integer result is: **-2**.",
+        "extracted": -2,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first two numbers:  \n   $ 9 - 27 = -18 $\n\n2. Add the next number:  \n   $ -18 + 16 = -2 $\n\nFinal answer: `<integer>-2`",
+        "extracted": -2,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "10",
+        "extracted": 10,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 9 - 27  \n-18\n\n2. Next operation: -18 + 16  \n-2\n\nFinal answer: -2",
+        "extracted": -2,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "missing-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "fe23778e32fa392b0722b3736173d6c3efc7cdca5d99605674c10fbbc04a8d37",
+      "expectedAnswer": 565,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n$ 30 \\times 18 = 540 $\n\nThen add 25:\n\n$ 540 + 25 = 565 $\n\nThe integer result is:\n\n**565**",
+        "extracted": 565,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "First, multiply 30 and 18:\n\n$$\n30 \\times 18 = 540\n$$\n\nNext, add 25 to the result:\n\n$$\n540 + 25 = 565\n$$\n\nFinal answer:  \n`Final answer: 565`",
+        "extracted": 565,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "270",
+        "extracted": 270,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication:  \n   30 × 18 = 540\n\n2. Then, add the result to 25:  \n   540 + 25 = 565\n\nFinal answer: 565",
+        "extracted": 565,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "1b68a5b1351584471acf9343fe93301ac422c9422ecdeede389706081042e1c7",
+      "expectedAnswer": 7200,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n15 × 30 = 450  \n450 × 16 = 7200\n\nThe integer result is **7200**.",
+        "extracted": 7200,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply 15 and 30:  \n   $ 15 \\times 30 = 450 $\n\n2. Multiply the result by 16:  \n   $ 450 \\times 16 = 7200 $\n\nFinal answer: `7200`",
+        "extracted": 7200,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "2400",
+        "extracted": 2400,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, calculate $15 \\times 30$:\n   $$\n   15 \\times 30 = 450\n   $$\n\n2. Next, multiply the result by 16:\n   $$\n   450 \\times 16 = 7200\n   $$\n\nFinal answer: `7200`",
+        "extracted": 7200,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "cd40f425a33a24bb18dafe4a2f26fbe51c417eeda8c254d1423027057c987eda",
+      "expectedAnswer": 477,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n1. Multiply: $30 \\times 16 = 480$\n2. Subtract: $480 - 3 = 477$\n\nFinal result: $\\boxed{477}$",
+        "extracted": 477,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "First, perform the multiplication:\n\n$$\n30 \\times 16 = 480\n$$\n\nNext, subtract 3 from the result:\n\n$$\n480 - 3 = 477\n$$\n\nFinal answer:  \n`Final answer: 477`",
+        "extracted": 477,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "240",
+        "extracted": 240,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, calculate the multiplication:  \n   30 × 16 = 480\n\n2. Then, subtract 3 from the result:  \n   480 − 3 = 477\n\nFinal answer: 477",
+        "extracted": 477,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "de0d10b923dac7407e1de5f028700bb5056da76a9eba8c0055476e6e61f991ba",
+      "expectedAnswer": 107,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n$ 7 \\times 12 = 84 $\n\nThen add 23:\n\n$ 84 + 23 = 107 $\n\nFinal result:  \n**107**",
+        "extracted": 107,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Multiply: $ 7 \\times 12 = 84 $\n2. Add: $ 84 + 23 = 107 $\n\nFinal answer: `107`",
+        "extracted": 107,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "250",
+        "extracted": 250,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. First, perform the multiplication:  \n   7 * 12 = 84\n\n2. Then, add the result to 23:  \n   84 + 23 = 107\n\nFinal answer: 107",
+        "extracted": 107,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "3a58070c3dda17375511502e7819be89c6cfe3c092c8ea138cfd385bdd2275cd",
+      "expectedAnswer": 25,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n15 - 6 = 9  \n9 + 16 = 25\n\nThe integer result is **25**.",
+        "extracted": 25,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first two numbers:  \n   $ 15 - 6 = 9 $\n\n2. Now add the result to 16:  \n   $ 9 + 16 = 25 $\n\nFinal answer:  \n`Final answer: 25`",
+        "extracted": 25,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "10",
+        "extracted": 10,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 15 - 6  \n2. 15 - 6 = 9  \n3. Next operation: 9 + 16  \n4. 9 + 16 = 25  \n\nFinal answer: 25",
+        "extracted": 25,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    },
+    {
+      "itemId": "757141394cb8ab926b3ae3f1fc8d077b9db3c25daedf23401f86bc500cca50b5",
+      "expectedAnswer": 27,
+      "basePromptA": {
+        "response": "Let's compute the expression step by step:\n\n23 - 13 = 10  \n10 + 17 = 27\n\nThe integer result is **27**.",
+        "extracted": 27,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "basePromptB": {
+        "response": "Let's solve the expression step by step:\n\n1. Start with the first two numbers:  \n   $ 23 - 13 = 10 $\n\n2. Add the result to the next number:  \n   $ 10 + 17 = 27 $\n\nFinal answer:  \n`Final answer: 27`",
+        "extracted": 27,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "correct-parseable",
+        "truncated": false
+      },
+      "adapterPromptA": {
+        "response": "17",
+        "extracted": 17,
+        "correct": false,
+        "responseClass": "bare",
+        "working": "missing-working",
+        "truncated": false
+      },
+      "adapterPromptB": {
+        "response": "1. Start with the first operation: 23 - 13  \n2. 23 - 13 = 10  \n3. Next operation: 10 + 17  \n4. 10 + 17 = 27  \n\nFinal answer: 27",
+        "extracted": 27,
+        "correct": true,
+        "responseClass": "worked",
+        "working": "unparseable-working",
+        "truncated": false
+      }
+    }
+  ]
+}

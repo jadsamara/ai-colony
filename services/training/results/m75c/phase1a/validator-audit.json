@@ -1,0 +1,194 @@
+{
+  "sealedPromptBCounts": {
+    "correct-parseable": 1429,
+    "incorrect-arithmetic": 507,
+    "unparseable-working": 476,
+    "ambiguous": 170,
+    "missing-working": 418
+  },
+  "finalCorrectRejections": 1075,
+  "inspected": [
+    {
+      "model": "structured-s5-n25-seed-202",
+      "condition": "sealed-a",
+      "itemId": "395a52c98e3b7f979b5f7c8424629607b2dcb2f97906ad25486724757e4feaed",
+      "expectedAnswer": 3780,
+      "extracted": 3780,
+      "working": "unparseable-working",
+      "response": "The expression is $20 \\times 21 \\times 9$.\n\nFirst, compute $20 \\times 21 = 420$.\n\nThen, compute $420 \\times 9 = 3780$.\n\nThe integer result is $\\boxed{3780}$."
+    },
+    {
+      "model": "structured-s5-n25",
+      "condition": "sealed-b",
+      "itemId": "8e8939bbe809a343f261473e3cb6d29d12905ff1494e06595021b411ad00be9f",
+      "expectedAnswer": 263,
+      "extracted": 263,
+      "working": "unparseable-working",
+      "response": "Let's solve the expression step by step:\n\n1. Multiply: $10 \\times 24 = 240$\n2. Add: $240 + 23 = 263$\n\nFinal answer: `263`"
+    },
+    {
+      "model": "structured-s5-n25-seed-202",
+      "condition": "sealed-a",
+      "itemId": "fec3187b6368896690041686438be5740291c034e9bb65d9854031328693e4d2",
+      "expectedAnswer": 78,
+      "extracted": 78,
+      "working": "unparseable-working",
+      "response": "Let's compute the expression step by step:\n\n1. Multiply: $ 8 \\times 13 = 104 $\n2. Subtract: $ 104 - 26 = 78 $\n\nFinal result: $ \\boxed{78} $"
+    },
+    {
+      "model": "self-303-r1",
+      "condition": "sealed-b",
+      "itemId": "dbe36c0ce77ef8c285596941dba320130c2ce41358abfea79a75c17ad218059c",
+      "expectedAnswer": -220,
+      "extracted": -220,
+      "working": "unparseable-working",
+      "response": "Evaluate the expression: 10 - 10 * 23\n\n- First, perform the multiplication: 10 * 23 = 230  \n- Then, subtract: 10 - 230 = -220\n\nFinal answer: -220"
+    },
+    {
+      "model": "structured-s5-n25-seed-303",
+      "condition": "sealed-a",
+      "itemId": "25692399cb898cc54ee9a90bb8dae697a9ef13f5bed9b8fb808515d6dca97195",
+      "expectedAnswer": -2,
+      "extracted": -2,
+      "working": "unparseable-working",
+      "response": "The expression is $ 4 - 3 \\times 2 $.\n\nFollowing the order of operations (PEMDAS/BODMAS):\n\n1. Multiply: $ 3 \\times 2 = 6 $\n2. Subtract: $ 4 - 6 = -2 $\n\nFinal result: $ \\boxed{-2} $"
+    },
+    {
+      "model": "structured-s5-n25-seed-202",
+      "condition": "dev-a",
+      "itemId": "d4a7c7c101024fb9d1e72c262d6fe4567ae2cfa78fa15f96e43d3e6320c0ba68",
+      "expectedAnswer": -11,
+      "extracted": -11,
+      "working": "unparseable-working",
+      "response": "Let's compute the expression step by step:\n\n12 - 29 + 6  \n= (12 + 6) - 29  \n= 18 - 29  \n= -11\n\nThe integer result is: **-11**."
+    },
+    {
+      "model": "base",
+      "condition": "sealed-b",
+      "itemId": "75524649d422e8d0e84803fd3a1331a3c9138c09f2753b162464c662a45a0042",
+      "expectedAnswer": 48,
+      "extracted": 48,
+      "working": "unparseable-working",
+      "response": "Let's solve the expression step by step:\n\n1. Multiply: $13 \\times 2 = 26$\n2. Add: $26 + 22 = 48$\n\nFinal answer: `48`"
+    },
+    {
+      "model": "structured-s5-n25-seed-202",
+      "condition": "sealed-a",
+      "itemId": "97240a10e54f711979a5b25575b5ede802d23863862b5e4368c8340ae780aa87",
+      "expectedAnswer": 224,
+      "extracted": 224,
+      "working": "unparseable-working",
+      "response": "Let's compute the expression step by step:\n\n1. Multiply: $17 \\times 12 = 204$\n2. Add: $20 + 204 = 224$\n\nFinal result: $\\boxed{224}$"
+    },
+    {
+      "model": "self-303-r1",
+      "condition": "sealed-b",
+      "itemId": "e87bf2ffda85be3a99bf0b39ec9f6e451dd4dbe3b95c22c5f08b38f39ea520a4",
+      "expectedAnswer": -8,
+      "extracted": -8,
+      "working": "unparseable-working",
+      "response": "Evaluate the expression step by step:\n\n1. Start with: 2 - 28  \n2. 2 - 28 = -26  \n3. Now add 18: -26 + 18 = -8  \n\nFinal answer: -8"
+    },
+    {
+      "model": "structured-s5-n25-seed-303",
+      "condition": "sealed-a",
+      "itemId": "b373d0850ec20b08296fd8a7eee7d5ddbb71633953a161a701522b0027258c87",
+      "expectedAnswer": 8,
+      "extracted": 8,
+      "working": "unparseable-working",
+      "response": "Let's compute the expression step by step:\n\n1. Multiply: $2 \\times 7 = 14$\n2. Subtract: $14 - 6 = 8$\n\nFinal result: $\\boxed{8}$"
+    },
+    {
+      "model": "structured-s5-n25-seed-202",
+      "condition": "sealed-b",
+      "itemId": "422d5c0462ca30a7434ebcb476145ddd503cb00b2246389474ff4a3bea99f85d",
+      "expectedAnswer": 533,
+      "extracted": 533,
+      "working": "ambiguous",
+      "response": "Let's solve the expression step by step:\n\n1. Multiply: $25 \\times 21$\n   - $25 \\times 20 = 500$\n   - $25 \\times 1 = 25$\n   - $500 + 25 = 525$\n\n2. Add: $525 + 8 = 533$\n\nFinal answer: `533`"
+    },
+    {
+      "model": "supervised-101",
+      "condition": "sealed-b",
+      "itemId": "768db1d05978b4b888bb47296fc087223b10a83a21a0d6c68ea8de7ebb3e67dc",
+      "expectedAnswer": 696,
+      "extracted": 696,
+      "working": "ambiguous",
+      "response": "1. First, perform the multiplication:  \n5. 24 * 30 = 720\n\n6. Then, subtract 24:  \n720 - 24 = 696\n\nFinal answer: 696"
+    },
+    {
+      "model": "base",
+      "condition": "sealed-b",
+      "itemId": "5617a00c3b47dec21a822f21ece7ada7f8163e6d3c2f37346ba110aef1d4a4d5",
+      "expectedAnswer": 173,
+      "extracted": 173,
+      "working": "unparseable-working",
+      "response": "Let's solve the expression step by step:\n\n1. Multiply: $10 \\times 16 = 160$\n2. Add: $160 + 13 = 173$\n\nFinal answer: `173`"
+    },
+    {
+      "model": "structured-s5-n25",
+      "condition": "dev-a",
+      "itemId": "9f167bcf513ec2af008c23dfe4ce7523ea6ff6e4fe8190bcbc4469d4ecbb9fae",
+      "expectedAnswer": 125,
+      "extracted": 125,
+      "working": "unparseable-working",
+      "response": "Let's compute the expression step by step:\n\n1. Multiply: $ 11 \\times 9 = 99 $\n2. Add: $ 26 + 99 = 125 $\n\nFinal result: $ \\boxed{125} $"
+    },
+    {
+      "model": "base",
+      "condition": "sealed-b",
+      "itemId": "16d0003aeda4c4a36e704eeecbc1eb656932fb6fecde2c54438b0514b0872e52",
+      "expectedAnswer": -7,
+      "extracted": -7,
+      "working": "unparseable-working",
+      "response": "Let's solve the expression step by step:\n\n1. Multiply: $ 2 \\times 5 = 10 $\n2. Subtract: $ 10 - 17 = -7 $\n\nFinal answer: `-7`"
+    },
+    {
+      "model": "structured-s5-n25",
+      "condition": "sealed-a",
+      "itemId": "4bda262e9e8e40de7d04a7586c5cbee3bfde817a7998bed5c1672eabd660a727",
+      "expectedAnswer": 4800,
+      "extracted": 4800,
+      "working": "unparseable-working",
+      "response": "The expression is $16 \\times 15 \\times 20$.\n\nFirst, compute $16 \\times 15 = 240$.\n\nThen, compute $240 \\times 20 = 4800$.\n\nThe integer result is $\\boxed{4800}$."
+    },
+    {
+      "model": "structured-s5-n25-seed-202",
+      "condition": "sealed-b",
+      "itemId": "44bac96e0e63cb80886fe12019746398fed76ce081ccccb8fac6291fb90e092f",
+      "expectedAnswer": 64,
+      "extracted": 64,
+      "working": "unparseable-working",
+      "response": "Let's solve the expression step by step:\n\n1. Multiply: $ 5 \\times 14 = 70 $\n2. Subtract: $ 70 - 6 = 64 $\n\nFinal answer: `64`"
+    },
+    {
+      "model": "structured-s5-n25-seed-202",
+      "condition": "sealed-a",
+      "itemId": "9fe81ee8e0f985e431f384b3ce6821db7e5beca286482107bd6cbc495ff32dec",
+      "expectedAnswer": 21,
+      "extracted": 21,
+      "working": "unparseable-working",
+      "response": "Let's compute the expression step by step:\n\n1. Multiply: $ 3 \\times 15 = 45 $\n2. Subtract: $ 45 - 24 = 21 $\n\nFinal result: $ \\boxed{21} $"
+    },
+    {
+      "model": "self-303-r1",
+      "condition": "sealed-b",
+      "itemId": "d315802f09391a9f72a2a087a0cfa32d1b8589cdb92b1fdcadda7f90d41f2f78",
+      "expectedAnswer": -214,
+      "extracted": -214,
+      "working": "unparseable-working",
+      "response": "Evaluate the expression: 2 - 12 * 18\n\n- First, perform the multiplication: 12 * 18 = 216  \n- Then, subtract: 2 - 216 = -214\n\nFinal answer: -214"
+    },
+    {
+      "model": "structured-s5-n25-seed-303",
+      "condition": "sealed-a",
+      "itemId": "72457d196ab49b9944be45edbff88eb00977d710cc6482ba411a4f988144e269",
+      "expectedAnswer": -69,
+      "extracted": -69,
+      "working": "unparseable-working",
+      "response": "Let's compute the expression step by step:\n\n6 - 3 * 25\n\nFollowing the order of operations (PEMDAS/BODMAS):\n\n1. Multiply: 3 * 25 = 75\n2. Subtract: 6 - 75 = -69\n\nFinal result: **-69**"
+    }
+  ],
+  "inspectionSeed": 7501,
+  "inspectionRule": "final answer correct and working verdict is incorrect-arithmetic, unparseable-working, or ambiguous; composite key model|condition|itemId; mulberry32 seed 7501; first 20"
+}

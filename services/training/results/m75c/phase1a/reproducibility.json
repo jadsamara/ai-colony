@@ -1,0 +1,101 @@
+{
+  "reproDecoding": {
+    "temperature": 0,
+    "topP": 1,
+    "maxTokens": 32,
+    "seed": 0,
+    "thinking": "closed-empty-prefill"
+  },
+  "models": [
+    {
+      "model": "base",
+      "reproStudy": "m75",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 88,
+      "sealedPrefix": 300,
+      "sealedCompared": 300
+    },
+    {
+      "model": "self-101-r1",
+      "reproStudy": "m75",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 300,
+      "sealedPrefix": 300,
+      "sealedCompared": 300
+    },
+    {
+      "model": "supervised-101",
+      "reproStudy": "m75",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 299,
+      "sealedPrefix": 300,
+      "sealedCompared": 300
+    },
+    {
+      "model": "self-202-r1",
+      "reproStudy": "m75",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 300,
+      "sealedPrefix": 300,
+      "sealedCompared": 300
+    },
+    {
+      "model": "supervised-202",
+      "reproStudy": "m75",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 300,
+      "sealedPrefix": 300,
+      "sealedCompared": 300
+    },
+    {
+      "model": "self-303-r1",
+      "reproStudy": "m75",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 298,
+      "sealedPrefix": 300,
+      "sealedCompared": 300
+    },
+    {
+      "model": "supervised-303",
+      "reproStudy": "m75",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 300,
+      "sealedPrefix": 300,
+      "sealedCompared": 300
+    },
+    {
+      "model": "structured-s5-n25",
+      "reproStudy": "m75b",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 0,
+      "sealedPrefix": 0,
+      "sealedCompared": 0
+    },
+    {
+      "model": "structured-s5-n25-seed-202",
+      "reproStudy": "m75b",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 0,
+      "sealedPrefix": 0,
+      "sealedCompared": 0
+    },
+    {
+      "model": "structured-s5-n25-seed-303",
+      "reproStudy": "m75b",
+      "reproExact": 300,
+      "reproCompared": 300,
+      "sealedExact": 0,
+      "sealedPrefix": 0,
+      "sealedCompared": 0
+    }
+  ]
+}

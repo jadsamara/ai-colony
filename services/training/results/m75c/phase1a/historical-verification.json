@@ -1,0 +1,103 @@
+{
+  "scorer": "answer-extract-m75-v1",
+  "results": [
+    {
+      "study": "m75",
+      "runs": [
+        {
+          "evaluationRunId": "baseline-sealed",
+          "expectedCorrect": 134,
+          "observedCorrect": 134,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        },
+        {
+          "evaluationRunId": "self-101-r1-sealed",
+          "expectedCorrect": 27,
+          "observedCorrect": 27,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        },
+        {
+          "evaluationRunId": "supervised-101-sealed",
+          "expectedCorrect": 37,
+          "observedCorrect": 37,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        },
+        {
+          "evaluationRunId": "self-202-r1-sealed",
+          "expectedCorrect": 38,
+          "observedCorrect": 38,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        },
+        {
+          "evaluationRunId": "supervised-202-sealed",
+          "expectedCorrect": 29,
+          "observedCorrect": 29,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        },
+        {
+          "evaluationRunId": "self-303-r1-sealed",
+          "expectedCorrect": 33,
+          "observedCorrect": 33,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        },
+        {
+          "evaluationRunId": "supervised-303-sealed",
+          "expectedCorrect": 54,
+          "observedCorrect": 54,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        }
+      ]
+    },
+    {
+      "study": "m75b",
+      "runs": [
+        {
+          "evaluationRunId": "baseline-sealed",
+          "expectedCorrect": 138,
+          "observedCorrect": 138,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        },
+        {
+          "evaluationRunId": "structured-s5-n25-sealed",
+          "expectedCorrect": 139,
+          "observedCorrect": 139,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        },
+        {
+          "evaluationRunId": "structured-s5-n25-seed-202-sealed",
+          "expectedCorrect": 139,
+          "observedCorrect": 139,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        },
+        {
+          "evaluationRunId": "structured-s5-n25-seed-303-sealed",
+          "expectedCorrect": 139,
+          "observedCorrect": 139,
+          "sampleSize": 300,
+          "discrepancy": false,
+          "invalid": null
+        }
+      ]
+    }
+  ]
+}

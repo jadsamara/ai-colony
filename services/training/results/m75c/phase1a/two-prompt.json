@@ -1,0 +1,3624 @@
+{
+  "label": "DIAGNOSTIC",
+  "extractor": "final-answer-then-last-integer-v1",
+  "maxTokens": {
+    "reproA": 32,
+    "comparison": 128
+  },
+  "thinking": "closed-empty-prefill",
+  "decoding": {
+    "temperature": 0,
+    "topP": 1,
+    "seed": 0
+  },
+  "models": [
+    {
+      "model": "base",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 134,
+          "accuracy": 0.44666666666666666,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 134,
+              "accuracy": 0.44666666666666666
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 71.33666666666667,
+          "averageTokens": 28.926666666666666,
+          "tokenCountsStored": 300,
+          "truncated": 212,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 131,
+            "incorrect-arithmetic": 45,
+            "unparseable-working": 79,
+            "ambiguous": 18,
+            "missing-working": 27
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 291,
+          "accuracy": 0.97,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 291,
+              "accuracy": 0.97
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 103.73,
+          "averageTokens": 45.02,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 203,
+            "incorrect-arithmetic": 6,
+            "unparseable-working": 86,
+            "ambiguous": 5,
+            "missing-working": 0
+          },
+          "byteMatches": 88,
+          "byteCompared": 300
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 258,
+          "accuracy": 0.86,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 258,
+              "accuracy": 0.86
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 193,
+          "averageCharacters": 218.33666666666667,
+          "averageTokens": 80.78666666666666,
+          "tokenCountsStored": 300,
+          "truncated": 46,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 201,
+            "incorrect-arithmetic": 37,
+            "unparseable-working": 40,
+            "ambiguous": 22,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 46,
+          "accuracy": 0.9583333333333334,
+          "classes": {
+            "worked": 48,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 48,
+              "correct": 46,
+              "accuracy": 0.9583333333333334
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 94.54166666666667,
+          "averageTokens": 41.395833333333336,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 35,
+            "incorrect-arithmetic": 2,
+            "unparseable-working": 11,
+            "ambiguous": 0,
+            "missing-working": 0
+          },
+          "byteMatches": 19,
+          "byteCompared": 48
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 42,
+          "accuracy": 0.875,
+          "classes": {
+            "worked": 48,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 48,
+              "correct": 42,
+              "accuracy": 0.875
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 31,
+          "averageCharacters": 211.8125,
+          "averageTokens": 76.8125,
+          "tokenCountsStored": 48,
+          "truncated": 6,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 31,
+            "incorrect-arithmetic": 6,
+            "unparseable-working": 10,
+            "ambiguous": 1,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 252,
+            "firstOnly": 39,
+            "secondOnly": 6,
+            "neither": 3,
+            "changedResponses": 300
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 291,
+            "firstOnly": 0,
+            "secondOnly": 0,
+            "neither": 9,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 258,
+            "firstOnly": 0,
+            "secondOnly": 0,
+            "neither": 42,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": -0.11,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": false
+          },
+          "promptADeficitRecovered": {
+            "points": -0.11,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "historicalGap": {
+            "points": 0.41333333333333333,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": false
+          }
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 40,
+            "firstOnly": 6,
+            "secondOnly": 2,
+            "neither": 0,
+            "changedResponses": 48
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 46,
+            "firstOnly": 0,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 42,
+            "firstOnly": 0,
+            "secondOnly": 0,
+            "neither": 6,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": -0.08333333333333333,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": false
+          },
+          "promptADeficitRecovered": {
+            "points": -0.08333333333333333,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    },
+    {
+      "model": "self-101-r1",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 27,
+          "accuracy": 0.09,
+          "classes": {
+            "worked": 17,
+            "bare": 281,
+            "unparseable": 0,
+            "other": 2
+          },
+          "classShare": {
+            "worked": 0.056666666666666664,
+            "bare": 0.9366666666666666,
+            "unparseable": 0,
+            "other": 0.006666666666666667
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 17,
+              "correct": 6,
+              "accuracy": 0.35294117647058826
+            },
+            "bare": {
+              "count": 281,
+              "correct": 21,
+              "accuracy": 0.07473309608540925
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 2,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 281,
+          "averageCharacters": 3.4233333333333333,
+          "averageTokens": 4.266666666666667,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 6,
+            "incorrect-arithmetic": 6,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 288
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 27,
+          "accuracy": 0.09,
+          "classes": {
+            "worked": 17,
+            "bare": 281,
+            "unparseable": 0,
+            "other": 2
+          },
+          "classShare": {
+            "worked": 0.056666666666666664,
+            "bare": 0.9366666666666666,
+            "unparseable": 0,
+            "other": 0.006666666666666667
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 17,
+              "correct": 6,
+              "accuracy": 0.35294117647058826
+            },
+            "bare": {
+              "count": 281,
+              "correct": 21,
+              "accuracy": 0.07473309608540925
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 2,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 281,
+          "averageCharacters": 3.4233333333333333,
+          "averageTokens": 4.266666666666667,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 6,
+            "incorrect-arithmetic": 6,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 288
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 173,
+          "accuracy": 0.5766666666666667,
+          "classes": {
+            "worked": 218,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 82
+          },
+          "classShare": {
+            "worked": 0.7266666666666667,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0.2733333333333333
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 218,
+              "correct": 173,
+              "accuracy": 0.7935779816513762
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 82,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 189,
+          "averageCharacters": 122.42666666666666,
+          "averageTokens": 73.60666666666667,
+          "tokenCountsStored": 300,
+          "truncated": 75,
+          "truncationKnown": true,
+          "extractionFailures": 43,
+          "working": {
+            "correct-parseable": 78,
+            "incorrect-arithmetic": 14,
+            "unparseable-working": 86,
+            "ambiguous": 19,
+            "missing-working": 103
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 4,
+          "accuracy": 0.08333333333333333,
+          "classes": {
+            "worked": 2,
+            "bare": 46,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.041666666666666664,
+            "bare": 0.9583333333333334,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 2,
+              "correct": 1,
+              "accuracy": 0.5
+            },
+            "bare": {
+              "count": 46,
+              "correct": 3,
+              "accuracy": 0.06521739130434782
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 46,
+          "averageCharacters": 2.9583333333333335,
+          "averageTokens": 3.875,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 1,
+            "incorrect-arithmetic": 0,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 47
+          },
+          "byteMatches": 48,
+          "byteCompared": 48
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 33,
+          "accuracy": 0.6875,
+          "classes": {
+            "worked": 38,
+            "bare": 1,
+            "unparseable": 0,
+            "other": 9
+          },
+          "classShare": {
+            "worked": 0.7916666666666666,
+            "bare": 0.020833333333333332,
+            "unparseable": 0,
+            "other": 0.1875
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 38,
+              "correct": 33,
+              "accuracy": 0.868421052631579
+            },
+            "bare": {
+              "count": 1,
+              "correct": 0,
+              "accuracy": 0
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 9,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 35,
+          "averageCharacters": 124.47916666666667,
+          "averageTokens": 65.22916666666667,
+          "tokenCountsStored": 48,
+          "truncated": 6,
+          "truncationKnown": true,
+          "extractionFailures": 6,
+          "working": {
+            "correct-parseable": 12,
+            "incorrect-arithmetic": 1,
+            "unparseable-working": 18,
+            "ambiguous": 4,
+            "missing-working": 13
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 15,
+            "firstOnly": 12,
+            "secondOnly": 158,
+            "neither": 115,
+            "changedResponses": 300
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 27,
+            "firstOnly": 264,
+            "secondOnly": 0,
+            "neither": 9,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 158,
+            "firstOnly": 100,
+            "secondOnly": 15,
+            "neither": 27,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.4866666666666667,
+            "fractionOfLossRecovered": 0.6320346320346321,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.4866666666666667,
+            "fractionOfLossRecovered": 0.553030303030303,
+            "remainsBelowBase": true
+          },
+          "historicalGap": {
+            "points": 0.4866666666666667,
+            "fractionOfLossRecovered": 1.3644859813084111,
+            "remainsBelowBase": false
+          }
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 3,
+            "firstOnly": 1,
+            "secondOnly": 30,
+            "neither": 14,
+            "changedResponses": 48
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 4,
+            "firstOnly": 42,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 29,
+            "firstOnly": 13,
+            "secondOnly": 4,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.6041666666666666,
+            "fractionOfLossRecovered": 0.7631578947368421,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.6041666666666666,
+            "fractionOfLossRecovered": 0.6904761904761905,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    },
+    {
+      "model": "supervised-101",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 37,
+          "accuracy": 0.12333333333333334,
+          "classes": {
+            "worked": 12,
+            "bare": 287,
+            "unparseable": 0,
+            "other": 1
+          },
+          "classShare": {
+            "worked": 0.04,
+            "bare": 0.9566666666666667,
+            "unparseable": 0,
+            "other": 0.0033333333333333335
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 12,
+              "correct": 6,
+              "accuracy": 0.5
+            },
+            "bare": {
+              "count": 287,
+              "correct": 31,
+              "accuracy": 0.10801393728222997
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 1,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 287,
+          "averageCharacters": 3.316666666666667,
+          "averageTokens": 4.1866666666666665,
+          "tokenCountsStored": 300,
+          "truncated": 1,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 6,
+            "incorrect-arithmetic": 3,
+            "unparseable-working": 1,
+            "ambiguous": 0,
+            "missing-working": 290
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 38,
+          "accuracy": 0.12666666666666668,
+          "classes": {
+            "worked": 12,
+            "bare": 287,
+            "unparseable": 0,
+            "other": 1
+          },
+          "classShare": {
+            "worked": 0.04,
+            "bare": 0.9566666666666667,
+            "unparseable": 0,
+            "other": 0.0033333333333333335
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 12,
+              "correct": 7,
+              "accuracy": 0.5833333333333334
+            },
+            "bare": {
+              "count": 287,
+              "correct": 31,
+              "accuracy": 0.10801393728222997
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 1,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 287,
+          "averageCharacters": 3.3233333333333333,
+          "averageTokens": 4.196666666666666,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 6,
+            "incorrect-arithmetic": 3,
+            "unparseable-working": 1,
+            "ambiguous": 0,
+            "missing-working": 290
+          },
+          "byteMatches": 299,
+          "byteCompared": 300
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 93,
+          "accuracy": 0.31,
+          "classes": {
+            "worked": 212,
+            "bare": 86,
+            "unparseable": 0,
+            "other": 2
+          },
+          "classShare": {
+            "worked": 0.7066666666666667,
+            "bare": 0.2866666666666667,
+            "unparseable": 0,
+            "other": 0.006666666666666667
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 212,
+              "correct": 92,
+              "accuracy": 0.4339622641509434
+            },
+            "bare": {
+              "count": 86,
+              "correct": 1,
+              "accuracy": 0.011627906976744186
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 2,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 68,
+          "averageCharacters": 45.943333333333335,
+          "averageTokens": 24.92,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 44,
+            "incorrect-arithmetic": 92,
+            "unparseable-working": 40,
+            "ambiguous": 18,
+            "missing-working": 106
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 8,
+          "accuracy": 0.16666666666666666,
+          "classes": {
+            "worked": 2,
+            "bare": 46,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.041666666666666664,
+            "bare": 0.9583333333333334,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 2,
+              "correct": 2,
+              "accuracy": 1
+            },
+            "bare": {
+              "count": 46,
+              "correct": 6,
+              "accuracy": 0.13043478260869565
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 46,
+          "averageCharacters": 3.3125,
+          "averageTokens": 4.1875,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 2,
+            "incorrect-arithmetic": 0,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 46
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 16,
+          "accuracy": 0.3333333333333333,
+          "classes": {
+            "worked": 27,
+            "bare": 20,
+            "unparseable": 0,
+            "other": 1
+          },
+          "classShare": {
+            "worked": 0.5625,
+            "bare": 0.4166666666666667,
+            "unparseable": 0,
+            "other": 0.020833333333333332
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 27,
+              "correct": 15,
+              "accuracy": 0.5555555555555556
+            },
+            "bare": {
+              "count": 20,
+              "correct": 0,
+              "accuracy": 0
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 1,
+              "correct": 1,
+              "accuracy": 1
+            }
+          },
+          "formatCompliant": 6,
+          "averageCharacters": 34.979166666666664,
+          "averageTokens": 20.0625,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 10,
+            "incorrect-arithmetic": 8,
+            "unparseable-working": 4,
+            "ambiguous": 2,
+            "missing-working": 24
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 9,
+            "firstOnly": 29,
+            "secondOnly": 84,
+            "neither": 178,
+            "changedResponses": 281
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 37,
+            "firstOnly": 254,
+            "secondOnly": 1,
+            "neither": 8,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 80,
+            "firstOnly": 178,
+            "secondOnly": 13,
+            "neither": 29,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.18333333333333332,
+            "fractionOfLossRecovered": 0.25,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.18333333333333332,
+            "fractionOfLossRecovered": 0.21739130434782608,
+            "remainsBelowBase": true
+          },
+          "historicalGap": {
+            "points": 0.18666666666666668,
+            "fractionOfLossRecovered": 0.5773195876288659,
+            "remainsBelowBase": true
+          }
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 1,
+            "firstOnly": 7,
+            "secondOnly": 15,
+            "neither": 25,
+            "changedResponses": 45
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 8,
+            "firstOnly": 38,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 14,
+            "firstOnly": 28,
+            "secondOnly": 2,
+            "neither": 4,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.16666666666666666,
+            "fractionOfLossRecovered": 0.23529411764705882,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.16666666666666666,
+            "fractionOfLossRecovered": 0.21052631578947367,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    },
+    {
+      "model": "self-202-r1",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 38,
+          "accuracy": 0.12666666666666668,
+          "classes": {
+            "worked": 10,
+            "bare": 290,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.03333333333333333,
+            "bare": 0.9666666666666667,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 10,
+              "correct": 8,
+              "accuracy": 0.8
+            },
+            "bare": {
+              "count": 290,
+              "correct": 30,
+              "accuracy": 0.10344827586206896
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 290,
+          "averageCharacters": 3.256666666666667,
+          "averageTokens": 4.1433333333333335,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 8,
+            "incorrect-arithmetic": 0,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 292
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 38,
+          "accuracy": 0.12666666666666668,
+          "classes": {
+            "worked": 10,
+            "bare": 290,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.03333333333333333,
+            "bare": 0.9666666666666667,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 10,
+              "correct": 8,
+              "accuracy": 0.8
+            },
+            "bare": {
+              "count": 290,
+              "correct": 30,
+              "accuracy": 0.10344827586206896
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 290,
+          "averageCharacters": 3.256666666666667,
+          "averageTokens": 4.1433333333333335,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 8,
+            "incorrect-arithmetic": 0,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 292
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 222,
+          "accuracy": 0.74,
+          "classes": {
+            "worked": 265,
+            "bare": 35,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.8833333333333333,
+            "bare": 0.11666666666666667,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 265,
+              "correct": 222,
+              "accuracy": 0.8377358490566038
+            },
+            "bare": {
+              "count": 35,
+              "correct": 0,
+              "accuracy": 0
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 140,
+          "averageCharacters": 152.56,
+          "averageTokens": 58.6,
+          "tokenCountsStored": 300,
+          "truncated": 33,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 190,
+            "incorrect-arithmetic": 43,
+            "unparseable-working": 22,
+            "ambiguous": 10,
+            "missing-working": 35
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 3,
+          "accuracy": 0.0625,
+          "classes": {
+            "worked": 2,
+            "bare": 46,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.041666666666666664,
+            "bare": 0.9583333333333334,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 2,
+              "correct": 2,
+              "accuracy": 1
+            },
+            "bare": {
+              "count": 46,
+              "correct": 1,
+              "accuracy": 0.021739130434782608
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 46,
+          "averageCharacters": 3.4375,
+          "averageTokens": 4.25,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 2,
+            "incorrect-arithmetic": 0,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 46
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 36,
+          "accuracy": 0.75,
+          "classes": {
+            "worked": 43,
+            "bare": 5,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.8958333333333334,
+            "bare": 0.10416666666666667,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 43,
+              "correct": 36,
+              "accuracy": 0.8372093023255814
+            },
+            "bare": {
+              "count": 5,
+              "correct": 0,
+              "accuracy": 0
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 18,
+          "averageCharacters": 163.22916666666666,
+          "averageTokens": 60.791666666666664,
+          "tokenCountsStored": 48,
+          "truncated": 7,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 31,
+            "incorrect-arithmetic": 8,
+            "unparseable-working": 4,
+            "ambiguous": 0,
+            "missing-working": 5
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 29,
+            "firstOnly": 9,
+            "secondOnly": 193,
+            "neither": 69,
+            "changedResponses": 296
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 38,
+            "firstOnly": 253,
+            "secondOnly": 0,
+            "neither": 9,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 197,
+            "firstOnly": 61,
+            "secondOnly": 25,
+            "neither": 17,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.6133333333333333,
+            "fractionOfLossRecovered": 0.8363636363636363,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.6133333333333333,
+            "fractionOfLossRecovered": 0.7272727272727273,
+            "remainsBelowBase": true
+          },
+          "historicalGap": {
+            "points": 0.6133333333333333,
+            "fractionOfLossRecovered": 1.9166666666666667,
+            "remainsBelowBase": false
+          }
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 2,
+            "firstOnly": 1,
+            "secondOnly": 34,
+            "neither": 11,
+            "changedResponses": 48
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 3,
+            "firstOnly": 43,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 33,
+            "firstOnly": 9,
+            "secondOnly": 3,
+            "neither": 3,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.6875,
+            "fractionOfLossRecovered": 0.8461538461538461,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.6875,
+            "fractionOfLossRecovered": 0.7674418604651163,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    },
+    {
+      "model": "supervised-202",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 29,
+          "accuracy": 0.09666666666666666,
+          "classes": {
+            "worked": 11,
+            "bare": 288,
+            "unparseable": 0,
+            "other": 1
+          },
+          "classShare": {
+            "worked": 0.03666666666666667,
+            "bare": 0.96,
+            "unparseable": 0,
+            "other": 0.0033333333333333335
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 11,
+              "correct": 6,
+              "accuracy": 0.5454545454545454
+            },
+            "bare": {
+              "count": 288,
+              "correct": 23,
+              "accuracy": 0.0798611111111111
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 1,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 288,
+          "averageCharacters": 3.433333333333333,
+          "averageTokens": 4.256666666666667,
+          "tokenCountsStored": 300,
+          "truncated": 1,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 6,
+            "incorrect-arithmetic": 5,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 289
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 29,
+          "accuracy": 0.09666666666666666,
+          "classes": {
+            "worked": 11,
+            "bare": 288,
+            "unparseable": 0,
+            "other": 1
+          },
+          "classShare": {
+            "worked": 0.03666666666666667,
+            "bare": 0.96,
+            "unparseable": 0,
+            "other": 0.0033333333333333335
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 11,
+              "correct": 6,
+              "accuracy": 0.5454545454545454
+            },
+            "bare": {
+              "count": 288,
+              "correct": 23,
+              "accuracy": 0.0798611111111111
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 1,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 288,
+          "averageCharacters": 3.433333333333333,
+          "averageTokens": 4.26,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 6,
+            "incorrect-arithmetic": 5,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 289
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 143,
+          "accuracy": 0.4766666666666667,
+          "classes": {
+            "worked": 259,
+            "bare": 39,
+            "unparseable": 0,
+            "other": 2
+          },
+          "classShare": {
+            "worked": 0.8633333333333333,
+            "bare": 0.13,
+            "unparseable": 0,
+            "other": 0.006666666666666667
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 259,
+              "correct": 140,
+              "accuracy": 0.5405405405405406
+            },
+            "bare": {
+              "count": 39,
+              "correct": 3,
+              "accuracy": 0.07692307692307693
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 2,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 192,
+          "averageCharacters": 121.03333333333333,
+          "averageTokens": 51.50333333333333,
+          "tokenCountsStored": 300,
+          "truncated": 16,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 110,
+            "incorrect-arithmetic": 107,
+            "unparseable-working": 22,
+            "ambiguous": 17,
+            "missing-working": 44
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 5,
+          "accuracy": 0.10416666666666667,
+          "classes": {
+            "worked": 5,
+            "bare": 43,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.10416666666666667,
+            "bare": 0.8958333333333334,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 5,
+              "correct": 2,
+              "accuracy": 0.4
+            },
+            "bare": {
+              "count": 43,
+              "correct": 3,
+              "accuracy": 0.06976744186046512
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 43,
+          "averageCharacters": 4.1875,
+          "averageTokens": 4.916666666666667,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 2,
+            "incorrect-arithmetic": 3,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 43
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 20,
+          "accuracy": 0.4166666666666667,
+          "classes": {
+            "worked": 41,
+            "bare": 7,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.8541666666666666,
+            "bare": 0.14583333333333334,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 41,
+              "correct": 19,
+              "accuracy": 0.4634146341463415
+            },
+            "bare": {
+              "count": 7,
+              "correct": 1,
+              "accuracy": 0.14285714285714285
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 31,
+          "averageCharacters": 132.875,
+          "averageTokens": 52.916666666666664,
+          "tokenCountsStored": 48,
+          "truncated": 4,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 15,
+            "incorrect-arithmetic": 19,
+            "unparseable-working": 3,
+            "ambiguous": 4,
+            "missing-working": 7
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 12,
+            "firstOnly": 17,
+            "secondOnly": 131,
+            "neither": 140,
+            "changedResponses": 291
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 28,
+            "firstOnly": 263,
+            "secondOnly": 1,
+            "neither": 8,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 126,
+            "firstOnly": 132,
+            "secondOnly": 17,
+            "neither": 25,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.38,
+            "fractionOfLossRecovered": 0.4978165938864629,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.38,
+            "fractionOfLossRecovered": 0.4351145038167939,
+            "remainsBelowBase": true
+          },
+          "historicalGap": {
+            "points": 0.38,
+            "fractionOfLossRecovered": 1.0857142857142856,
+            "remainsBelowBase": false
+          }
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 3,
+            "firstOnly": 2,
+            "secondOnly": 17,
+            "neither": 26,
+            "changedResponses": 44
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 5,
+            "firstOnly": 41,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 19,
+            "firstOnly": 23,
+            "secondOnly": 1,
+            "neither": 5,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.3125,
+            "fractionOfLossRecovered": 0.40540540540540543,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.3125,
+            "fractionOfLossRecovered": 0.36585365853658536,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    },
+    {
+      "model": "self-303-r1",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 33,
+          "accuracy": 0.11,
+          "classes": {
+            "worked": 13,
+            "bare": 287,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.043333333333333335,
+            "bare": 0.9566666666666667,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 13,
+              "correct": 4,
+              "accuracy": 0.3076923076923077
+            },
+            "bare": {
+              "count": 287,
+              "correct": 29,
+              "accuracy": 0.10104529616724739
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 287,
+          "averageCharacters": 3.3966666666666665,
+          "averageTokens": 4.203333333333333,
+          "tokenCountsStored": 300,
+          "truncated": 2,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 5,
+            "incorrect-arithmetic": 7,
+            "unparseable-working": 1,
+            "ambiguous": 0,
+            "missing-working": 287
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 35,
+          "accuracy": 0.11666666666666667,
+          "classes": {
+            "worked": 13,
+            "bare": 287,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.043333333333333335,
+            "bare": 0.9566666666666667,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 13,
+              "correct": 6,
+              "accuracy": 0.46153846153846156
+            },
+            "bare": {
+              "count": 287,
+              "correct": 29,
+              "accuracy": 0.10104529616724739
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 287,
+          "averageCharacters": 3.41,
+          "averageTokens": 4.223333333333334,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 5,
+            "incorrect-arithmetic": 7,
+            "unparseable-working": 1,
+            "ambiguous": 0,
+            "missing-working": 287
+          },
+          "byteMatches": 298,
+          "byteCompared": 300
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 127,
+          "accuracy": 0.42333333333333334,
+          "classes": {
+            "worked": 211,
+            "bare": 76,
+            "unparseable": 0,
+            "other": 13
+          },
+          "classShare": {
+            "worked": 0.7033333333333334,
+            "bare": 0.25333333333333335,
+            "unparseable": 0,
+            "other": 0.043333333333333335
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 211,
+              "correct": 123,
+              "accuracy": 0.5829383886255924
+            },
+            "bare": {
+              "count": 76,
+              "correct": 3,
+              "accuracy": 0.039473684210526314
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 13,
+              "correct": 1,
+              "accuracy": 0.07692307692307693
+            }
+          },
+          "formatCompliant": 129,
+          "averageCharacters": 67.71333333333334,
+          "averageTokens": 36.21666666666667,
+          "tokenCountsStored": 300,
+          "truncated": 16,
+          "truncationKnown": true,
+          "extractionFailures": 14,
+          "working": {
+            "correct-parseable": 47,
+            "incorrect-arithmetic": 87,
+            "unparseable-working": 70,
+            "ambiguous": 5,
+            "missing-working": 91
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 5,
+          "accuracy": 0.10416666666666667,
+          "classes": {
+            "worked": 4,
+            "bare": 44,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.08333333333333333,
+            "bare": 0.9166666666666666,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 4,
+              "correct": 1,
+              "accuracy": 0.25
+            },
+            "bare": {
+              "count": 44,
+              "correct": 4,
+              "accuracy": 0.09090909090909091
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 44,
+          "averageCharacters": 3.625,
+          "averageTokens": 4.4375,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 1,
+            "incorrect-arithmetic": 3,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 44
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 20,
+          "accuracy": 0.4166666666666667,
+          "classes": {
+            "worked": 33,
+            "bare": 15,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.6875,
+            "bare": 0.3125,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 33,
+              "correct": 18,
+              "accuracy": 0.5454545454545454
+            },
+            "bare": {
+              "count": 15,
+              "correct": 2,
+              "accuracy": 0.13333333333333333
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 18,
+          "averageCharacters": 68.08333333333333,
+          "averageTokens": 36.8125,
+          "tokenCountsStored": 48,
+          "truncated": 3,
+          "truncationKnown": true,
+          "extractionFailures": 3,
+          "working": {
+            "correct-parseable": 8,
+            "incorrect-arithmetic": 13,
+            "unparseable-working": 10,
+            "ambiguous": 1,
+            "missing-working": 16
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 13,
+            "firstOnly": 22,
+            "secondOnly": 114,
+            "neither": 151,
+            "changedResponses": 296
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 35,
+            "firstOnly": 256,
+            "secondOnly": 0,
+            "neither": 9,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 96,
+            "firstOnly": 162,
+            "secondOnly": 31,
+            "neither": 11,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.30666666666666664,
+            "fractionOfLossRecovered": 0.4125560538116592,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.30666666666666664,
+            "fractionOfLossRecovered": 0.359375,
+            "remainsBelowBase": true
+          },
+          "historicalGap": {
+            "points": 0.31333333333333335,
+            "fractionOfLossRecovered": 0.9306930693069307,
+            "remainsBelowBase": true
+          }
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 3,
+            "firstOnly": 2,
+            "secondOnly": 17,
+            "neither": 26,
+            "changedResponses": 45
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 5,
+            "firstOnly": 41,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 15,
+            "firstOnly": 27,
+            "secondOnly": 5,
+            "neither": 1,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.3125,
+            "fractionOfLossRecovered": 0.40540540540540543,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.3125,
+            "fractionOfLossRecovered": 0.36585365853658536,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    },
+    {
+      "model": "supervised-303",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 54,
+          "accuracy": 0.18,
+          "classes": {
+            "worked": 40,
+            "bare": 259,
+            "unparseable": 0,
+            "other": 1
+          },
+          "classShare": {
+            "worked": 0.13333333333333333,
+            "bare": 0.8633333333333333,
+            "unparseable": 0,
+            "other": 0.0033333333333333335
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 40,
+              "correct": 29,
+              "accuracy": 0.725
+            },
+            "bare": {
+              "count": 259,
+              "correct": 25,
+              "accuracy": 0.09652509652509653
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 1,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 259,
+          "averageCharacters": 5.05,
+          "averageTokens": 5.533333333333333,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 29,
+            "incorrect-arithmetic": 7,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 264
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 54,
+          "accuracy": 0.18,
+          "classes": {
+            "worked": 40,
+            "bare": 259,
+            "unparseable": 0,
+            "other": 1
+          },
+          "classShare": {
+            "worked": 0.13333333333333333,
+            "bare": 0.8633333333333333,
+            "unparseable": 0,
+            "other": 0.0033333333333333335
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 40,
+              "correct": 29,
+              "accuracy": 0.725
+            },
+            "bare": {
+              "count": 259,
+              "correct": 25,
+              "accuracy": 0.09652509652509653
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 1,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 259,
+          "averageCharacters": 5.05,
+          "averageTokens": 5.533333333333333,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 29,
+            "incorrect-arithmetic": 7,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 264
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 254,
+          "accuracy": 0.8466666666666667,
+          "classes": {
+            "worked": 264,
+            "bare": 35,
+            "unparseable": 0,
+            "other": 1
+          },
+          "classShare": {
+            "worked": 0.88,
+            "bare": 0.11666666666666667,
+            "unparseable": 0,
+            "other": 0.0033333333333333335
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 264,
+              "correct": 251,
+              "accuracy": 0.9507575757575758
+            },
+            "bare": {
+              "count": 35,
+              "correct": 3,
+              "accuracy": 0.08571428571428572
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 1,
+              "correct": 0,
+              "accuracy": 0
+            }
+          },
+          "formatCompliant": 247,
+          "averageCharacters": 97.44666666666667,
+          "averageTokens": 46.05,
+          "tokenCountsStored": 300,
+          "truncated": 1,
+          "truncationKnown": true,
+          "extractionFailures": 1,
+          "working": {
+            "correct-parseable": 158,
+            "incorrect-arithmetic": 9,
+            "unparseable-working": 83,
+            "ambiguous": 11,
+            "missing-working": 39
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 10,
+          "accuracy": 0.20833333333333334,
+          "classes": {
+            "worked": 5,
+            "bare": 43,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.10416666666666667,
+            "bare": 0.8958333333333334,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 5,
+              "correct": 5,
+              "accuracy": 1
+            },
+            "bare": {
+              "count": 43,
+              "correct": 5,
+              "accuracy": 0.11627906976744186
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 43,
+          "averageCharacters": 4.729166666666667,
+          "averageTokens": 5.25,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 5,
+            "incorrect-arithmetic": 0,
+            "unparseable-working": 0,
+            "ambiguous": 0,
+            "missing-working": 43
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 42,
+          "accuracy": 0.875,
+          "classes": {
+            "worked": 44,
+            "bare": 4,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 0.9166666666666666,
+            "bare": 0.08333333333333333,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 44,
+              "correct": 42,
+              "accuracy": 0.9545454545454546
+            },
+            "bare": {
+              "count": 4,
+              "correct": 0,
+              "accuracy": 0
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 43,
+          "averageCharacters": 104.1875,
+          "averageTokens": 48.083333333333336,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 25,
+            "incorrect-arithmetic": 2,
+            "unparseable-working": 14,
+            "ambiguous": 2,
+            "missing-working": 5
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 45,
+            "firstOnly": 9,
+            "secondOnly": 209,
+            "neither": 37,
+            "changedResponses": 295
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 52,
+            "firstOnly": 239,
+            "secondOnly": 2,
+            "neither": 7,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 218,
+            "firstOnly": 40,
+            "secondOnly": 36,
+            "neither": 6,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.6666666666666666,
+            "fractionOfLossRecovered": 0.9803921568627451,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": 0.6666666666666666,
+            "fractionOfLossRecovered": 0.8438818565400844,
+            "remainsBelowBase": true
+          },
+          "historicalGap": {
+            "points": 0.6666666666666666,
+            "fractionOfLossRecovered": 2.5,
+            "remainsBelowBase": false
+          }
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 8,
+            "firstOnly": 2,
+            "secondOnly": 34,
+            "neither": 4,
+            "changedResponses": 48
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 10,
+            "firstOnly": 36,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 36,
+            "firstOnly": 6,
+            "secondOnly": 6,
+            "neither": 0,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": 0.6666666666666666,
+            "fractionOfLossRecovered": 1,
+            "remainsBelowBase": false
+          },
+          "promptADeficitRecovered": {
+            "points": 0.6666666666666666,
+            "fractionOfLossRecovered": 0.8888888888888888,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    },
+    {
+      "model": "structured-s5-n25",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 139,
+          "accuracy": 0.4633333333333333,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 139,
+              "accuracy": 0.4633333333333333
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 70.32333333333334,
+          "averageTokens": 28.826666666666668,
+          "tokenCountsStored": 300,
+          "truncated": 202,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 136,
+            "incorrect-arithmetic": 56,
+            "unparseable-working": 73,
+            "ambiguous": 15,
+            "missing-working": 20
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 290,
+          "accuracy": 0.9666666666666667,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 290,
+              "accuracy": 0.9666666666666667
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 102.94666666666667,
+          "averageTokens": 44.67,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 207,
+            "incorrect-arithmetic": 7,
+            "unparseable-working": 81,
+            "ambiguous": 5,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 254,
+          "accuracy": 0.8466666666666667,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 254,
+              "accuracy": 0.8466666666666667
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 191,
+          "averageCharacters": 218.96,
+          "averageTokens": 80.63333333333334,
+          "tokenCountsStored": 300,
+          "truncated": 49,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 202,
+            "incorrect-arithmetic": 38,
+            "unparseable-working": 36,
+            "ambiguous": 24,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 46,
+          "accuracy": 0.9583333333333334,
+          "classes": {
+            "worked": 48,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 48,
+              "correct": 46,
+              "accuracy": 0.9583333333333334
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 94.375,
+          "averageTokens": 41.270833333333336,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 35,
+            "incorrect-arithmetic": 2,
+            "unparseable-working": 11,
+            "ambiguous": 0,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 41,
+          "accuracy": 0.8541666666666666,
+          "classes": {
+            "worked": 48,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 48,
+              "correct": 41,
+              "accuracy": 0.8541666666666666
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 29,
+          "averageCharacters": 217.45833333333334,
+          "averageTokens": 78.77083333333333,
+          "tokenCountsStored": 48,
+          "truncated": 7,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 30,
+            "incorrect-arithmetic": 6,
+            "unparseable-working": 9,
+            "ambiguous": 3,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 247,
+            "firstOnly": 43,
+            "secondOnly": 7,
+            "neither": 3,
+            "changedResponses": 300
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 290,
+            "firstOnly": 1,
+            "secondOnly": 0,
+            "neither": 9,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 254,
+            "firstOnly": 4,
+            "secondOnly": 0,
+            "neither": 42,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": -0.12,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": -0.12,
+            "fractionOfLossRecovered": -36,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 39,
+            "firstOnly": 7,
+            "secondOnly": 2,
+            "neither": 0,
+            "changedResponses": 48
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 46,
+            "firstOnly": 0,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 41,
+            "firstOnly": 1,
+            "secondOnly": 0,
+            "neither": 6,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": -0.10416666666666667,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": -0.10416666666666667,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    },
+    {
+      "model": "structured-s5-n25-seed-202",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 139,
+          "accuracy": 0.4633333333333333,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 139,
+              "accuracy": 0.4633333333333333
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 70.47666666666667,
+          "averageTokens": 28.86,
+          "tokenCountsStored": 300,
+          "truncated": 204,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 135,
+            "incorrect-arithmetic": 56,
+            "unparseable-working": 73,
+            "ambiguous": 15,
+            "missing-working": 21
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 290,
+          "accuracy": 0.9666666666666667,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 290,
+              "accuracy": 0.9666666666666667
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 103.09666666666666,
+          "averageTokens": 44.71666666666667,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 208,
+            "incorrect-arithmetic": 7,
+            "unparseable-working": 80,
+            "ambiguous": 5,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 253,
+          "accuracy": 0.8433333333333334,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 253,
+              "accuracy": 0.8433333333333334
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 182,
+          "averageCharacters": 219.77333333333334,
+          "averageTokens": 80.85333333333334,
+          "tokenCountsStored": 300,
+          "truncated": 51,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 199,
+            "incorrect-arithmetic": 39,
+            "unparseable-working": 38,
+            "ambiguous": 24,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 46,
+          "accuracy": 0.9583333333333334,
+          "classes": {
+            "worked": 48,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 48,
+              "correct": 46,
+              "accuracy": 0.9583333333333334
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 94.0625,
+          "averageTokens": 41.1875,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 35,
+            "incorrect-arithmetic": 2,
+            "unparseable-working": 11,
+            "ambiguous": 0,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 41,
+          "accuracy": 0.8541666666666666,
+          "classes": {
+            "worked": 48,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 48,
+              "correct": 41,
+              "accuracy": 0.8541666666666666
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 30,
+          "averageCharacters": 218.77083333333334,
+          "averageTokens": 79.10416666666667,
+          "tokenCountsStored": 48,
+          "truncated": 7,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 31,
+            "incorrect-arithmetic": 6,
+            "unparseable-working": 9,
+            "ambiguous": 2,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 246,
+            "firstOnly": 44,
+            "secondOnly": 7,
+            "neither": 3,
+            "changedResponses": 300
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 290,
+            "firstOnly": 1,
+            "secondOnly": 0,
+            "neither": 9,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 253,
+            "firstOnly": 5,
+            "secondOnly": 0,
+            "neither": 42,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": -0.12333333333333334,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": -0.12333333333333334,
+            "fractionOfLossRecovered": -37,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 39,
+            "firstOnly": 7,
+            "secondOnly": 2,
+            "neither": 0,
+            "changedResponses": 48
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 46,
+            "firstOnly": 0,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 41,
+            "firstOnly": 1,
+            "secondOnly": 0,
+            "neither": 6,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": -0.10416666666666667,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": -0.10416666666666667,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    },
+    {
+      "model": "structured-s5-n25-seed-303",
+      "conditions": {
+        "repro-a": {
+          "sampleSize": 300,
+          "correct": 139,
+          "accuracy": 0.4633333333333333,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 139,
+              "accuracy": 0.4633333333333333
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 70.17,
+          "averageTokens": 28.803333333333335,
+          "tokenCountsStored": 300,
+          "truncated": 202,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 135,
+            "incorrect-arithmetic": 53,
+            "unparseable-working": 76,
+            "ambiguous": 15,
+            "missing-working": 21
+          },
+          "byteMatches": 300,
+          "byteCompared": 300
+        },
+        "sealed-a": {
+          "sampleSize": 300,
+          "correct": 290,
+          "accuracy": 0.9666666666666667,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 290,
+              "accuracy": 0.9666666666666667
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 102.18333333333334,
+          "averageTokens": 44.42666666666667,
+          "tokenCountsStored": 300,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 205,
+            "incorrect-arithmetic": 7,
+            "unparseable-working": 83,
+            "ambiguous": 5,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "sealed-b": {
+          "sampleSize": 300,
+          "correct": 257,
+          "accuracy": 0.8566666666666667,
+          "classes": {
+            "worked": 300,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 300,
+              "correct": 257,
+              "accuracy": 0.8566666666666667
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 185,
+          "averageCharacters": 218.64666666666668,
+          "averageTokens": 80.63666666666667,
+          "tokenCountsStored": 300,
+          "truncated": 47,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 200,
+            "incorrect-arithmetic": 41,
+            "unparseable-working": 39,
+            "ambiguous": 20,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-a": {
+          "sampleSize": 48,
+          "correct": 46,
+          "accuracy": 0.9583333333333334,
+          "classes": {
+            "worked": 48,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 48,
+              "correct": 46,
+              "accuracy": 0.9583333333333334
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 0,
+          "averageCharacters": 94.125,
+          "averageTokens": 41.166666666666664,
+          "tokenCountsStored": 48,
+          "truncated": 0,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 35,
+            "incorrect-arithmetic": 2,
+            "unparseable-working": 11,
+            "ambiguous": 0,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        },
+        "dev-b": {
+          "sampleSize": 48,
+          "correct": 41,
+          "accuracy": 0.8541666666666666,
+          "classes": {
+            "worked": 48,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "classShare": {
+            "worked": 1,
+            "bare": 0,
+            "unparseable": 0,
+            "other": 0
+          },
+          "conditionalAccuracy": {
+            "worked": {
+              "count": 48,
+              "correct": 41,
+              "accuracy": 0.8541666666666666
+            },
+            "bare": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "unparseable": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            },
+            "other": {
+              "count": 0,
+              "correct": 0,
+              "accuracy": null
+            }
+          },
+          "formatCompliant": 28,
+          "averageCharacters": 214.54166666666666,
+          "averageTokens": 77.83333333333333,
+          "tokenCountsStored": 48,
+          "truncated": 7,
+          "truncationKnown": true,
+          "extractionFailures": 0,
+          "working": {
+            "correct-parseable": 30,
+            "incorrect-arithmetic": 6,
+            "unparseable-working": 9,
+            "ambiguous": 3,
+            "missing-working": 0
+          },
+          "byteMatches": 0,
+          "byteCompared": 0
+        }
+      },
+      "comparisons": [
+        {
+          "set": "m75-sealed-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 300,
+            "bothCorrect": 250,
+            "firstOnly": 40,
+            "secondOnly": 7,
+            "neither": 3,
+            "changedResponses": 300
+          },
+          "versusBasePromptA": {
+            "sampleSize": 300,
+            "bothCorrect": 290,
+            "firstOnly": 1,
+            "secondOnly": 0,
+            "neither": 9,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 300,
+            "bothCorrect": 254,
+            "firstOnly": 4,
+            "secondOnly": 3,
+            "neither": 39,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": -0.11,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": -0.11,
+            "fractionOfLossRecovered": -33,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        },
+        {
+          "set": "m75-development-diagnostic",
+          "betweenPrompts": {
+            "sampleSize": 48,
+            "bothCorrect": 39,
+            "firstOnly": 7,
+            "secondOnly": 2,
+            "neither": 0,
+            "changedResponses": 48
+          },
+          "versusBasePromptA": {
+            "sampleSize": 48,
+            "bothCorrect": 46,
+            "firstOnly": 0,
+            "secondOnly": 0,
+            "neither": 2,
+            "changedResponses": 0
+          },
+          "versusBasePromptB": {
+            "sampleSize": 48,
+            "bothCorrect": 41,
+            "firstOnly": 1,
+            "secondOnly": 0,
+            "neither": 6,
+            "changedResponses": 0
+          },
+          "sameBudgetRecovery": {
+            "points": -0.10416666666666667,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "promptADeficitRecovered": {
+            "points": -0.10416666666666667,
+            "fractionOfLossRecovered": null,
+            "remainsBelowBase": true
+          },
+          "historicalGap": null
+        }
+      ]
+    }
+  ]
+}
