@@ -38,6 +38,10 @@ export async function executePrepared(
   request.messages = (await service.memoryMessages(prepared)) ?? prepared.messages;
   try {
     const result = await provider.generate(request);
+    if (result.servedModel !== request.modelAlias) {
+      await service.failGeneration(prepared.requestId, "Served model did not match the pinned routing decision");
+      throw new InferenceError("identity_mismatch", "Served model did not match the pinned routing decision", false);
+    }
     await service.completeGeneration({
       requestId: prepared.requestId,
       text: result.text,
@@ -48,7 +52,9 @@ export async function executePrepared(
     });
     return result.text;
   } catch (error) {
-    await service.failGeneration(prepared.requestId, error instanceof Error ? error.message : "inference failed");
+    if (!(error instanceof InferenceError) || error.code !== "identity_mismatch") {
+      await service.failGeneration(prepared.requestId, error instanceof Error ? error.message : "inference failed");
+    }
     if (error instanceof InferenceError && error.retryable) {
       throw new MessageHandlingError(error.message, false);
     }

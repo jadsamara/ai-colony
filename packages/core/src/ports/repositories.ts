@@ -864,6 +864,37 @@ export interface ExperimentRepository {
   list(): Promise<StoredExperiment[]>;
 }
 
+export interface StoredRoutingDecision {
+  id: string;
+  taskId: string | null;
+  objectiveId: string;
+  purpose: string;
+  departmentId: string;
+  assignmentId: string | null;
+  assignmentVersion: number | null;
+  registryModelId: string;
+  servingModel: string;
+  modelDigest: string | null;
+  adapterId: string | null;
+  adapterVersion: string | null;
+  policyVersion: string;
+  authorization: "authorized" | "denied";
+  reasonCode: string;
+  budgetOutcome: string;
+  resourceOutcome: string;
+  fallbackStatus: "disabled";
+  executionVerification: "unverified" | "matched" | "mismatch";
+  capabilityNote: string;
+  runtimeEvidence: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface RoutingRepository {
+  insert(row: StoredRoutingDecision): Promise<void>;
+  findByTask(taskId: string): Promise<StoredRoutingDecision | null>;
+  findByObjectivePurpose(objectiveId: string, purpose: string): Promise<StoredRoutingDecision | null>;
+}
+
 export interface Repositories {
   departments: DepartmentRepository;
   agents: AgentRepository;
@@ -880,6 +911,7 @@ export interface Repositories {
   learning: LearningRepository;
   experiments: ExperimentRepository;
   capability: CapabilityRepository;
+  routing: RoutingRepository;
 }
 
 export interface Persistence {

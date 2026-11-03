@@ -275,4 +275,16 @@ export type {
   PrincipalRepository,
   StoredMessage,
   Repositories,
+  RoutingRepository,
+  StoredRoutingDecision,
 } from "./ports/repositories.js";
+export { evaluateRouting, inferencePathClass } from "./routing/evaluate.js";
+export {
+  CEO_DEPARTMENT_ID,
+  LEGACY_DEPARTMENT_IDS,
+  LEGACY_ROUTING_POLICY_VERSION,
+  ROUTING_EVIDENCE_TTL_MS,
+  SHARED_QWEN3_8B_MODEL_ID,
+  isLegacyDepartment,
+} from "./routing/policy.js";
+export type { RoutingSelection, RoutingSnapshot, RuntimeEvidence, DerivedServingArtifact } from "./routing/types.js";

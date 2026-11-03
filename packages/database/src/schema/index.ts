@@ -1587,6 +1587,41 @@ export const departmentModelAssignments = pgTable(
   ],
 );
 
+export const routingDecisions = pgTable(
+  "routing_decisions",
+  {
+    id: uuid("id").primaryKey(),
+    taskId: uuid("task_id").references(() => objectiveTasks.id, { onDelete: "restrict" }),
+    objectiveId: uuid("objective_id").notNull().references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    purpose: text("purpose").notNull(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    assignmentId: uuid("assignment_id").references(() => departmentModelAssignments.id, { onDelete: "restrict" }),
+    assignmentVersion: integer("assignment_version"),
+    registryModelId: uuid("registry_model_id").notNull().references(() => models.id, { onDelete: "restrict" }),
+    servingModel: text("serving_model").notNull(),
+    modelDigest: text("model_digest"),
+    adapterId: text("adapter_id"),
+    adapterVersion: text("adapter_version"),
+    policyVersion: text("policy_version").notNull(),
+    authorization: text("authorization").notNull(),
+    reasonCode: text("reason_code").notNull(),
+    runtimeEvidence: jsonb("runtime_evidence").$type<Record<string, unknown>>().notNull(),
+    budgetOutcome: text("budget_outcome").notNull(),
+    resourceOutcome: text("resource_outcome").notNull(),
+    fallbackStatus: text("fallback_status").notNull(),
+    executionVerification: text("execution_verification").notNull(),
+    capabilityNote: text("capability_note").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("routing_decisions_task_unique").on(table.taskId).where(sql`${table.taskId} is not null`),
+    uniqueIndex("routing_decisions_objective_purpose_unique").on(table.objectiveId, table.purpose).where(sql`${table.taskId} is null`),
+    check("routing_decisions_authorization_check", sql`${table.authorization} in ('authorized', 'denied')`),
+    check("routing_decisions_fallback_check", sql`${table.fallbackStatus} = 'disabled'`),
+    check("routing_decisions_verification_check", sql`${table.executionVerification} in ('unverified', 'matched', 'mismatch')`),
+  ],
+);
+
 export const knowledgeTransfers = pgTable(
   "knowledge_transfers",
   {

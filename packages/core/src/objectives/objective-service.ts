@@ -37,6 +37,9 @@ import type {
 import { extractJsonObject, validatePlan } from "./plan.js";
 import { planPrompt, RESEARCH_EVIDENCE_FOOTER, specialistPrompt, synthesisPrompt, withMemory } from "./prompts.js";
 import { blockedTaskIds, chooseDispatch, readyTaskIds } from "./schedule.js";
+import { evaluateRouting } from "../routing/evaluate.js";
+import type { RoutingSelection, RoutingSnapshot, RuntimeEvidence } from "../routing/types.js";
+import { CEO_DEPARTMENT_ID, LEGACY_ROUTING_POLICY_VERSION } from "../routing/policy.js";
 import { assertObjectiveTransition, assertTaskTransition, isTerminalObjective, isTerminalTask } from "./transitions.js";
 
 export const DEFAULT_OBJECTIVE_LIMITS: ObjectiveLimits = {
@@ -58,6 +61,10 @@ export interface InferenceRoute {
   rates: CostRates;
   globalConcurrency: number;
   departmentConcurrency: number;
+  routingEvidence?: RuntimeEvidence;
+  routingResourceAllowed?: boolean;
+  routingMemoryKnown?: boolean;
+  derivedServing?: RoutingSnapshot["derived"];
 }
 
 export type PreparedGeneration =
@@ -359,6 +366,28 @@ export class ObjectiveService {
         estimatedOutputTokens: estimatedOut,
         estimatedCostUsdMicros: cost,
       });
+      const run = await repos.objectives.getRun(stored.objectiveId);
+      await repos.audit.append({
+        eventType: "routing.execution",
+        actorId: WORKER_ACTOR,
+        actorType: "system",
+        targetType: "inference_request",
+        targetId: stored.id,
+        action: "completed",
+        correlationId: run?.correlationId ?? stored.objectiveId,
+        beforeState: null,
+        afterState: null,
+        metadata: {
+          objectiveId: stored.objectiveId,
+          taskId: stored.taskId,
+          registryModelId: stored.registryModelId,
+          requestedAlias: stored.requestedAlias,
+          servedModel: input.servedModel,
+          latencyMs: input.latencyMs,
+          inputTokens: input.usage.inputTokens,
+          outputTokens: input.usage.outputTokens,
+        },
+      });
     });
     if (stored.purpose === "synthesize") {
       await this.finishSynthesis(stored.objectiveId, input.text);
@@ -407,6 +436,19 @@ export class ObjectiveService {
         error: error.slice(0, 500),
       });
       await repos.objectives.releaseReservation(stored.objectiveId, stored.reservedOutputTokens);
+      const run = await repos.objectives.getRun(stored.objectiveId);
+      await repos.audit.append({
+        eventType: "routing.execution",
+        actorId: WORKER_ACTOR,
+        actorType: "system",
+        targetType: "inference_request",
+        targetId: stored.id,
+        action: "failed",
+        correlationId: run?.correlationId ?? stored.objectiveId,
+        beforeState: null,
+        afterState: null,
+        metadata: { objectiveId: stored.objectiveId, error: error.slice(0, 120) },
+      });
     });
   }
 
@@ -506,17 +548,29 @@ export class ObjectiveService {
       if (task.assignedAgentId && message.recipientAgentId && task.assignedAgentId !== message.recipientAgentId) {
         throw new DomainError("AUTHORIZATION_DENIED", "Task is addressed to a different agent", 403);
       }
+      if (message.metadata.objectiveId && message.metadata.objectiveId !== task.objectiveId) {
+        throw new DomainError("AUTHORIZATION_DENIED", "Message objective does not match the persisted task", 403);
+      }
+      const claimedDepartment = message.metadata.departmentId ?? ("departmentId" in message.payload ? message.payload.departmentId : undefined);
+      if (typeof claimedDepartment === "string" && claimedDepartment !== task.departmentId) {
+        throw new DomainError("AUTHORIZATION_DENIED", "Message department does not match the persisted task", 403);
+      }
       const leaseFresh = task.leaseUntil !== null && Date.parse(task.leaseUntil) > this.now().getTime();
       if (task.status === "running" && leaseFresh && task.leaseOwner !== workerId) {
         return { action: "wait" };
       }
-      if (task.status === "dispatched" || task.status === "running") {
+      if (task.status === "dispatched") {
         assertTaskTransition(task.status, "running");
         await repos.objectives.saveTask(task.id, {
           status: "running",
           leaseOwner: workerId,
           leaseUntil: new Date(this.now().getTime() + route.timeoutMs),
           startedAt: this.now(),
+        });
+      } else if (task.status === "running") {
+        await repos.objectives.saveTask(task.id, {
+          leaseOwner: workerId,
+          leaseUntil: new Date(this.now().getTime() + route.timeoutMs),
         });
       }
       return this.prepareTextCall(repos, run, "specialist", route, workerId, task);
@@ -909,7 +963,16 @@ export class ObjectiveService {
         new Date(this.now().getTime() + route.timeoutMs),
       );
     }
-    const choice = modelChoice(purpose, route);
+    const decision = existing
+      ? null
+      : await this.ensureRoutingDecision(repos, run, purpose, route, task);
+    if (decision && decision.authorization !== "authorized") {
+      await this.fail(repos, run, decision.reasonCode);
+      return { action: "done" };
+    }
+    const choice = decision
+      ? { registryModelId: decision.registryModelId, intendedModelId: decision.registryModelId, alias: decision.servingModel }
+      : { registryModelId: existing?.registryModelId ?? QWEN3_8B_MODEL_ID, intendedModelId: existing?.intendedModelId ?? QWEN3_8B_MODEL_ID, alias: existing?.requestedAlias ?? route.alias };
     const reserved = route.maxOutputTokens;
     const prompt = await this.messagesFor(repos, run, purpose, task);
     const estimated = estimateTokens(prompt.map((item) => item.content).join("\n")) + reserved;
@@ -1144,6 +1207,143 @@ export class ObjectiveService {
     });
   }
 
+  private async ensureRoutingDecision(
+    repos: Parameters<Parameters<Persistence["transaction"]>[0]>[0],
+    run: ObjectiveRun,
+    purpose: "plan" | "correct" | "synthesize" | "specialist",
+    route: InferenceRoute,
+    task: ObjectiveTaskRecord | null,
+  ): Promise<RoutingSelection> {
+    const stored = task
+      ? await repos.routing.findByTask(task.id)
+      : await repos.routing.findByObjectivePurpose(run.id, purpose);
+    if (stored) {
+      return selectionFromStored(stored);
+    }
+    const departmentId = task?.departmentId ?? CEO_DEPARTMENT_ID;
+    const department = await repos.departments.findById(departmentId);
+    const agent = task?.assignedAgentId ? await repos.objectives.findAgent(task.assignedAgentId) : null;
+    const assignments = await repos.learning.listAssignments(departmentId);
+    const modelIds = new Set<string>([QWEN3_8B_MODEL_ID, ...assignments.map((row) => row.registryModelId)]);
+    const models: Record<string, RoutingSnapshot["models"][string]> = {};
+    for (const modelId of modelIds) {
+      const model = await repos.models.findById(modelId);
+      if (model) {
+        models[model.id] = { id: model.id, status: model.status, modelFamily: model.modelFamily, displayName: model.displayName };
+      }
+    }
+    let certifiedCapabilityCount = 0;
+    let syntheticCapabilityCount = 0;
+    try {
+      const snapshots = await repos.capability.listSnapshots({ departmentId });
+      for (const snapshot of snapshots) {
+        if (snapshot.evidenceRef.startsWith("synthetic:") || snapshot.provenance.toLowerCase().includes("synthetic")) {
+          syntheticCapabilityCount += 1;
+        } else {
+          certifiedCapabilityCount += 1;
+        }
+      }
+    } catch {
+      certifiedCapabilityCount = 0;
+      syntheticCapabilityCount = 0;
+    }
+    const evidence = route.routingEvidence ?? {
+      state: "readiness_unknown" as const,
+      capturedAt: null,
+      digest: null,
+      servingTag: null,
+      artifactBytes: null,
+      loadedCount: null,
+    };
+    const selection = evaluateRouting({
+      departmentId,
+      departmentStatus: department?.status ?? "inactive",
+      agentDepartmentId: agent?.departmentId ?? null,
+      assignments,
+      models,
+      requestedModelId: null,
+      sharedServingTag: route.alias,
+      derived: route.derivedServing ?? null,
+      evidence,
+      now: this.now().toISOString(),
+      budgetAllowed: run.consumedRequests + run.reservedRequests < run.limits.maxInferenceRequests,
+      resourceAllowed: route.routingResourceAllowed !== false,
+      memoryKnown: route.routingMemoryKnown === true,
+      servingBackend: "ollama",
+      certifiedCapabilityCount,
+      syntheticCapabilityCount,
+      executionDigest: null,
+    });
+    const row = {
+      id: randomUUID(),
+      taskId: task?.id ?? null,
+      objectiveId: run.id,
+      purpose,
+      departmentId,
+      assignmentId: selection.assignmentId,
+      assignmentVersion: selection.assignmentVersion,
+      registryModelId: selection.registryModelId,
+      servingModel: selection.servingModel,
+      modelDigest: selection.modelDigest,
+      adapterId: selection.adapterId,
+      adapterVersion: selection.adapterVersion,
+      policyVersion: selection.policyVersion,
+      authorization: selection.authorization,
+      reasonCode: selection.reasonCode,
+      budgetOutcome: selection.budgetOutcome,
+      resourceOutcome: selection.resourceOutcome,
+      fallbackStatus: "disabled" as const,
+      executionVerification: selection.executionVerification,
+      capabilityNote: selection.capabilityNote,
+      runtimeEvidence: {
+        state: evidence.state,
+        capturedAt: evidence.capturedAt,
+        digest: evidence.digest,
+        policyVersion: LEGACY_ROUTING_POLICY_VERSION,
+      },
+      createdAt: this.now().toISOString(),
+    };
+    try {
+      await repos.routing.insert(row);
+    } catch (error) {
+      if (!(error instanceof DomainError) || error.code !== "CONFLICT") {
+        throw error;
+      }
+      const winner = task
+        ? await repos.routing.findByTask(task.id)
+        : await repos.routing.findByObjectivePurpose(run.id, purpose);
+      if (!winner) {
+        throw error;
+      }
+      return selectionFromStored(winner);
+    }
+    await repos.audit.append({
+      eventType: "routing.decision",
+      actorId: WORKER_ACTOR,
+      actorType: "system",
+      targetType: task ? "objective_task" : "objective",
+      targetId: task?.id ?? run.id,
+      action: selection.authorization,
+      correlationId: run.correlationId,
+      beforeState: null,
+      afterState: null,
+      metadata: {
+        decisionId: row.id,
+        departmentId,
+        assignmentId: selection.assignmentId,
+        assignmentVersion: selection.assignmentVersion,
+        registryModelId: selection.registryModelId,
+        servingModel: selection.servingModel,
+        modelDigest: selection.modelDigest,
+        adapterId: selection.adapterId,
+        reasonCode: selection.reasonCode,
+        policyVersion: selection.policyVersion,
+        fallbackStatus: "disabled",
+      },
+    });
+    return selection;
+  }
+
   private async fail(
     repos: Parameters<Parameters<Persistence["transaction"]>[0]>[0],
     run: ObjectiveRun,
@@ -1302,14 +1502,42 @@ function agentContext(agent: EligibleAgent, correlationId: string): RequestConte
   };
 }
 
-function modelChoice(purpose: string, route: InferenceRoute) {
-  if (purpose === "monitor" && route.memoryProfile === "split" && route.operationalAlias) {
-    return { registryModelId: QWEN3_4B_MODEL_ID, intendedModelId: QWEN3_4B_MODEL_ID, alias: route.operationalAlias };
-  }
+function selectionFromStored(stored: {
+  authorization: "authorized" | "denied";
+  reasonCode: string;
+  departmentId: string;
+  assignmentId: string | null;
+  assignmentVersion: number | null;
+  registryModelId: string;
+  servingModel: string;
+  modelDigest: string | null;
+  adapterId: string | null;
+  adapterVersion: string | null;
+  policyVersion: string;
+  budgetOutcome: string;
+  resourceOutcome: string;
+  executionVerification: "unverified" | "matched" | "mismatch";
+  capabilityNote: string;
+}): RoutingSelection {
   return {
-    registryModelId: QWEN3_8B_MODEL_ID,
-    intendedModelId: purpose === "monitor" ? QWEN3_4B_MODEL_ID : QWEN3_8B_MODEL_ID,
-    alias: route.alias,
+    authorization: stored.authorization,
+    reasonCode: stored.reasonCode as RoutingSelection["reasonCode"],
+    departmentId: stored.departmentId,
+    assignmentId: stored.assignmentId,
+    assignmentVersion: stored.assignmentVersion,
+    registryModelId: stored.registryModelId,
+    servingModel: stored.servingModel,
+    modelDigest: stored.modelDigest,
+    adapterId: stored.adapterId,
+    adapterVersion: stored.adapterVersion,
+    policyVersion: stored.policyVersion,
+    fallbackStatus: "disabled",
+    budgetOutcome: stored.budgetOutcome === "denied" ? "denied" : "allowed",
+    resourceOutcome: stored.resourceOutcome === "denied" ? "denied" : stored.resourceOutcome === "allowed" ? "allowed" : "memory_unknown",
+    executionVerification: stored.executionVerification,
+    capabilityNote: stored.capabilityNote,
+    runtimeState: "readiness_unknown",
+    evidenceCapturedAt: null,
   };
 }
 
