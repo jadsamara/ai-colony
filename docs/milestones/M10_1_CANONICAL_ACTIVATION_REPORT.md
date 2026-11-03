@@ -22,7 +22,7 @@ M10.1 verified the M10 routing policy against the canonical department rows, aud
 - M10 implementation commit: `04afc2996e52f451c287423fe1aff9e9874a79fd`
 - Preflight commit: `10058adfbef5e32dd3291fbfcf33d66a392466c6`
 - Preflight tip before activation: `4c4fad2`
-- This activation report is committed after the migration. Its commit is the tip of `m10.1-routing-activation` that adds this file.
+- Activation report commit: `b6542189b14d0f272769116d162a75ff97cf7866`
 
 `docs/audits/` and `docs/milestones/M9_1_CANONICAL_ACTIVATION_REPORT.md` remain untracked.
 
