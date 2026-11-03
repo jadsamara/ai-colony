@@ -26,6 +26,7 @@ One reasoning-department task ran through `claimSpecialist` and `executePrepared
 ## 2. Git branch and commit
 
 - Branch: `m11-live-model-serving`
+- Implementation commit: `68c718b63c5dcd625215bfa318db3f8b51f5a543`
 - Base: `d3c1d6aa0f4baa36023514b5c4fe4a3e4ade38db` on `m10.1-routing-activation`
 - M10 implementation: `04afc2996e52f451c287423fe1aff9e9874a79fd`
 - M10.1 activation report: `b6542189b14d0f272769116d162a75ff97cf7866`
