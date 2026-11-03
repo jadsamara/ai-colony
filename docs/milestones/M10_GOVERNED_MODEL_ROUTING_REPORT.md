@@ -14,7 +14,7 @@ The shared compatibility model remains Qwen3-8B (`00000000-0000-4000-8000-000000
 
 - Branch: `m10-governed-model-routing`
 - Base: `e51e4f4` on `m9.1-ledger-activation`
-- The commit hash is recorded after the commit that adds this report.
+- Implementation commit: `04afc2996e52f451c287423fe1aff9e9874a79fd`
 
 Untracked files left out of the commit: `docs/audits/` and `docs/milestones/M9_1_CANONICAL_ACTIVATION_REPORT.md`.
 
