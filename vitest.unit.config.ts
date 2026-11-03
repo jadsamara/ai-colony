@@ -15,5 +15,6 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/unit/**/*.test.ts"],
+    fileParallelism: process.env.LEDGER_TEST_DATABASE_URL ? false : true,
   },
 });

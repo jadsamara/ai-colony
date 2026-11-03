@@ -151,6 +151,48 @@ export async function registerCapabilityRoutes(app: FastifyInstance): Promise<vo
     },
   }, async (request) => app.services.ledger.compare(requestContext(request), request.body));
 
+  route.post("/api/v1/capabilities/measurements/proposals", {
+    schema: {
+      tags: ["capabilities"],
+      body: z.object({
+        departmentId: z.string().uuid(),
+        topicId: z.string().uuid(),
+        taxonomyVersionId: z.string().uuid(),
+        mappingVersionId: z.string().uuid(),
+        evaluationRunId: z.string().uuid().nullable().optional(),
+        evidenceRef: z.string().min(1).max(500),
+        manifest: z.record(z.string(), z.unknown()),
+        measuredAt: z.string().datetime(),
+        correctCount: z.number().int().nonnegative(),
+        incorrectCount: z.number().int().nonnegative(),
+        failureClasses: z.record(z.string(), z.number().int().nonnegative()),
+        measurementMode: z.enum(["closed_book", "retrieval_assisted"]),
+        capabilityKind: z.enum(["model", "agent_system"]),
+        items: z.array(z.object({
+          itemId: z.string().min(1).max(80),
+          contentDigest: digest,
+          correct: z.boolean().nullable(),
+          valid: z.boolean(),
+        }).strict()).min(1).max(2000),
+        provenance: z.string().min(1).max(500),
+      }).strict(),
+      response: { 201: json, ...errorResponses },
+    },
+  }, async (request, reply) => reply.status(201).send(await app.services.ledger.proposeMeasurement(requestContext(request), request.body)));
+
+  route.get("/api/v1/capabilities/measurements/proposals/:id", {
+    schema: { tags: ["capabilities"], params: idParams, response: { 200: json, ...errorResponses } },
+  }, async (request) => app.services.ledger.reviewMeasurement(requestContext(request), request.params.id));
+
+  route.post("/api/v1/capabilities/measurements/proposals/:id/decision", {
+    schema: {
+      tags: ["capabilities"],
+      params: idParams,
+      body: z.object({ decision: z.enum(["approved", "rejected"]) }).strict(),
+      response: { 200: json, ...errorResponses },
+    },
+  }, async (request) => app.services.ledger.decideMeasurement(requestContext(request), request.params.id, request.body.decision));
+
   route.post("/api/v1/capabilities/retention", {
     schema: {
       tags: ["capabilities"],

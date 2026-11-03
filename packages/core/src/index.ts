@@ -107,7 +107,7 @@ export { analyzePairedRuns } from "./evaluation/paired.js";
 export { CapabilityLedgerService, separateModelIdentity } from "./capability/service.js";
 export { MemoryCapabilityRepository, type CapabilityRepository } from "./capability/repository.js";
 export { holmAdjust, applyHolm } from "./capability/holm.js";
-export { pairedScoreInterval } from "./capability/interval.js";
+export { discordantPairWilsonInterval, newcombePairedDifference, NEWCOMBE_Z } from "./capability/interval.js";
 export { validateTaxonomyGraph, reconstructTaxonomy } from "./capability/taxonomy.js";
 export { compareCertifiedSnapshots } from "./capability/compare.js";
 export { SNAPSHOT_SCHEMA_VERSION } from "./capability/types.js";

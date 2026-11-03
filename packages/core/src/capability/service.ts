@@ -49,6 +49,32 @@ const mappingPayload = z
     items: z.array(mappingItemSchema).min(1).max(2000),
   })
   .strict();
+const snapshotItemSchema = z
+  .object({
+    itemId: z.string().min(1).max(80),
+    contentDigest: digest,
+    correct: z.boolean().nullable(),
+    valid: z.boolean(),
+  })
+  .strict();
+const measurementPayload = z
+  .object({
+    topicId: z.string().uuid(),
+    taxonomyVersionId: z.string().uuid(),
+    mappingVersionId: z.string().uuid(),
+    evaluationRunId: z.string().uuid().nullable(),
+    evidenceRef: z.string().min(1).max(500),
+    manifest: z.record(z.string(), z.unknown()),
+    measuredAt: z.string().datetime(),
+    correctCount: z.number().int().nonnegative(),
+    incorrectCount: z.number().int().nonnegative(),
+    failureClasses: z.record(z.string(), z.number().int().nonnegative()),
+    measurementMode: z.enum(["closed_book", "retrieval_assisted"]),
+    capabilityKind: z.enum(["model", "agent_system"]),
+    items: z.array(snapshotItemSchema).min(1).max(2000),
+    provenance: z.string().min(1).max(500),
+  })
+  .strict();
 
 const READ_SLUGS = new Set(["weight-optimization", "evaluation", "monitoring", "memory-and-forgetting"]);
 const STALE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
@@ -244,6 +270,115 @@ export class CapabilityLedgerService {
     return { proposalId, decision, version };
   }
 
+  async proposeMeasurement(
+    ctx: RequestContext,
+    input: {
+      departmentId: string;
+      topicId: string;
+      taxonomyVersionId: string;
+      mappingVersionId: string;
+      evaluationRunId?: string | null;
+      evidenceRef: string;
+      manifest: unknown;
+      measuredAt: string;
+      correctCount: number;
+      incorrectCount: number;
+      failureClasses: Record<string, number>;
+      measurementMode: MeasurementMode;
+      capabilityKind: CapabilityKind;
+      items: SnapshotItem[];
+      provenance: string;
+    },
+  ) {
+    await this.assertOwnProposal(ctx, input.departmentId);
+    const { departmentId, ...measurement } = input;
+    const payload = measurementPayload.parse({ ...measurement, evaluationRunId: measurement.evaluationRunId ?? null });
+    const topic = await this.requireTopic(payload.topicId);
+    if (topic.departmentId !== departmentId) {
+      throw new DomainError("AUTHORIZATION_DENIED", "A department cannot propose a measurement for another department's topic", 403);
+    }
+    const proposal = {
+      id: this.ids(),
+      departmentId: input.departmentId,
+      kind: "measurement" as const,
+      payload,
+      proposedBy: ctx.actor.principalId,
+      createdAt: this.clock().toISOString(),
+    };
+    await this.store.insertProposal(proposal);
+    return proposal;
+  }
+
+  async reviewMeasurement(ctx: RequestContext, proposalId: string) {
+    const proposal = await this.requireProposal(proposalId, "measurement");
+    await this.assertRead(ctx, proposal.departmentId, "approved");
+    const payload = measurementPayload.parse(proposal.payload);
+    const problems: string[] = [];
+    try {
+      await this.buildMeasurement({ ...payload, departmentId: proposal.departmentId });
+    } catch (error) {
+      problems.push(error instanceof Error ? error.message : "The measurement could not be reviewed");
+    }
+    let manifest = null;
+    try {
+      manifest = parseEvaluationManifest(payload.manifest);
+    } catch {
+      manifest = null;
+    }
+    const synthetic = manifest?.execution.provenance.state === "set" && manifest.execution.provenance.value === "synthetic";
+    return {
+      proposalId,
+      proposedBy: proposal.proposedBy,
+      departmentId: proposal.departmentId,
+      decision: await this.store.findDecision(proposalId),
+      synthetic,
+      manifest,
+      mappingVersionId: payload.mappingVersionId,
+      problems,
+      certifiable: problems.length === 0,
+    };
+  }
+
+  async decideMeasurement(ctx: RequestContext, proposalId: string, decision: ProposalDecision) {
+    this.authorizer.assert(ctx.actor, "evaluation:suite:approve");
+    const proposal = await this.requireProposal(proposalId, "measurement");
+    this.assertDifferentPrincipal(ctx, proposal.proposedBy);
+    if (ctx.actor.departmentId !== null && ctx.actor.departmentId === proposal.departmentId) {
+      throw new DomainError("SELF_APPROVAL", "A department cannot certify its own capability score", 403);
+    }
+    if (await this.store.findDecision(proposalId)) {
+      throw new DomainError("CONFLICT", "That proposal already has a decision", 409);
+    }
+    const payload = measurementPayload.parse(proposal.payload);
+    const recorded = {
+      id: this.ids(),
+      proposalId,
+      decision,
+      decidedBy: ctx.actor.principalId,
+      createdAt: this.clock().toISOString(),
+    };
+    if (decision === "rejected") {
+      await this.store.insertDecision(recorded);
+      return { proposalId, decision, snapshot: null, repeated: false };
+    }
+    const draft = await this.buildMeasurement({ ...payload, departmentId: proposal.departmentId });
+    const existing = await this.findIdenticalSnapshot(draft);
+    return this.inTransaction(async (store) => {
+      await store.insertDecision(recorded);
+      if (existing) {
+        return { proposalId, decision, snapshot: existing, repeated: true };
+      }
+      const snapshot: LedgerSnapshot = {
+        ...draft,
+        id: this.ids(),
+        certifiedBy: ctx.actor.principalId,
+        createdAt: this.clock().toISOString(),
+      };
+      await store.insertSnapshot(snapshot);
+      return { proposalId, decision, snapshot, repeated: false };
+    });
+  }
+
   async certifySnapshot(
     ctx: RequestContext,
     input: {
@@ -268,87 +403,14 @@ export class CapabilityLedgerService {
     if (ctx.actor.departmentId !== null && ctx.actor.departmentId === input.departmentId) {
       throw new DomainError("SELF_APPROVAL", "A department cannot certify its own capability score", 403);
     }
-    let manifest;
-    try {
-      manifest = parseEvaluationManifest(input.manifest);
-    } catch {
-      throw new DomainError("EVALUATION_FAILED", "The evaluation manifest is not valid", 422);
+    const draft = await this.buildMeasurement({ ...input, evaluationRunId: input.evaluationRunId ?? null });
+    const existing = await this.findIdenticalSnapshot(draft);
+    if (existing) {
+      return existing;
     }
-    if (manifest.execution.status.state !== "set" || manifest.execution.status.value !== "completed") {
-      throw new DomainError("EVALUATION_FAILED", "Only a completed evaluation can certify a capability", 422);
-    }
-    if (manifest.generation.retrieval.state !== "set" || manifest.generation.retrieval.value !== input.measurementMode) {
-      throw new DomainError("EVALUATION_FAILED", "Measurement mode does not match the evaluation manifest", 422);
-    }
-    if (manifest.evaluation.itemCount.state !== "set") {
-      throw new DomainError("EVALUATION_FAILED", "The evaluation item count is unknown", 422);
-    }
-    const sampleSize = input.correctCount + input.incorrectCount;
-    if (sampleSize < 1 || manifest.evaluation.itemCount.value !== sampleSize || input.items.length !== sampleSize) {
-      throw new DomainError("VALIDATION_ERROR", "An empty or mismatched measurement is not a capability score", 422);
-    }
-    if (input.items.some((item) => item.correct === null || !item.valid)) {
-      throw new DomainError("EVALUATION_FAILED", "Official certification requires a valid outcome for every included item", 422);
-    }
-    const correct = input.items.filter((item) => item.correct === true).length;
-    if (correct !== input.correctCount) {
-      throw new DomainError("VALIDATION_ERROR", "Correct count does not match the item outcomes", 422);
-    }
-    for (const [name, count] of Object.entries(input.failureClasses)) {
-      if (!name || !Number.isInteger(count) || count < 0) {
-        throw new DomainError("VALIDATION_ERROR", "Failure classifications must be non-negative counts", 422);
-      }
-    }
-    const mapping = await this.store.findMappingVersion(input.mappingVersionId);
-    if (!mapping || mapping.departmentId !== input.departmentId || mapping.taxonomyVersionId !== input.taxonomyVersionId) {
-      throw new DomainError("NOT_APPROVED", "Official scores require an approved mapping for this taxonomy version", 422);
-    }
-    const edges = await this.store.listEdges(input.taxonomyVersionId);
-    if (!edges.some((edge) => edge.kind === "parent" && edge.topicId === input.topicId)) {
-      throw new DomainError("VALIDATION_ERROR", "The topic is not in the taxonomy version", 422);
-    }
-    const topic = await this.requireTopic(input.topicId);
-    if (topic.departmentId !== input.departmentId) {
-      throw new DomainError("AUTHORIZATION_DENIED", "A mapping cannot score another department's topic", 403);
-    }
-    const rows = await this.store.listMappings(mapping.id);
-    const covered = new Map(rows.filter((row) => row.topicId === input.topicId).map((row) => [row.itemId, row]));
-    for (const item of input.items) {
-      const row = covered.get(item.itemId);
-      if (!row || row.contentDigest !== item.contentDigest) {
-        throw new DomainError("NOT_APPROVED", "An item is not on the approved mapping for this topic", 422);
-      }
-    }
-    const interval = wilsonInterval(input.correctCount, sampleSize);
     const snapshot: LedgerSnapshot = {
+      ...draft,
       id: this.ids(),
-      departmentId: input.departmentId,
-      topicId: input.topicId,
-      taxonomyVersionId: input.taxonomyVersionId,
-      mappingVersionId: input.mappingVersionId,
-      evaluationRunId: input.evaluationRunId ?? null,
-      evidenceRef: input.evidenceRef,
-      manifestFingerprint: configurationFingerprint(manifest),
-      manifest,
-      modelFamily: valueOrNull(manifest.model.family),
-      modelIdentifier: valueOrNull(manifest.model.identifier),
-      checkpointDigest: valueOrNull(manifest.model.checkpointDigest),
-      adapterId: valueOrNull(manifest.model.adapterId),
-      adapterDigest: valueOrNull(manifest.model.adapterDigest),
-      measuredAt: input.measuredAt,
-      validity: "valid",
-      sampleSize,
-      correctCount: input.correctCount,
-      incorrectCount: input.incorrectCount,
-      failureClasses: input.failureClasses,
-      accuracy: input.correctCount / sampleSize,
-      uncertaintyLow: interval.low,
-      uncertaintyHigh: interval.high,
-      measurementMode: input.measurementMode,
-      capabilityKind: input.capabilityKind,
-      items: input.items,
-      provenance: input.provenance,
-      schemaVersion: SNAPSHOT_SCHEMA_VERSION,
       certifiedBy: ctx.actor.principalId,
       createdAt: this.clock().toISOString(),
     };
@@ -504,6 +566,134 @@ export class CapabilityLedgerService {
     return slug === "memory-and-forgetting" || slug === "evaluation";
   }
 
+  private async buildMeasurement(input: {
+    departmentId: string;
+    topicId: string;
+    taxonomyVersionId: string;
+    mappingVersionId: string;
+    evaluationRunId: string | null;
+    evidenceRef: string;
+    manifest: unknown;
+    measuredAt: string;
+    correctCount: number;
+    incorrectCount: number;
+    failureClasses: Record<string, number>;
+    measurementMode: MeasurementMode;
+    capabilityKind: CapabilityKind;
+    items: SnapshotItem[];
+    provenance: string;
+  }): Promise<Omit<LedgerSnapshot, "id" | "certifiedBy" | "createdAt">> {
+    let manifest;
+    try {
+      manifest = parseEvaluationManifest(input.manifest);
+    } catch {
+      throw new DomainError("EVALUATION_FAILED", "The evaluation manifest is not valid", 422);
+    }
+    const manifestProvenance = manifest.execution.provenance.state === "set" ? manifest.execution.provenance.value : null;
+    if (manifestProvenance === "synthetic" && (!input.evidenceRef.startsWith("synthetic:") || !input.provenance.toLowerCase().includes("synthetic"))) {
+      throw new DomainError("VALIDATION_ERROR", "Synthetic evidence must be labeled synthetic in the evidence reference and provenance", 422);
+    }
+    if (input.evidenceRef.startsWith("synthetic:") && manifestProvenance !== "synthetic") {
+      throw new DomainError("VALIDATION_ERROR", "A synthetic evidence reference requires a synthetic evaluation manifest", 422);
+    }
+    if (manifest.execution.status.state !== "set" || manifest.execution.status.value !== "completed") {
+      throw new DomainError("EVALUATION_FAILED", "Only a completed evaluation can certify a capability", 422);
+    }
+    if (manifest.generation.retrieval.state !== "set" || manifest.generation.retrieval.value !== input.measurementMode) {
+      throw new DomainError("EVALUATION_FAILED", "Measurement mode does not match the evaluation manifest", 422);
+    }
+    if (manifest.evaluation.itemCount.state !== "set") {
+      throw new DomainError("EVALUATION_FAILED", "The evaluation item count is unknown", 422);
+    }
+    const sampleSize = input.correctCount + input.incorrectCount;
+    if (sampleSize < 1 || manifest.evaluation.itemCount.value !== sampleSize || input.items.length !== sampleSize) {
+      throw new DomainError("VALIDATION_ERROR", "An empty or mismatched measurement is not a capability score", 422);
+    }
+    if (input.items.some((item) => item.correct === null || !item.valid)) {
+      throw new DomainError("EVALUATION_FAILED", "Official certification requires a valid outcome for every included item", 422);
+    }
+    const correct = input.items.filter((item) => item.correct === true).length;
+    if (correct !== input.correctCount) {
+      throw new DomainError("VALIDATION_ERROR", "Correct count does not match the item outcomes", 422);
+    }
+    for (const [name, count] of Object.entries(input.failureClasses)) {
+      if (!name || !Number.isInteger(count) || count < 0) {
+        throw new DomainError("VALIDATION_ERROR", "Failure classifications must be non-negative counts", 422);
+      }
+    }
+    const mapping = await this.store.findMappingVersion(input.mappingVersionId);
+    if (!mapping || mapping.departmentId !== input.departmentId || mapping.taxonomyVersionId !== input.taxonomyVersionId) {
+      throw new DomainError("NOT_APPROVED", "Official scores require an approved mapping for this taxonomy version", 422);
+    }
+    const edges = await this.store.listEdges(input.taxonomyVersionId);
+    if (!edges.some((edge) => edge.kind === "parent" && edge.topicId === input.topicId)) {
+      throw new DomainError("VALIDATION_ERROR", "The topic is not in the taxonomy version", 422);
+    }
+    const topic = await this.requireTopic(input.topicId);
+    if (topic.departmentId !== input.departmentId) {
+      throw new DomainError("AUTHORIZATION_DENIED", "A mapping cannot score another department's topic", 403);
+    }
+    const rows = await this.store.listMappings(mapping.id);
+    const covered = new Map(rows.filter((row) => row.topicId === input.topicId).map((row) => [row.itemId, row]));
+    for (const item of input.items) {
+      const mapped = covered.get(item.itemId);
+      if (!mapped || mapped.contentDigest !== item.contentDigest) {
+        throw new DomainError("NOT_APPROVED", "An item is not on the approved mapping for this topic", 422);
+      }
+    }
+    const interval = wilsonInterval(input.correctCount, sampleSize);
+    return {
+      departmentId: input.departmentId,
+      topicId: input.topicId,
+      taxonomyVersionId: input.taxonomyVersionId,
+      mappingVersionId: input.mappingVersionId,
+      evaluationRunId: input.evaluationRunId,
+      evidenceRef: input.evidenceRef,
+      manifestFingerprint: configurationFingerprint(manifest),
+      manifest,
+      modelFamily: valueOrNull(manifest.model.family),
+      modelIdentifier: valueOrNull(manifest.model.identifier),
+      checkpointDigest: valueOrNull(manifest.model.checkpointDigest),
+      adapterId: valueOrNull(manifest.model.adapterId),
+      adapterDigest: valueOrNull(manifest.model.adapterDigest),
+      measuredAt: input.measuredAt,
+      validity: "valid",
+      sampleSize,
+      correctCount: input.correctCount,
+      incorrectCount: input.incorrectCount,
+      failureClasses: input.failureClasses,
+      accuracy: input.correctCount / sampleSize,
+      uncertaintyLow: interval.low,
+      uncertaintyHigh: interval.high,
+      measurementMode: input.measurementMode,
+      capabilityKind: input.capabilityKind,
+      items: input.items,
+      provenance: input.provenance,
+      schemaVersion: SNAPSHOT_SCHEMA_VERSION,
+    };
+  }
+
+  private async findIdenticalSnapshot(draft: Omit<LedgerSnapshot, "id" | "certifiedBy" | "createdAt">): Promise<LedgerSnapshot | null> {
+    const rows = await this.store.listSnapshots({ departmentId: draft.departmentId, topicId: draft.topicId });
+    const signature = itemSignature(draft.items);
+    return (
+      rows.find(
+        (row) =>
+          row.mappingVersionId === draft.mappingVersionId &&
+          row.manifestFingerprint === draft.manifestFingerprint &&
+          row.evidenceRef === draft.evidenceRef &&
+          itemSignature(row.items) === signature,
+      ) ?? null
+    );
+  }
+
+  private async inTransaction<T>(work: (store: CapabilityRepository) => Promise<T>): Promise<T> {
+    if (typeof this.persistence.transaction !== "function") {
+      return work(this.store);
+    }
+    return this.persistence.transaction(async (repos) => work(repos.capability));
+  }
+
   private async assertOwnProposal(ctx: RequestContext, departmentId: string) {
     this.authorizer.assert(ctx.actor, "learning:propose");
     if (ctx.actor.role === "system_administrator") {
@@ -612,7 +802,7 @@ export class CapabilityLedgerService {
     return topic;
   }
 
-  private async requireProposal(id: string, kind: "taxonomy" | "mapping") {
+  private async requireProposal(id: string, kind: "taxonomy" | "mapping" | "measurement") {
     const proposal = await this.store.findProposal(id);
     if (!proposal || proposal.kind !== kind) {
       throw notFound("Proposal", id);
@@ -627,6 +817,19 @@ export class CapabilityLedgerService {
     }
     return snapshot;
   }
+}
+
+function itemSignature(items: readonly SnapshotItem[]): string {
+  return JSON.stringify(
+    [...items]
+      .map((item) => ({
+        itemId: item.itemId,
+        contentDigest: item.contentDigest,
+        correct: item.correct,
+        valid: item.valid,
+      }))
+      .sort((left, right) => (left.itemId < right.itemId ? -1 : left.itemId > right.itemId ? 1 : 0)),
+  );
 }
 
 function valueOrNull<T>(presence: { state: string; value?: T }): T | null {

@@ -162,7 +162,7 @@ function mapProposal(row: typeof ledgerProposals.$inferSelect): LedgerProposal {
   return {
     id: row.id,
     departmentId: row.departmentId,
-    kind: row.kind === "mapping" ? "mapping" : "taxonomy",
+    kind: row.kind === "mapping" ? "mapping" : row.kind === "measurement" ? "measurement" : "taxonomy",
     payload: row.payload,
     proposedBy: row.proposedBy,
     createdAt: iso(row.createdAt),

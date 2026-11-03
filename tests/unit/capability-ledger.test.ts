@@ -10,7 +10,8 @@ import {
   holmAdjust,
   applyHolm,
   MemoryCapabilityRepository,
-  pairedScoreInterval,
+  discordantPairWilsonInterval,
+  newcombePairedDifference,
   permissionsForRole,
   type Persistence,
 } from "@ai-colony/core";
@@ -276,8 +277,9 @@ describe("department capability ledger", () => {
     expect(contract.pairedInterval).toEqual({ low: 1, high: 1 });
     expect(matched.rawPValue).toBe(contract.pValue);
     expect(matched.verdict).toBe("improvement");
-    expect(matched.interval?.low).toBeGreaterThan(0);
-    expect(matched.interval?.low).toBeLessThan(1);
+    expect(matched.intervalMethod).toBe("newcombe-1998-method-10");
+    expect(matched.interval?.low).toBeCloseTo(0.8394678198623838, 12);
+    expect(matched.interval?.high).toBe(1);
     expect(matched.waldInterval).toEqual({ low: 1, high: 1 });
     expect(matched.attribution.catastrophicForgetting).toBe(false);
     expect(matched.attribution.cause).toBe("not_attributed");
@@ -331,10 +333,11 @@ describe("department capability ledger", () => {
     expect(rows[1]?.adjustedPValue).toBeCloseTo(0.06);
     expect(rows[2]?.verdict).toBe("inconclusive");
     expect(holmAdjust([0.01, null])[1]).toBeNull();
-    const extreme = pairedScoreInterval(30, 0, 30);
-    expect(extreme.low).toBeGreaterThan(0);
-    expect(extreme.low).toBeLessThan(1);
+    const extreme = newcombePairedDifference({ bothCorrect: 0, baselineOnly: 0, candidateOnly: 30, neitherCorrect: 0 });
+    const conditional = discordantPairWilsonInterval(30, 0, 30);
+    expect(extreme.low).toBeCloseTo(0.8394678198623838, 12);
     expect(extreme.high).toBe(1);
+    expect(conditional.low).toBeLessThan(extreme.low);
     const world = await approvedDepartment();
     const oldFlags = Array.from({ length: 30 }, () => false);
     const newFlags = Array.from({ length: 30 }, () => true);

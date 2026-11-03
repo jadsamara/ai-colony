@@ -191,5 +191,7 @@ export function migrationsFolder(): string {
 export async function migrateDatabase(db: Database): Promise<void> {
   await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
   await migrate(db, { migrationsFolder: migrationsFolder() });
-  await db.execute(sql.raw(AUDIT_IMMUTABILITY_SQL));
+  await db.transaction(async (tx) => {
+    await tx.execute(sql.raw(AUDIT_IMMUTABILITY_SQL));
+  });
 }

@@ -2,6 +2,7 @@ export { createDatabase, type Database, type DbExecutor, type DbTransaction } fr
 export { assertDisposableDatabaseUrl, assertReadOnlyInspectionUrl, createReadOnlyInspection } from "./inspection.js";
 export { createPersistence } from "./persistence.js";
 export { migrateDatabase, migrationsFolder } from "./migrate.js";
+export { assessLedgerReadiness, ledgerSourceMigrations, type LedgerReadiness } from "./ledger-readiness.js";
 export {
   seed,
   seedFoundations,

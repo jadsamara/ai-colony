@@ -1852,7 +1852,7 @@ export const ledgerProposals = pgTable(
     proposedBy: text("proposed_by").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  () => [check("ledger_proposals_kind_check", textIn("kind", ["taxonomy", "mapping"]))],
+  () => [check("ledger_proposals_kind_check", textIn("kind", ["taxonomy", "mapping", "measurement"]))],
 );
 
 export const ledgerDecisions = pgTable(

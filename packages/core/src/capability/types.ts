@@ -4,7 +4,7 @@ export const SNAPSHOT_SCHEMA_VERSION = "m9-capability-snapshot-v1" as const;
 
 export type TopicStatus = "active" | "deprecated";
 export type EdgeKind = "parent" | "cross_link";
-export type ProposalKind = "taxonomy" | "mapping";
+export type ProposalKind = "taxonomy" | "mapping" | "measurement";
 export type ProposalDecision = "approved" | "rejected";
 export type MeasurementMode = "closed_book" | "retrieval_assisted";
 export type CapabilityKind = "model" | "agent_system";

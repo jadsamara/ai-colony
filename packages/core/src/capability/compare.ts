@@ -1,7 +1,7 @@
 import { analyzePairedRuns, type AlignedItem, type PairedVerdict } from "../evaluation/paired.js";
 import { parseEvaluationManifest, type EvaluationManifest } from "../evaluation/manifest.js";
 import type { Interval } from "../evaluation/stats.js";
-import { pairedScoreInterval } from "./interval.js";
+import { newcombePairedDifference } from "./interval.js";
 import type { LedgerMapping, LedgerSnapshot, MeasurementMode } from "./types.js";
 
 export interface LedgerComparison {
@@ -10,6 +10,7 @@ export interface LedgerComparison {
   rawPValue: number | null;
   adjustedPValue: number | null;
   interval: Interval | null;
+  intervalMethod: "newcombe-1998-method-10" | null;
   waldInterval: Interval | null;
   absoluteDifference: number | null;
   sampleSize: number;
@@ -42,6 +43,7 @@ export function compareCertifiedSnapshots(input: {
     rawPValue: null,
     adjustedPValue: null,
     interval: null,
+    intervalMethod: null,
     waldInterval: null,
     absoluteDifference: null,
     sampleSize: 0,
@@ -92,6 +94,7 @@ export function compareCertifiedSnapshots(input: {
       rawPValue: analysis.pValue,
       adjustedPValue: analysis.pValue,
       interval: null,
+      intervalMethod: null,
       waldInterval: analysis.pairedInterval,
       absoluteDifference: analysis.absoluteDifference,
       sampleSize: analysis.sampleSize,
@@ -101,7 +104,12 @@ export function compareCertifiedSnapshots(input: {
       deploymentAuthorization: "separate_decision_required",
     };
   }
-  const interval = pairedScoreInterval(analysis.improved, analysis.regressed, analysis.validPairs);
+  const interval = newcombePairedDifference({
+    bothCorrect: analysis.unchangedCorrect,
+    baselineOnly: analysis.regressed,
+    candidateOnly: analysis.improved,
+    neitherCorrect: analysis.unchangedIncorrect,
+  });
   const pValue = analysis.pValue ?? 1;
   const alpha = input.alpha ?? 0.05;
   const difference = analysis.absoluteDifference ?? 0;
@@ -122,6 +130,7 @@ export function compareCertifiedSnapshots(input: {
     rawPValue: pValue,
     adjustedPValue: pValue,
     interval,
+    intervalMethod: "newcombe-1998-method-10",
     waldInterval: analysis.pairedInterval,
     absoluteDifference: analysis.absoluteDifference,
     sampleSize: analysis.sampleSize,
