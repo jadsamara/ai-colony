@@ -14,10 +14,14 @@ export function compileCeoGraph(input: {
   route: InferenceRoute;
   workerId: string;
   checkpointer: BaseCheckpointSaver;
+  refreshRoute?: () => Promise<void>;
 }) {
   return new StateGraph(WorkflowState)
     .addNode("ceo", async (state) => {
       try {
+        if (input.refreshRoute) {
+          await input.refreshRoute();
+        }
         const prepared = await input.service.prepareCeo(state.objectiveId, input.route, input.workerId);
         if (prepared.action !== "generate") {
           return { status: prepared.action };

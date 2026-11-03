@@ -38,6 +38,11 @@ export async function executePrepared(
   request.messages = (await service.memoryMessages(prepared)) ?? prepared.messages;
   try {
     const result = await provider.generate(request);
+    const pinnedDigest = route.routingEvidence?.digest ?? null;
+    if (result.servedDigest && pinnedDigest && result.servedDigest !== pinnedDigest) {
+      await service.failGeneration(prepared.requestId, "Resolved digest did not match the pinned routing decision");
+      throw new InferenceError("identity_mismatch", "Resolved digest did not match the pinned routing decision", false);
+    }
     if (result.servedModel !== request.modelAlias) {
       await service.failGeneration(prepared.requestId, "Served model did not match the pinned routing decision");
       throw new InferenceError("identity_mismatch", "Served model did not match the pinned routing decision", false);
@@ -68,8 +73,12 @@ export function objectiveMessageHandler(input: {
   route: InferenceRoute;
   workerId: string;
   role: "specialist" | "orchestration";
+  refreshRoute?: () => Promise<void>;
 }): MessageHandler {
   return async (message: Message) => {
+    if (input.refreshRoute) {
+      await input.refreshRoute();
+    }
     if (
       input.role === "specialist" &&
       message.messageType === "TASK_REQUEST" &&

@@ -5,12 +5,20 @@ export interface OllamaProbeError {
   message: string;
 }
 
+export interface OllamaModelDetail {
+  name: string;
+  digest: string | null;
+  sizeBytes: number | null;
+}
+
 export interface OllamaProbe {
   checkedAt: string;
   reachable: boolean;
   version: string | null;
   installedNames: string[];
   loadedNames: string[];
+  installed: OllamaModelDetail[];
+  loaded: OllamaModelDetail[];
   errors: OllamaProbeError[];
   stale: boolean;
 }
@@ -80,12 +88,14 @@ export class OllamaStatusClient {
         version: null,
         installedNames: [],
         loadedNames: [],
+        installed: [],
+        loaded: [],
         errors,
       };
     }
     const versionValue = stringField(version.value, "version");
-    const tags = namesFrom(await this.readJson("/api/tags"));
-    const ps = namesFrom(await this.readJson("/api/ps"));
+    const tags = detailsFrom(await this.readJson("/api/tags"));
+    const ps = detailsFrom(await this.readJson("/api/ps"), true);
     if (tags.error) {
       errors.push({ endpoint: "/api/tags", message: tags.error });
     }
@@ -96,8 +106,10 @@ export class OllamaStatusClient {
       checkedAt: new Date(now).toISOString(),
       reachable: true,
       version: versionValue,
-      installedNames: tags.names,
-      loadedNames: ps.names,
+      installedNames: tags.models.map((model) => model.name),
+      loadedNames: ps.models.map((model) => model.name),
+      installed: tags.models,
+      loaded: ps.models,
       errors,
     };
   }
@@ -128,27 +140,45 @@ export class OllamaStatusClient {
   }
 }
 
-function namesFrom(result: { ok: true; value: unknown } | { ok: false; error: string }): {
-  names: string[];
-  error: string | null;
-} {
+function detailsFrom(
+  result: { ok: true; value: unknown } | { ok: false; error: string },
+  preferResident = false,
+): { models: OllamaModelDetail[]; error: string | null } {
   if (!result.ok) {
-    return { names: [], error: result.error };
+    return { models: [], error: result.error };
   }
   try {
-    return { names: modelNames(result.value), error: null };
+    return { models: modelDetails(result.value, preferResident), error: null };
   } catch (error) {
-    return { names: [], error: error instanceof Error ? error.message : "malformed JSON" };
+    return { models: [], error: error instanceof Error ? error.message : "malformed JSON" };
   }
 }
 
-function modelNames(value: unknown): string[] {
+function modelDetails(value: unknown, preferResident: boolean): OllamaModelDetail[] {
   if (!value || typeof value !== "object" || !("models" in value) || !Array.isArray(value.models)) {
     throw new Error("malformed JSON");
   }
-  return value.models
-    .map((model) => (model && typeof model === "object" && "name" in model ? model.name : null))
-    .filter((name): name is string => typeof name === "string" && name.length > 0);
+  return value.models.flatMap((model) => {
+    if (!model || typeof model !== "object" || !("name" in model) || typeof model.name !== "string" || model.name.length === 0) {
+      return [];
+    }
+    const digest = "digest" in model && typeof model.digest === "string" ? model.digest : null;
+    const size = byteField(model, "size");
+    const resident = byteField(model, "size_vram");
+    return [{
+      name: model.name,
+      digest,
+      sizeBytes: preferResident ? resident ?? size : size,
+    }];
+  });
+}
+
+function byteField(model: object, key: string): number | null {
+  if (!(key in model)) {
+    return null;
+  }
+  const value = model[key as keyof typeof model];
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function stringField(value: unknown, key: string): string | null {

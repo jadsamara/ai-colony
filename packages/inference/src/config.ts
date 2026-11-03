@@ -1,3 +1,4 @@
+import type { InferenceRoute } from "@ai-colony/core";
 import { z } from "zod";
 
 const schema = z.object({
@@ -96,7 +97,7 @@ export function loadInferenceConfig(env: NodeJS.ProcessEnv): InferenceConfig {
   };
 }
 
-export function routeFromConfig(config: InferenceConfig) {
+export function routeFromConfig(config: InferenceConfig): InferenceRoute {
   return {
     memoryProfile: config.memoryProfile,
     alias: config.alias,

@@ -280,6 +280,14 @@ export type {
 } from "./ports/repositories.js";
 export { evaluateRouting, inferencePathClass } from "./routing/evaluate.js";
 export {
+  ADVISORY_MACHINE_MEMORY_BYTES,
+  LARGE_ARTIFACT_BYTES,
+  RESERVED_HEADROOM_BYTES,
+  assessLiveServing,
+  type CatalogModel,
+  type LiveServingAssessment,
+} from "./routing/resources.js";
+export {
   CEO_DEPARTMENT_ID,
   LEGACY_DEPARTMENT_IDS,
   LEGACY_ROUTING_POLICY_VERSION,

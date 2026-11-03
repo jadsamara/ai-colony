@@ -22,6 +22,7 @@ export interface InferenceRequest {
 export interface InferenceResult {
   text: string;
   servedModel: string;
+  servedDigest?: string | null;
   usage: TokenUsage;
   latencyMs: number;
 }

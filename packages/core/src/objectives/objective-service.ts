@@ -64,6 +64,7 @@ export interface InferenceRoute {
   routingEvidence?: RuntimeEvidence;
   routingResourceAllowed?: boolean;
   routingMemoryKnown?: boolean;
+  routingResourceDetail?: string | null;
   derivedServing?: RoutingSnapshot["derived"];
 }
 
@@ -367,6 +368,9 @@ export class ObjectiveService {
         estimatedCostUsdMicros: cost,
       });
       const run = await repos.objectives.getRun(stored.objectiveId);
+      const decision = stored.taskId
+        ? await repos.routing.findByTask(stored.taskId)
+        : await repos.routing.findByObjectivePurpose(stored.objectiveId, stored.purpose);
       await repos.audit.append({
         eventType: "routing.execution",
         actorId: WORKER_ACTOR,
@@ -386,6 +390,12 @@ export class ObjectiveService {
           latencyMs: input.latencyMs,
           inputTokens: input.usage.inputTokens,
           outputTokens: input.usage.outputTokens,
+          decisionId: decision?.id ?? null,
+          modelDigest: decision?.modelDigest ?? null,
+          executionVerification: decision?.executionVerification ?? "unverified",
+          resourceOutcome: decision?.resourceOutcome ?? null,
+          assignmentVersion: decision?.assignmentVersion ?? null,
+          adapterId: decision?.adapterId ?? null,
         },
       });
     });
@@ -1299,7 +1309,11 @@ export class ObjectiveService {
         state: evidence.state,
         capturedAt: evidence.capturedAt,
         digest: evidence.digest,
+        servingTag: evidence.servingTag,
+        artifactBytes: evidence.artifactBytes,
+        loadedCount: evidence.loadedCount,
         policyVersion: LEGACY_ROUTING_POLICY_VERSION,
+        resourceDetail: route.routingResourceDetail ?? null,
       },
       createdAt: this.now().toISOString(),
     };

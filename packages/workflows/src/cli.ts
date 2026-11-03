@@ -1,9 +1,9 @@
 import "dotenv/config";
 import { hostname } from "node:os";
 import type { Message } from "@ai-colony/contracts";
-import { Authorizer, DEFAULT_MEMORY_LIMITS, MemoryService, MessagingService, ObjectiveService } from "@ai-colony/core";
+import { assessLiveServing, Authorizer, DEFAULT_MEMORY_LIMITS, MemoryService, MessagingService, ObjectiveService } from "@ai-colony/core";
 import { createDatabase, createPersistence } from "@ai-colony/database";
-import { loadInferenceConfig, OllamaEmbeddingProvider, OpenAICompatibleProvider, routeFromConfig } from "@ai-colony/inference";
+import { loadInferenceConfig, OllamaEmbeddingProvider, OllamaStatusClient, OpenAICompatibleProvider, routeFromConfig } from "@ai-colony/inference";
 import { loadWorkerConfig, RabbitMessageTransport, runMessageConsumer } from "@ai-colony/messaging";
 import { openCheckpointer } from "./checkpoint.js";
 import { compileCeoGraph, compileMonitoringGraph, compileOrchestrationGraph } from "./graphs.js";
@@ -20,6 +20,27 @@ if (role !== "ceo" && role !== "orchestration" && role !== "specialist" && role 
 const messaging = loadWorkerConfig(process.env);
 const inference = loadInferenceConfig(process.env);
 const route = routeFromConfig(inference);
+const ollamaStatus = new OllamaStatusClient({
+  baseUrl: inference.baseUrl,
+  timeoutMs: inference.probeTimeoutMs,
+  freshnessMs: inference.probeFreshnessMs,
+  minIntervalMs: inference.probeMinIntervalMs,
+});
+async function refreshRoute(): Promise<void> {
+  const probe = await ollamaStatus.inspect();
+  const assessed = assessLiveServing({
+    requestedAlias: route.alias,
+    reachable: probe.reachable,
+    stale: probe.stale,
+    checkedAt: probe.checkedAt,
+    installed: probe.installed,
+    loaded: probe.loaded,
+  });
+  route.routingEvidence = assessed.evidence;
+  route.routingResourceAllowed = assessed.resourceAllowed;
+  route.routingMemoryKnown = assessed.memoryKnown;
+  route.routingResourceDetail = assessed.resourceDetail;
+}
 const policy = {
   ...messaging.policy,
   leaseMs: Math.max(messaging.policy.leaseMs, inference.timeoutMs + 30_000),
@@ -54,6 +75,7 @@ const messages = new MessagingService(
           route,
           workerId,
           role,
+          refreshRoute,
         })(message);
       }
     : undefined,
@@ -79,7 +101,7 @@ runtime.service = service;
 
 try {
   if (role === "ceo") {
-    const graph = compileCeoGraph({ service, provider, route, workerId, checkpointer });
+    const graph = compileCeoGraph({ service, provider, route, workerId, checkpointer, refreshRoute });
     await loop(controller.signal, 2000, async () => {
       await service.heartbeat(workerId, role, null);
       await runCeoPass(graph, service);
