@@ -3,6 +3,7 @@ export { assertDisposableDatabaseUrl, assertReadOnlyInspectionUrl, createReadOnl
 export { createPersistence } from "./persistence.js";
 export { migrateDatabase, migrationsFolder } from "./migrate.js";
 export { assessLedgerReadiness, ledgerSourceMigrations, type LedgerReadiness } from "./ledger-readiness.js";
+export { assessRoutingReadiness, routingSourceMigration, type RoutingReadiness, type RoutingDepartmentFinding } from "./routing-readiness.js";
 export {
   seed,
   seedFoundations,

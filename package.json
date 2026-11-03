@@ -38,6 +38,7 @@
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "health": "tsc -b packages/contracts packages/core packages/database packages/inference --pretty false && tsx apps/api/src/runtime-health-cli.ts",
     "ledger:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/ledger-readiness-cli.ts",
+    "routing:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/routing-readiness-cli.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",

@@ -8,7 +8,7 @@ import {
   ObjectiveService,
   type InferenceRoute,
 } from "@ai-colony/core";
-import { assertDisposableDatabaseUrl, createDatabase, createPersistence, migrateDatabase, schema, seed } from "@ai-colony/database";
+import { assertDisposableDatabaseUrl, assessRoutingReadiness, createDatabase, createPersistence, migrateDatabase, schema, seed } from "@ai-colony/database";
 import { ScriptedInferenceProvider } from "@ai-colony/inference";
 import { executePrepared } from "@ai-colony/workflows";
 import { eq } from "drizzle-orm";
@@ -52,6 +52,10 @@ describe.skipIf(!enabled)("governed routing against isolated PostgreSQL", () => 
     await migrateDatabase(opened.db);
     await migrateDatabase(opened.db);
     await seed(opened.db);
+    const readiness = await assessRoutingReadiness(databaseUrl);
+    expect(readiness.status).toBe("ready");
+    expect(readiness.activeDepartmentsDenied).toEqual([]);
+    expect(readiness.liveInference).toBe("not_run");
   });
 
   afterAll(async () => {

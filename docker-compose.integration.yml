@@ -1,0 +1,48 @@
+name: ai-colony-m101
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: ai-colony-m101-postgres
+    environment:
+      POSTGRES_USER: m101
+      POSTGRES_PASSWORD: m101
+      POSTGRES_DB: colony_m101_integration
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - m101_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U m101 -d colony_m101_integration"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks:
+      - m101
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: ai-colony-m101-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: m101
+      RABBITMQ_DEFAULT_PASS: m101
+    ports:
+      - "127.0.0.1:5673:5672"
+    volumes:
+      - m101_rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - m101
+
+networks:
+  m101:
+    name: ai-colony-m101
+
+volumes:
+  m101_postgres:
+  m101_rabbitmq:

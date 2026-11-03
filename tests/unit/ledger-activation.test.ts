@@ -353,7 +353,10 @@ suite("ledger activation", () => {
       const inspection = createReadOnlyInspection(databaseUrl);
       try {
         await inspection.assertReadOnly();
-        const count = await inspection.sql<{ count: string }[]>`select count(*)::text as count from ledger_snapshots`;
+        const count = await inspection.sql<{ count: string }[]>`
+          select count(*)::text as count from ledger_snapshots
+          where department_id = ${scienceId}::uuid
+        `;
         expect(Number(count[0]?.count)).toBe(2);
       } finally {
         await inspection.close();

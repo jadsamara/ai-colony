@@ -2,10 +2,16 @@ import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { departmentQueueName } from "@ai-colony/core";
 import { RabbitMessageTransport } from "@ai-colony/messaging";
+import { resolveIntegrationRabbitUrl } from "../helpers/isolation.js";
 
-const rabbitUrl = process.env.RABBITMQ_URL ?? "amqp://colony:colony-dev-password@127.0.0.1:5672";
+function integrationRabbitUrl(): string | null {
+  if (!process.env.INTEGRATION_RABBITMQ_URL) {
+    return null;
+  }
+  return resolveIntegrationRabbitUrl(process.env);
+}
 
-async function brokerAvailable(): Promise<RabbitMessageTransport | null> {
+async function brokerAvailable(rabbitUrl: string): Promise<RabbitMessageTransport | null> {
   const transport = new RabbitMessageTransport(rabbitUrl, 10);
   try {
     await transport.connect();
@@ -24,7 +30,12 @@ describe("RabbitMQ transport", () => {
   });
 
   it("routes an agent message to that agent's department queue and survives a reconnect", async (context) => {
-    transport = await brokerAvailable();
+    const rabbitUrl = integrationRabbitUrl();
+    if (!rabbitUrl) {
+      context.skip();
+      return;
+    }
+    transport = await brokerAvailable(rabbitUrl);
     if (!transport) {
       context.skip();
       return;
