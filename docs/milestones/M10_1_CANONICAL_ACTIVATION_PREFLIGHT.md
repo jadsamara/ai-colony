@@ -9,7 +9,7 @@ Canonical PostgreSQL has not been backed up and migration `0011` has not been ap
 - Branch: `m10.1-routing-activation`
 - Base: `a5e7f1e` on `m10-governed-model-routing`
 - M10 implementation commit: `04afc2996e52f451c287423fe1aff9e9874a79fd`
-- The preflight commit hash is the tip of `m10.1-routing-activation` after this file is committed.
+- Preflight commit: `10058adfbef5e32dd3291fbfcf33d66a392466c6`
 
 Untracked files left out of the commit: `docs/audits/` and `docs/milestones/M9_1_CANONICAL_ACTIVATION_REPORT.md`.
 
