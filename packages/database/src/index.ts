@@ -8,6 +8,8 @@ export {
   seed,
   seedFoundations,
   truncateColony,
+  SEED_AGENTS,
+  SEED_DEPARTMENTS,
   SEED_DEPARTMENT_BUDGET,
   type SeedResult,
 } from "./seed.js";

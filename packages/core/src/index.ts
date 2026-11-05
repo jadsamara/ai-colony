@@ -296,3 +296,27 @@ export {
   isLegacyDepartment,
 } from "./routing/policy.js";
 export type { RoutingSelection, RoutingSnapshot, RuntimeEvidence, DerivedServingArtifact } from "./routing/types.js";
+export { normalizeEndpoint, endpointReferenceFor, dedicatedInstanceId } from "./serving/endpoints.js";
+export { httpDepartmentClient } from "./serving/http.js";
+export { departmentProfiles, planDedicatedInstances } from "./serving/inventory.js";
+export { bindDedicatedEndpoints, assertNoSharedServing, type TrustedEndpointDirectory } from "./serving/plan.js";
+export { estimateDedicatedCapacity, gcpDeploymentPlan, type CapacityEstimate, type GcpServicePlan } from "./serving/capacity.js";
+export {
+  DepartmentAgentRuntime,
+  DepartmentColony,
+  MemoryStore,
+  InMemoryCheckpoints,
+  createDepartmentColony,
+  type DepartmentModelClient,
+  type CheckpointStore,
+} from "./serving/runtime.js";
+export {
+  DEDICATED_SERVING_POLICY_VERSION,
+  type AgentCheckpoint,
+  type AgentMessage,
+  type AgentSource,
+  type DedicatedRoutingContext,
+  type DedicatedServingInstance,
+  type DepartmentProfile,
+  type DepartmentSource,
+} from "./serving/types.js";

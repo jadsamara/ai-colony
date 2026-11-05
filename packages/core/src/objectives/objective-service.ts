@@ -1305,6 +1305,10 @@ export class ObjectiveService {
       fallbackStatus: "disabled" as const,
       executionVerification: selection.executionVerification,
       capabilityNote: selection.capabilityNote,
+      servingInstanceId: selection.servingInstanceId,
+      endpointReference: selection.endpointReference,
+      agentId: selection.agentId,
+      servingPolicyVersion: selection.servingPolicyVersion,
       runtimeEvidence: {
         state: evidence.state,
         capturedAt: evidence.capturedAt,
@@ -1532,6 +1536,10 @@ function selectionFromStored(stored: {
   resourceOutcome: string;
   executionVerification: "unverified" | "matched" | "mismatch";
   capabilityNote: string;
+  servingInstanceId?: string | null;
+  endpointReference?: string | null;
+  agentId?: string | null;
+  servingPolicyVersion?: string | null;
 }): RoutingSelection {
   return {
     authorization: stored.authorization,
@@ -1552,6 +1560,10 @@ function selectionFromStored(stored: {
     capabilityNote: stored.capabilityNote,
     runtimeState: "readiness_unknown",
     evidenceCapturedAt: null,
+    servingInstanceId: stored.servingInstanceId ?? null,
+    endpointReference: stored.endpointReference ?? null,
+    agentId: stored.agentId ?? null,
+    servingPolicyVersion: stored.servingPolicyVersion ?? null,
   };
 }
 

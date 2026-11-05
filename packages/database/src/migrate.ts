@@ -165,7 +165,8 @@ BEGIN
     'ledger_topic_mappings',
     'ledger_snapshots',
     'ledger_retention_events',
-    'routing_decisions'
+    'routing_decisions',
+    'department_serving_events'
   ]
   LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', ledger_table || '_no_update', ledger_table);

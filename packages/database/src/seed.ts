@@ -7,9 +7,11 @@ import {
   resourceBudgetSchema,
 } from "@ai-colony/contracts";
 import {
+  departmentProfiles,
   listRoleGrants,
   PERMISSION_DESCRIPTIONS,
   PERMISSIONS,
+  planDedicatedInstances,
   ROLE_DESCRIPTIONS,
   snapshot,
 } from "@ai-colony/core";
@@ -18,6 +20,8 @@ import type { Database } from "./client.js";
 import {
   agents,
   auditEvents,
+  departmentServingEvents,
+  departmentServingInstances,
   departments,
   models,
   permissions,
@@ -169,7 +173,12 @@ const FOUNDING_AGENTS = [
   ["00000000-0000-4000-8000-000000000205", "00000000-0000-4000-8000-00000000001b", "Science", "department_agent", "seed.science", "00000000-0000-4000-8000-000000000101", "Completes scientific analysis tasks."],
   ["00000000-0000-4000-8000-000000000206", "00000000-0000-4000-8000-000000000018", "Research", "department_agent", "seed.research", "00000000-0000-4000-8000-000000000101", "Completes evidence tasks without external tools."],
   ["00000000-0000-4000-8000-000000000207", "00000000-0000-4000-8000-00000000001a", "Reasoning", "department_agent", "seed.reasoning", "00000000-0000-4000-8000-000000000101", "Completes reasoning tasks."],
+  ["00000000-0000-4000-8000-000000000211", "00000000-0000-4000-8000-000000000014", "Evolution", "evolution_agent", "seed.evolution", "00000000-0000-4000-8000-000000000101", "Proposes structural changes. Cannot create or activate a department."],
+  ["00000000-0000-4000-8000-000000000212", "00000000-0000-4000-8000-00000000001c", "Gaming", "department_agent", "seed.gaming", "00000000-0000-4000-8000-000000000101", "Owns game and simulation tasks. Cannot reach outside the task state."],
 ] as const;
+
+export const SEED_DEPARTMENTS = INITIAL_DEPARTMENTS;
+export const SEED_AGENTS = FOUNDING_AGENTS;
 
 type SeedExecutor = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -365,6 +374,43 @@ export async function seed(db: Database): Promise<SeedResult> {
       });
     }
 
+    const profiles = departmentProfiles(
+      INITIAL_DEPARTMENTS.map(([id, name, slug, , purpose]) => ({ id, name, slug, status: "active", purpose })),
+      FOUNDING_AGENTS.map(([id, departmentId]) => ({ id, departmentId })),
+    );
+    for (const instance of planDedicatedInstances(profiles)) {
+      const inserted = await tx
+        .insert(departmentServingInstances)
+        .values({
+          id: instance.instanceId,
+          departmentId: instance.departmentId,
+          agentId: instance.agentId,
+          provider: instance.provider,
+          endpointReference: instance.endpointReference,
+          normalizedEndpoint: instance.normalizedEndpoint,
+          modelRegistryId: instance.modelRegistryId,
+          modelVersion: instance.modelVersion,
+          artifactDigest: instance.artifactDigest,
+          deploymentMode: instance.deploymentMode,
+          status: instance.status,
+          resourcePolicyId: instance.resourcePolicyId,
+        })
+        .onConflictDoNothing({ target: departmentServingInstances.id })
+        .returning();
+      const row = inserted[0];
+      if (!row) {
+        continue;
+      }
+      await tx.insert(departmentServingEvents).values({
+        id: randomUUID(),
+        instanceId: row.id,
+        fromStatus: "configured",
+        toStatus: "configured",
+        actorId: SYSTEM_ADMINISTRATOR_ID,
+        reason: "Seed a dedicated serving instance. This does not start a model.",
+      });
+    }
+
     return { departmentsInserted, modelsInserted, agentsInserted };
   });
 }
@@ -428,6 +474,9 @@ export async function truncateColony(db: Database): Promise<void> {
       memories,
       inference_usage,
       inference_requests,
+      department_agent_checkpoints,
+      department_serving_events,
+      department_serving_instances,
       routing_decisions,
       task_results,
       task_assignments,

@@ -43,6 +43,8 @@ import {
   PROCESSING_STATUSES,
   QUANTIZATIONS,
   ROLE_NAMES,
+  SERVING_PROVIDERS,
+  SERVING_STATUSES,
   TASK_STATUSES,
   TASK_TYPES,
 } from "./constants.js";
@@ -1611,6 +1613,10 @@ export const routingDecisions = pgTable(
     fallbackStatus: text("fallback_status").notNull(),
     executionVerification: text("execution_verification").notNull(),
     capabilityNote: text("capability_note").notNull(),
+    servingInstanceId: uuid("serving_instance_id"),
+    endpointReference: text("endpoint_reference"),
+    agentId: uuid("agent_id"),
+    servingPolicyVersion: text("serving_policy_version"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -2009,4 +2015,58 @@ export const ledgerRetentionEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   () => [check("ledger_retention_events_action_check", textIn("action", ["retain", "revoke", "archive"]))],
+);
+
+export const departmentServingInstances = pgTable(
+  "department_serving_instances",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "restrict" }),
+    provider: text("provider").notNull(),
+    endpointReference: text("endpoint_reference").notNull(),
+    normalizedEndpoint: text("normalized_endpoint").notNull(),
+    modelRegistryId: uuid("model_registry_id").notNull().references(() => models.id, { onDelete: "restrict" }),
+    modelVersion: text("model_version").notNull(),
+    artifactDigest: text("artifact_digest"),
+    deploymentMode: text("deployment_mode").notNull(),
+    status: text("status").notNull(),
+    resourcePolicyId: text("resource_policy_id").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    unique("department_serving_instances_department_unique").on(table.departmentId),
+    unique("department_serving_instances_endpoint_ref_unique").on(table.endpointReference),
+    unique("department_serving_instances_endpoint_unique").on(table.normalizedEndpoint),
+    check("department_serving_instances_provider_check", textIn("provider", SERVING_PROVIDERS)),
+    check("department_serving_instances_status_check", textIn("status", SERVING_STATUSES)),
+    check("department_serving_instances_mode_check", sql`${table.deploymentMode} = 'dedicated'`),
+  ],
+);
+
+export const departmentServingEvents = pgTable("department_serving_events", {
+  id: uuid("id").primaryKey(),
+  instanceId: uuid("instance_id").notNull().references(() => departmentServingInstances.id, { onDelete: "restrict" }),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  actorId: text("actor_id").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const departmentAgentCheckpoints = pgTable(
+  "department_agent_checkpoints",
+  {
+    id: uuid("id").primaryKey(),
+    agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    taskId: uuid("task_id").notNull(),
+    servingInstanceId: uuid("serving_instance_id").notNull().references(() => departmentServingInstances.id, { onDelete: "restrict" }),
+    modelVersion: text("model_version").notNull(),
+    endpointReference: text("endpoint_reference").notNull(),
+    state: jsonb("state").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("department_agent_checkpoints_task_unique").on(table.agentId, table.taskId)],
 );

@@ -1,7 +1,12 @@
+import { DEDICATED_SERVING_POLICY_VERSION } from "../serving/types.js";
 import { isLegacyDepartment, LEGACY_ROUTING_POLICY_VERSION, ROUTING_EVIDENCE_TTL_MS, SHARED_QWEN3_8B_MODEL_ID } from "./policy.js";
 import type { RoutingAssignment, RoutingReasonCode, RoutingSelection, RoutingSnapshot, RuntimeReadiness } from "./types.js";
 
 export function evaluateRouting(snapshot: RoutingSnapshot): RoutingSelection {
+  return applyDedicatedServing(snapshot, evaluateModelRouting(snapshot));
+}
+
+function evaluateModelRouting(snapshot: RoutingSnapshot): RoutingSelection {
   const latest = [...snapshot.assignments].sort((left, right) => right.version - left.version)[0] ?? null;
   const active = latest?.status === "active" ? latest : null;
   const base = blank(snapshot, active);
@@ -168,7 +173,54 @@ function blank(snapshot: RoutingSnapshot, active: RoutingAssignment | null): Rou
     capabilityNote: capabilityNote(snapshot),
     runtimeState: snapshot.evidence.state,
     evidenceCapturedAt: snapshot.evidence.capturedAt,
+    servingInstanceId: null,
+    endpointReference: null,
+    agentId: null,
+    servingPolicyVersion: null,
   };
+}
+
+function applyDedicatedServing(snapshot: RoutingSnapshot, decision: RoutingSelection): RoutingSelection {
+  if (!snapshot.dedicated) {
+    return decision;
+  }
+  const dedicated = snapshot.dedicated;
+  const mine = dedicated.instances.filter((instance) => instance.departmentId === snapshot.departmentId);
+  const instance = mine.length === 1 ? mine[0] : null;
+  const stamped: RoutingSelection = {
+    ...decision,
+    servingInstanceId: instance?.instanceId ?? null,
+    endpointReference: instance?.endpointReference ?? null,
+    agentId: instance?.agentId ?? null,
+    servingPolicyVersion: DEDICATED_SERVING_POLICY_VERSION,
+  };
+  if (!instance) {
+    return deny(stamped, "serving_instance_unassigned");
+  }
+  const owners = new Map<string, string>();
+  for (const candidate of dedicated.instances) {
+    const previous = owners.get(candidate.normalizedEndpoint);
+    if (previous && previous !== candidate.departmentId) {
+      return deny(stamped, "serving_endpoint_shared");
+    }
+    owners.set(candidate.normalizedEndpoint, candidate.departmentId);
+  }
+  if (
+    (dedicated.requestedEndpoint && dedicated.requestedEndpoint !== instance.endpointReference) ||
+    (dedicated.requestedInstanceId && dedicated.requestedInstanceId !== instance.instanceId)
+  ) {
+    return deny(stamped, "endpoint_override_denied");
+  }
+  if (
+    (dedicated.pinnedInstanceId && dedicated.pinnedInstanceId !== instance.instanceId) ||
+    (dedicated.pinnedModelVersion && dedicated.pinnedModelVersion !== instance.modelVersion)
+  ) {
+    return deny(stamped, "serving_migration_required");
+  }
+  if (instance.status !== "ready" || instance.deploymentMode !== "dedicated") {
+    return deny(stamped, "serving_instance_unavailable");
+  }
+  return stamped;
 }
 
 function deny(selection: RoutingSelection, reasonCode: RoutingReasonCode): RoutingSelection {

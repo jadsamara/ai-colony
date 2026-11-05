@@ -1,3 +1,5 @@
+import type { DedicatedRoutingContext } from "../serving/types.js";
+
 export type RoutingAuthorization = "authorized" | "denied";
 
 export type RoutingReasonCode =
@@ -19,7 +21,12 @@ export type RoutingReasonCode =
   | "model_override_denied"
   | "digest_mismatch"
   | "department_inactive"
-  | "department_identity_mismatch";
+  | "department_identity_mismatch"
+  | "serving_instance_unassigned"
+  | "serving_instance_unavailable"
+  | "serving_endpoint_shared"
+  | "endpoint_override_denied"
+  | "serving_migration_required";
 
 export type RuntimeReadiness =
   | "registered"
@@ -84,6 +91,7 @@ export interface RoutingSnapshot {
   certifiedCapabilityCount: number;
   syntheticCapabilityCount: number;
   executionDigest: string | null;
+  dedicated?: DedicatedRoutingContext;
 }
 
 export interface RoutingSelection {
@@ -105,4 +113,8 @@ export interface RoutingSelection {
   capabilityNote: string;
   runtimeState: RuntimeReadiness;
   evidenceCapturedAt: string | null;
+  servingInstanceId: string | null;
+  endpointReference: string | null;
+  agentId: string | null;
+  servingPolicyVersion: string | null;
 }

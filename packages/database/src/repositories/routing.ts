@@ -48,5 +48,9 @@ function mapDecision(row: typeof routingDecisions.$inferSelect): StoredRoutingDe
     capabilityNote: row.capabilityNote,
     runtimeEvidence: row.runtimeEvidence,
     createdAt: row.createdAt.toISOString(),
+    servingInstanceId: row.servingInstanceId,
+    endpointReference: row.endpointReference,
+    agentId: row.agentId,
+    servingPolicyVersion: row.servingPolicyVersion,
   };
 }

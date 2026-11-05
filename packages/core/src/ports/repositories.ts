@@ -887,6 +887,10 @@ export interface StoredRoutingDecision {
   capabilityNote: string;
   runtimeEvidence: Record<string, unknown>;
   createdAt: string;
+  servingInstanceId: string | null;
+  endpointReference: string | null;
+  agentId: string | null;
+  servingPolicyVersion: string | null;
 }
 
 export interface RoutingRepository {
