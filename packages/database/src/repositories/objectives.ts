@@ -11,6 +11,8 @@ import {
   buildPage,
   notFound,
   type DecodedCursor,
+  type InferenceObservation,
+  type MessageTiming,
   type ObjectiveRepository,
   type ObjectiveRun,
   type ObjectiveTaskRecord,
@@ -20,8 +22,11 @@ import { guard } from "../db-error.js";
 import {
   agents,
   departments,
+  iacpMessages,
   inferenceRequests,
   inferenceUsage,
+  messageDeliveryAttempts,
+  messageOutbox,
   modelRuntimes,
   models,
   objectivePlans,
@@ -44,6 +49,7 @@ function mapRun(row: typeof objectiveRuns.$inferSelect): ObjectiveRun {
     submitterPrincipalId: row.submitterPrincipalId,
     objective: row.objectiveText,
     status: row.status as ObjectiveStatus,
+    origin: row.origin === "autonomous" ? "autonomous" : "human",
     correlationId: row.correlationId,
     failureReason: row.failureReason,
     finalOutput: row.finalOutput,
@@ -71,6 +77,10 @@ function mapRun(row: typeof objectiveRuns.$inferSelect): ObjectiveRun {
     createdAt: row.createdAt.toISOString(),
     startedAt: iso(row.startedAt),
     completedAt: iso(row.completedAt),
+    executionPath: row.executionPath as ObjectiveRun["executionPath"],
+    executionRationale: row.executionRationale,
+    planningCompletedAt: iso(row.planningCompletedAt),
+    synthesisStartedAt: iso(row.synthesisStartedAt),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -119,6 +129,8 @@ function mapTask(
     leaseOwner: row.leaseOwner,
     leaseUntil: iso(row.leaseUntil),
     createdAt: row.createdAt.toISOString(),
+    startedAt: iso(row.startedAt),
+    completedAt: iso(row.completedAt),
     updatedAt: row.updatedAt.toISOString(),
     objectiveCreatedAt: objectiveCreatedAt.toISOString(),
   };
@@ -137,6 +149,7 @@ export function createObjectiveRepository(db: DbExecutor): ObjectiveRepository {
             status: "submitted",
             correlationId: input.correlationId,
             executionAuthorized: input.executionAuthorized,
+            origin: input.origin ?? "human",
             memoryProfile: input.memoryProfile,
             primaryModelId: input.primaryModelId,
             operationalModelId: input.operationalModelId,
@@ -181,6 +194,10 @@ export function createObjectiveRepository(db: DbExecutor): ObjectiveRepository {
           ...(patch.planCorrections !== undefined ? { planCorrections: patch.planCorrections } : {}),
           ...(patch.startedAt !== undefined ? { startedAt: patch.startedAt } : {}),
           ...(patch.completedAt !== undefined ? { completedAt: patch.completedAt } : {}),
+          ...(patch.executionPath !== undefined ? { executionPath: patch.executionPath } : {}),
+          ...(patch.executionRationale !== undefined ? { executionRationale: patch.executionRationale } : {}),
+          ...(patch.planningCompletedAt !== undefined ? { planningCompletedAt: patch.planningCompletedAt } : {}),
+          ...(patch.synthesisStartedAt !== undefined ? { synthesisStartedAt: patch.synthesisStartedAt } : {}),
         })
         .where(eq(objectiveRuns.id, id))
         .returning();
@@ -402,6 +419,71 @@ export function createObjectiveRepository(db: DbExecutor): ObjectiveRepository {
             updated_at = now()
         where id = ${input.objectiveId}
       `);
+    },
+    async listInferenceObservations(objectiveId): Promise<InferenceObservation[]> {
+      const rows = await db
+        .select({ request: inferenceRequests, usage: inferenceUsage })
+        .from(inferenceRequests)
+        .leftJoin(inferenceUsage, eq(inferenceUsage.requestId, inferenceRequests.id))
+        .where(eq(inferenceRequests.objectiveId, objectiveId));
+      return rows.map((row) => ({
+        id: row.request.id,
+        taskId: row.request.taskId,
+        purpose: row.request.purpose,
+        status: row.request.status,
+        createdAt: row.request.createdAt.toISOString(),
+        completedAt: iso(row.request.completedAt),
+        inputTokens: row.usage?.inputTokens ?? null,
+        outputTokens: row.usage?.outputTokens ?? null,
+        tokenSource: (row.usage?.tokenSource ?? null) as InferenceObservation["tokenSource"],
+        latencyMs: row.usage?.latencyMs ?? null,
+      }));
+    },
+    async listMessageTimings(ids): Promise<MessageTiming[]> {
+      if (ids.length === 0) {
+        return [];
+      }
+      const rows = await db
+        .select({
+          id: iacpMessages.id,
+          createdAt: iacpMessages.createdAt,
+          publishedAt: messageOutbox.publishedAt,
+        })
+        .from(iacpMessages)
+        .leftJoin(messageOutbox, eq(messageOutbox.messageId, iacpMessages.id))
+        .where(inArray(iacpMessages.id, ids));
+      const attempts = await db
+        .select({
+          messageId: messageDeliveryAttempts.messageId,
+          createdAt: messageDeliveryAttempts.createdAt,
+        })
+        .from(messageDeliveryAttempts)
+        .where(inArray(messageDeliveryAttempts.messageId, ids));
+      const byId = new Map<string, MessageTiming>();
+      for (const row of rows) {
+        const current = byId.get(row.id) ?? {
+          id: row.id,
+          createdAt: row.createdAt.toISOString(),
+          publishedAt: null,
+          deliveredAt: null,
+        };
+        const published = iso(row.publishedAt);
+        if (published && (!current.publishedAt || published < current.publishedAt)) {
+          current.publishedAt = published;
+        }
+        byId.set(row.id, current);
+      }
+      for (const attempt of attempts) {
+        const current = byId.get(attempt.messageId);
+        if (!current) {
+          continue;
+        }
+        const delivered = attempt.createdAt.toISOString();
+        if (!current.deliveredAt || delivered < current.deliveredAt) {
+          current.deliveredAt = delivered;
+        }
+      }
+      return [...byId.values()];
     },
     async appendEvent(input) {
       await db.insert(workflowEvents).values(input);

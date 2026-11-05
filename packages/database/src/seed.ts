@@ -22,6 +22,7 @@ import { installProductDepartment } from "./product-install.js";
 import {
   agents,
   auditEvents,
+  colonyAutonomy,
   departmentServingEvents,
   departmentServingInstances,
   departments,
@@ -217,15 +218,35 @@ async function seedFoundationsInTx(tx: SeedExecutor): Promise<void> {
       roleName: "system_administrator",
       agentId: null,
     })
-    .onConflictDoUpdate({
-      target: principals.id,
-      set: {
-        principalType: "system",
-        displayName: "System Administrator",
-        roleName: "system_administrator",
-        agentId: null,
-      },
-    });
+      .onConflictDoUpdate({
+        target: principals.id,
+        set: {
+          principalType: "system",
+          displayName: "System Administrator",
+          roleName: "system_administrator",
+          agentId: null,
+        },
+      });
+  await tx
+    .insert(colonyAutonomy)
+    .values({
+      id: "default",
+      enabled: false,
+      paused: false,
+      intervalMs: 86_400_000,
+      cooldownMs: 3_600_000,
+      maxActiveGoals: 1,
+      maxInferenceRequests: 1,
+      maxDurationMs: 1_800_000,
+      maxConversations: 4,
+      maxConversationMessages: 12,
+      maxConversationTokens: 4_000,
+      maxConversationParticipants: 12,
+      conversationExecutionEnabled: false,
+      maxConcurrentConversationTurns: 1,
+      contextTokenBudget: 1_500,
+    })
+    .onConflictDoNothing();
 }
 
 async function recordSeedAudit(
@@ -503,6 +524,17 @@ export async function truncateColony(db: Database): Promise<void> {
       memories,
       inference_usage,
       inference_requests,
+      conversation_context_events,
+      conversation_jobs,
+      conversation_turn_claims,
+      conversation_membership_events,
+      conversation_turns,
+      conversation_participants,
+      department_conversations,
+      objective_subgoals,
+      colony_goals,
+      colony_goal_cycles,
+      colony_autonomy,
       product_improvement_events,
       product_improvement_proposals,
       department_agent_checkpoints,

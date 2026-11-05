@@ -26,6 +26,9 @@ import {
   CollaborationService,
   DepartmentLearningService,
   MlxTrainingProvider,
+  AutonomyService,
+  DialogueService,
+  ConversationRunner,
   ObjectiveService,
   ScriptedTrainingProvider,
   ExperimentService,
@@ -53,6 +56,7 @@ import { registerCapabilityRoutes } from "./routes/capabilities.js";
 import { registerLearningRoutes } from "./routes/learning.js";
 import { registerExperimentRoutes } from "./routes/experiments.js";
 import { registerTrainingRoutes } from "./routes/training.js";
+import { registerAutonomyRoutes } from "./routes/autonomy.js";
 import { registerObjectiveRoutes } from "./routes/objectives.js";
 import "./types.js";
 
@@ -122,6 +126,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const ledger = new CapabilityLedgerService(options.persistence, authorizer);
   const learning = new DepartmentLearningService(options.persistence, authorizer, messages, training, evaluation, memories);
   const collaboration = new CollaborationService(options.persistence, authorizer, memories, messages);
+  const objectives = new ObjectiveService(options.persistence, authorizer, messages);
+  const dialogue = new DialogueService(options.persistence, authorizer, messages);
   app.decorate("services", {
     identity: new IdentityService(options.persistence),
     departments: new DepartmentService(options.persistence, authorizer),
@@ -135,7 +141,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     models: new ModelService(options.persistence, authorizer),
     audit: new AuditQueryService(options.persistence, authorizer),
     messages,
-    objectives: new ObjectiveService(options.persistence, authorizer, messages),
+    objectives,
+    autonomy: new AutonomyService(options.persistence, authorizer, objectives),
+    dialogue,
+    runner: new ConversationRunner(options.persistence, authorizer, dialogue),
     memories,
     inference: {
       baseUrl: inferenceConfig.baseUrl,
@@ -207,6 +216,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await registerModelRoutes(app);
   await registerMessageRoutes(app);
   await registerObjectiveRoutes(app);
+  await registerAutonomyRoutes(app);
   await registerMemoryRoutes(app);
   await registerGovernanceRoutes(app);
 

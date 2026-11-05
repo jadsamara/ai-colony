@@ -54,6 +54,28 @@ export { meanExposures, outputDisagreement, stopDecision } from "./training/stab
 export { EvaluationService } from "./evaluation/evaluation-service.js";
 export { DepartmentLearningService } from "./learning/learning-service.js";
 export { CollaborationService } from "./learning/collaboration-service.js";
+export { AutonomyService } from "./autonomy/autonomy-service.js";
+export { DialogueService } from "./autonomy/dialogue-service.js";
+export { ConversationRunner } from "./autonomy/conversation-runner.js";
+export type { ConversationWake } from "./autonomy/conversation-runner.js";
+export { acceptGoalEvidence, normalizeGoal, redactSensitive } from "./autonomy/policy.js";
+export { buildDialogueContext, maySpeak, selectSpeaker } from "./autonomy/speakers.js";
+export type { SpeakerChoice, SpeakerReason } from "./autonomy/speakers.js";
+export type {
+  AutonomyRepository,
+  AutonomySettings,
+  ColonyGoalRecord,
+  ConversationRecord,
+  ConversationTurnRecord,
+  DepartmentRef,
+  GoalCycleRecord,
+  MembershipEventRecord,
+  MembershipRecord,
+  SubgoalRecord,
+  TurnClaim,
+  ConversationJob,
+  ContextEventRecord,
+} from "./autonomy/repository.js";
 export { promotionAllowed, retainedProvenance } from "./learning/collaboration-policy.js";
 export { assertLearningTransition, gapFingerprint, selectLearningMethod, outcomeForMethod, weightImprovementVerified, LEARNING_CYCLE_STATUSES } from "./learning/transitions.js";
 export type {
@@ -216,6 +238,13 @@ export { DEFAULT_MEMORY_LIMITS, MemoryService, type MemoryLimits } from "./memor
 export { fitContext, rankMemories } from "./memory/rank.js";
 export { planPrompt, renderMemoryBlock, withMemory } from "./objectives/prompts.js";
 export {
+  buildPerformance,
+  efficiencyPlan,
+  routeObjective,
+  type EfficiencyRoute,
+  type ExecutionPath,
+} from "./objectives/efficiency.js";
+export {
   DEAD_EXCHANGE,
   DEAD_QUEUE,
   DEFAULT_MESSAGING_POLICY,
@@ -240,7 +269,9 @@ export type {
   LifecycleRepository,
   MessageListFilter,
   EligibleAgent,
+  InferenceObservation,
   InferenceRow,
+  MessageTiming,
   MessageRepository,
   MessageVisibility,
   MemoryPromotionRow,

@@ -6,6 +6,7 @@ export interface SchedulableTask {
   dependsOn: readonly string[];
   objectiveCreatedAt: string;
   createdAt: string;
+  schedulingRank?: number;
 }
 
 export interface DispatchLimits {
@@ -50,6 +51,10 @@ export function chooseDispatch(tasks: readonly SchedulableTask[], limits: Dispat
     .filter((task) => task.status === "ready")
     .slice()
     .sort((left, right) => {
+      const rank = (left.schedulingRank ?? 0) - (right.schedulingRank ?? 0);
+      if (rank !== 0) {
+        return rank;
+      }
       const objectiveOrder = left.objectiveCreatedAt.localeCompare(right.objectiveCreatedAt);
       return objectiveOrder === 0 ? left.createdAt.localeCompare(right.createdAt) : objectiveOrder;
     });
