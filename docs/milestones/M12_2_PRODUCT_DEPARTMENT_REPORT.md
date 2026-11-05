@@ -1,6 +1,6 @@
 # M12.2 Product department
 
-Implementation commit: recorded in the following commit.
+Implementation commit: `a9f347ef411f8691e969b3aa30cf5822e745e08e`.
 
 M12.2 retires Gaming from the active inventory and adds Product as the colony's permanent internal improvement department. The active department count stays 12. Gaming's department id, agent id, serving instance, audit events, and model volume are kept. They are not renamed to Product.
 
