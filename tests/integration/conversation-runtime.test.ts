@@ -374,6 +374,46 @@ describe("autonomous conversation runtime", () => {
     expect(parent.turns.some((turn) => turn.prompt.some((message) => message.content.includes("Working-group findings")))).toBe(true);
   });
 
+  it("corrects invalid model JSON once and stores a bounded diagnostic when correction fails", async () => {
+    await seed(testDb());
+    await enable();
+    const { dialogue, runner } = services();
+    const valid = JSON.stringify({ kind: "response", body: "The zero case is still open.", decision: "speak" });
+    const cases = [
+      { key: "fix-malformed", first: "this is not json SECRET-MODEL-OUTPUT", error: "output was not a JSON object" },
+      { key: "fix-missing-body", first: '{"kind":"response"}', error: "body:" },
+      { key: "fix-invalid-kind", first: '{"kind":"essay","body":"hello"}', error: "kind: invalid value" },
+    ];
+    for (const item of cases) {
+      const provider = outputsProvider([item.first, valid]);
+      const conversationId = await openRepair(dialogue, provider, item.key);
+      await runner.run(admin(), conversationId, provider, route, { maxTurns: 1 });
+      const record = await dialogue.read(admin(), conversationId);
+      expect(record.turns.some((turn) => turn.body === "The zero case is still open.")).toBe(true);
+      const runnerCalls = provider.requests.filter((request) => request.messages.some((message) => message.content.includes("Return one JSON object")));
+      expect(runnerCalls).toHaveLength(2);
+      const correction = [...(runnerCalls[1]?.messages ?? [])].reverse().find((message) => message.role === "user")?.content ?? "";
+      expect(correction).toContain("Validation errors");
+      expect(correction).toContain(item.error);
+      expect(correction).toContain("Previous output:");
+      expect((await persistence.repos.autonomy.findConversation(conversationId))?.lastError).toBeNull();
+    }
+
+    const secret = "SECRET-MODEL-OUTPUT-UNCORRECTED";
+    const stuck = outputsProvider([`not-json ${secret}`, `{still ${secret}`]);
+    const failedId = await openRepair(dialogue, stuck, "fix-failed", "private-topic-token");
+    await runner.run(admin(), failedId, stuck, route, { maxTurns: 1 });
+    const failed = await persistence.repos.autonomy.findConversation(failedId);
+    expect(failed?.status).toBe("terminated");
+    expect(failed?.closeReason).toBe("model_invalid");
+    expect(failed?.outcome).toBe("failed");
+    expect(failed?.lastError?.startsWith("model_invalid:")).toBe(true);
+    expect(failed?.lastError?.length).toBeLessThanOrEqual(240);
+    expect(failed?.lastError).not.toContain(secret);
+    expect(failed?.lastError).not.toContain("private-topic-token");
+    expect(stuck.requests.filter((request) => request.messages.some((message) => message.content.includes("Return one JSON object")))).toHaveLength(2);
+  });
+
   function services(wake?: { publish(payload: { jobId: string; conversationId: string; fence: number }): Promise<void> }) {
     const dialogue = new DialogueService(persistence, authorizer, new MessagingService(persistence, authorizer, DEFAULT_MESSAGING_POLICY), () => new Date(now));
     const runner = new ConversationRunner(persistence, authorizer, dialogue, () => new Date(now), wake, 1_000);
@@ -394,7 +434,7 @@ function scripted(options?: { failOnce?: boolean; declineInvitation?: boolean; c
   let failed = false;
   return new ScriptedInferenceProvider((request) => {
     const system = request.messages.find((message) => message.role === "system")?.content ?? "";
-    const user = request.messages.map((message) => message.content).join("\n");
+    const user = request.messages.filter((message) => message.role === "user").map((message) => message.content).join("\n");
     if (!system.includes("Return one JSON object")) {
       const instruction = user.match(/Instruction: ([^\n]+)/)?.[1] ?? "Turn";
       return observed(request, instruction);
@@ -476,6 +516,32 @@ function blockingProvider() {
     },
   };
   return { provider, requests, started, release: () => release() };
+}
+
+function outputsProvider(outputs: string[]) {
+  let index = 0;
+  return new ScriptedInferenceProvider((request) => {
+    const system = request.messages.find((message) => message.role === "system")?.content ?? "";
+    if (!system.includes("Return one JSON object")) {
+      const user = request.messages.filter((message) => message.role === "user").map((message) => message.content).join("\n");
+      const instruction = user.match(/Instruction: ([^\n]+)/)?.[1] ?? "Turn";
+      return observed(request, instruction);
+    }
+    const text = outputs[index] ?? outputs.at(-1) ?? "{}";
+    index += 1;
+    return observed(request, text);
+  });
+}
+
+async function openRepair(dialogue: DialogueService, provider: ScriptedInferenceProvider, key: string, topic = "Are the current mathematical assumptions adequate?") {
+  const opened = await dialogue.open(agent(SCIENCE, SCIENCE_DEPARTMENT), provider, route, {
+    recipientDepartmentId: MATH_DEPARTMENT,
+    topic,
+    kind: "question",
+    instruction: "Math, are the current assumptions adequate?",
+    idempotencyKey: key,
+  });
+  return opened.conversationId;
 }
 
 function observed(request: InferenceRequest, text: string): InferenceResult {

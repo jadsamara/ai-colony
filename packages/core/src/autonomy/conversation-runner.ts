@@ -9,6 +9,7 @@ import { extractJsonObject } from "../objectives/plan.js";
 import type { InferenceRoute } from "../objectives/objective-service.js";
 import type { Persistence } from "../ports/repositories.js";
 import type { DialogueService } from "./dialogue-service.js";
+import { redactSensitive } from "./policy.js";
 import type { ConversationJob, ConversationRecord } from "./repository.js";
 import { buildDialogueContext, selectSpeaker } from "./speakers.js";
 
@@ -24,6 +25,70 @@ const decisionSchema = z.object({
   searchQuery: z.string().trim().min(1).max(200).nullable().optional(),
   workingGroup: z.array(z.string().trim().min(1).max(64)).max(4).optional(),
 });
+
+const DIAGNOSTIC_LIMIT = 240;
+const PREVIOUS_OUTPUT_LIMIT = 500;
+
+export const DECISION_JSON_SCHEMA = [
+  "Return one JSON object and no other text.",
+  "Required JSON schema: {\"kind\":\"question\"|\"response\"|\"proposal\"|\"challenge\"|\"evidence\"|\"counterargument\"|\"agreement\"|\"disagreement\"|\"resolution\"|\"close\",\"body\":\"string\"}.",
+  "kind is required and must be one of: question, response, proposal, challenge, evidence, counterargument, agreement, disagreement, resolution, close.",
+  "body is required and must be a non-empty string of at most 4000 characters.",
+  "Optional fields: addressedSlug (string or null), inviteSlug (string or null), decision (speak, accept, or decline), searchQuery (string or null), workingGroup (array of at most 4 department slugs).",
+  "Do not omit kind or body. Do not invent fields. Do not invent citations.",
+].join(" ");
+
+export type DecisionDraft = z.infer<typeof decisionSchema>;
+
+export type DecisionInspection =
+  | { ok: true; value: DecisionDraft }
+  | { ok: false; diagnostic: string };
+
+export function inspectDecision(text: string): DecisionInspection {
+  let extracted: unknown;
+  try {
+    extracted = extractJsonObject(text);
+  } catch (error) {
+    const reason = error instanceof Error && error.message.includes("did not contain a JSON object")
+      ? "output was not a JSON object"
+      : "output was not valid JSON";
+    return { ok: false, diagnostic: boundDiagnostic(reason) };
+  }
+  const parsed = decisionSchema.safeParse(extracted);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.slice(0, 4).map(formatIssue);
+    return { ok: false, diagnostic: boundDiagnostic(issues.join("; ") || "output did not match the schema") };
+  }
+  return { ok: true, value: parsed.data };
+}
+
+export function correctionInstruction(previousOutput: string, diagnostic: string): string {
+  const clipped = redactSensitive(previousOutput).slice(0, PREVIOUS_OUTPUT_LIMIT);
+  return [
+    "The previous JSON failed validation. Correct it.",
+    `Validation errors: ${diagnostic}`,
+    "Previous output:",
+    clipped,
+    DECISION_JSON_SCHEMA,
+    "Return one JSON object that matches the schema.",
+  ].join("\n");
+}
+
+function formatIssue(issue: { code: string; path: PropertyKey[]; message: string }): string {
+  const path = issue.path.length ? issue.path.map(String).join(".") : "object";
+  if (issue.code === "invalid_enum_value" || issue.code === "invalid_value") {
+    return `${path}: invalid value`;
+  }
+  return `${path}: ${issue.message.replace(/\s+/g, " ").trim().slice(0, 120)}`;
+}
+
+function boundDiagnostic(reason: string): string {
+  const prefix = "model_invalid: ";
+  const cleaned = redactSensitive(reason).replace(/\s+/g, " ").trim();
+  const room = DIAGNOSTIC_LIMIT - prefix.length;
+  const body = cleaned.length > room ? `${cleaned.slice(0, Math.max(0, room - 1))}…` : cleaned;
+  return `${prefix}${body}`;
+}
 
 export interface ConversationWake {
   publish(payload: { jobId: string; conversationId: string; fence: number }): Promise<void>;
@@ -294,9 +359,9 @@ export class ConversationRunner {
     const speakerRow = await this.persistence.repos.autonomy.department(speakerDepartmentId);
     const prompt = await this.prompt(conversation, speakerRow?.name ?? "department", job.action, turns);
     let result = await this.generate(provider, route, prompt);
-    let parsed = this.parse(result.text);
-    if (parsed?.searchQuery) {
-      const found = await this.dialogue.search(speaker, job.conversationId, parsed.searchQuery, 5);
+    let inspected = inspectDecision(result.text);
+    if (inspected.ok && inspected.value.searchQuery) {
+      const found = await this.dialogue.search(speaker, job.conversationId, inspected.value.searchQuery, 5);
       const followUp = [
         ...prompt,
         {
@@ -305,21 +370,27 @@ export class ConversationRunner {
         },
       ];
       result = await this.generate(provider, route, followUp);
-      parsed = this.parse(result.text);
-      if (parsed) {
-        parsed.searchQuery = null;
+      inspected = inspectDecision(result.text);
+      if (inspected.ok) {
+        inspected = { ok: true, value: { ...inspected.value, searchQuery: null } };
       }
     }
-    if (!parsed) {
-      result = await this.generate(provider, route, [...prompt, { role: "user", content: "The previous output was not a valid JSON object. Return one JSON object." }]);
-      parsed = this.parse(result.text);
+    if (!inspected.ok) {
+      const diagnostic = inspected.diagnostic;
+      result = await this.generate(provider, route, [
+        ...prompt,
+        { role: "user", content: correctionInstruction(result.text, diagnostic) },
+      ]);
+      inspected = inspectDecision(result.text);
     }
     await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
-    if (!parsed) {
+    if (!inspected.ok) {
+      await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastError: inspected.diagnostic });
       await this.dialogueClose(this.persistence.repos, job.conversationId, "terminated", "model_invalid");
-      await this.finishJob(job.id, token, false);
+      await this.finishJob(job.id, token, false, inspected.diagnostic);
       return { generated: true, continue: false, stop: "failed", childId: null };
     }
+    const parsed = inspected.value;
     const repeated = turns.filter((turn) => turn.body.trim().toLowerCase() === parsed.body.trim().toLowerCase()).length;
     if (repeated >= 2) {
       await this.dialogueClose(this.persistence.repos, job.conversationId, "unresolved", "no_progress");
@@ -409,7 +480,7 @@ export class ConversationRunner {
     return [
       {
         role: "system" as const,
-        content: `You are the ${departmentName} department. Return one JSON object with kind, body, addressedSlug, inviteSlug, decision, searchQuery, and optional workingGroup. decision is speak, accept, or decline. Do not invent citations.`,
+        content: `You are the ${departmentName} department. ${DECISION_JSON_SCHEMA}`,
       },
       {
         role: "user" as const,
@@ -436,14 +507,6 @@ export class ConversationRunner {
       timeoutMs: route.timeoutMs,
       jsonObject: true,
     });
-  }
-
-  private parse(text: string): z.infer<typeof decisionSchema> | null {
-    try {
-      return decisionSchema.parse(extractJsonObject(text));
-    } catch {
-      return null;
-    }
   }
 
   private async validatedKind(conversationId: string, kind: DialogueKind, body: string): Promise<DialogueKind> {
@@ -510,9 +573,9 @@ export class ConversationRunner {
     return children.map((row) => `message parent-link ${row.id}: ${row.finalConclusion}`).join("\n");
   }
 
-  private async finishJob(id: string, token: string, ok: boolean): Promise<boolean> {
+  private async finishJob(id: string, token: string, ok: boolean, error = "invalid model output"): Promise<boolean> {
     if (!ok) {
-      return this.persistence.repos.autonomy.releaseJob(id, token, "invalid model output");
+      return this.persistence.repos.autonomy.releaseJob(id, token, error);
     }
     return this.persistence.repos.autonomy.completeJob(id, token, this.now());
   }
