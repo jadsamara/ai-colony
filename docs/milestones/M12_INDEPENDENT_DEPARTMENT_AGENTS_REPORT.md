@@ -1,5 +1,7 @@
 # M12 independent department agents
 
+Implementation commit: `b227344e168666bb0d7c0b1eb8828329e6829593`.
+
 M12 adds a dedicated serving instance and an independent agent runtime for every active department. It does not start twelve Qwen processes, call a live model, or create GCP resources.
 
 ## 1. Architecture
