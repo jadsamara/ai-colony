@@ -302,6 +302,27 @@ export { departmentProfiles, planDedicatedInstances } from "./serving/inventory.
 export { bindDedicatedEndpoints, assertNoSharedServing, type TrustedEndpointDirectory } from "./serving/plan.js";
 export { estimateDedicatedCapacity, gcpDeploymentPlan, type CapacityEstimate, type GcpServicePlan } from "./serving/capacity.js";
 export {
+  dedicatedRoutingEnabled,
+  gateDedicatedExecution,
+  probeServingEndpoint,
+  readActivation,
+  resolveDedicatedProvider,
+  writeActivationAtomic,
+  type ActivationRecord,
+  type DedicatedRoutingConfig,
+} from "./serving/activation.js";
+export { assertDedicatedCapacity, limitsFromEnv, type CapacityLimits, type PreflightResult } from "./serving/preflight.js";
+export { planModelArtifacts, type ArtifactObservation, type ArtifactPlan } from "./serving/provision.js";
+export {
+  AGENT_IMAGE,
+  MOCK_IMAGE,
+  OLLAMA_IMAGE,
+  STOP_ARGS,
+  composeStopInvocation,
+  renderDedicatedCompose,
+  type ComposeDocument,
+} from "./serving/compose.js";
+export {
   DepartmentAgentRuntime,
   DepartmentColony,
   MemoryStore,

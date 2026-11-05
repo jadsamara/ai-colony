@@ -1,0 +1,778 @@
+# Generated dedicated department deployment.
+# Ollama and mock endpoints are private to the compose network.
+# colony stop uses `docker compose stop` and never deletes volumes.
+# MODE=mock. These processes do not load Qwen weights and are not a real-model deployment.
+name: ai-colony-dedicated
+services:
+  mock-ceo:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: ceo
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000011
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000311
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: ceo
+      colony.instance: 00000000-0000-4000-8000-000000000311
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-ceo:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-ceo:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: ceo
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000011
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000201
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000311
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-ceo:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: CEO
+      colony.instance: 00000000-0000-4000-8000-000000000311
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-ceo:8080
+      colony.memory: department:ceo
+    depends_on:
+      mock-ceo:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-orchestration:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: orchestration
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000012
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000312
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: orchestration
+      colony.instance: 00000000-0000-4000-8000-000000000312
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-orchestration:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-orchestration:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: orchestration
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000012
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000202
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000312
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-orchestration:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Orchestration
+      colony.instance: 00000000-0000-4000-8000-000000000312
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-orchestration:8080
+      colony.memory: department:orchestration
+    depends_on:
+      mock-orchestration:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-monitoring:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: monitoring
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000013
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000313
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: monitoring
+      colony.instance: 00000000-0000-4000-8000-000000000313
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-monitoring:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-monitoring:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: monitoring
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000013
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000203
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000313
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-monitoring:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Monitoring
+      colony.instance: 00000000-0000-4000-8000-000000000313
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-monitoring:8080
+      colony.memory: department:monitoring
+    depends_on:
+      mock-monitoring:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-evolution:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: evolution
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000014
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000314
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: evolution
+      colony.instance: 00000000-0000-4000-8000-000000000314
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-evolution:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-evolution:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: evolution
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000014
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000211
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000314
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-evolution:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Evolution
+      colony.instance: 00000000-0000-4000-8000-000000000314
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-evolution:8080
+      colony.memory: department:evolution
+    depends_on:
+      mock-evolution:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-weight-optimization:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: weight-optimization
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000015
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000315
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: weight-optimization
+      colony.instance: 00000000-0000-4000-8000-000000000315
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-weight-optimization:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-weight-optimization:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: weight-optimization
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000015
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000208
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000315
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-weight-optimization:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Weight Optimization
+      colony.instance: 00000000-0000-4000-8000-000000000315
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-weight-optimization:8080
+      colony.memory: department:weight-optimization
+    depends_on:
+      mock-weight-optimization:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-memory-and-forgetting:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: memory-and-forgetting
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000016
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000316
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: memory-and-forgetting
+      colony.instance: 00000000-0000-4000-8000-000000000316
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-memory-and-forgetting:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-memory-and-forgetting:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: memory-and-forgetting
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000016
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000210
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000316
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-memory-and-forgetting:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Memory & Forgetting
+      colony.instance: 00000000-0000-4000-8000-000000000316
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-memory-and-forgetting:8080
+      colony.memory: department:memory-and-forgetting
+    depends_on:
+      mock-memory-and-forgetting:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-evaluation:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: evaluation
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000017
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000317
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: evaluation
+      colony.instance: 00000000-0000-4000-8000-000000000317
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-evaluation:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-evaluation:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: evaluation
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000017
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000209
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000317
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-evaluation:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Evaluation
+      colony.instance: 00000000-0000-4000-8000-000000000317
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-evaluation:8080
+      colony.memory: department:evaluation
+    depends_on:
+      mock-evaluation:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-research:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: research
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000018
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000318
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: research
+      colony.instance: 00000000-0000-4000-8000-000000000318
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-research:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-research:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: research
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000018
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000206
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000318
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-research:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Research
+      colony.instance: 00000000-0000-4000-8000-000000000318
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-research:8080
+      colony.memory: department:research
+    depends_on:
+      mock-research:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-math:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: math
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000019
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000319
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: math
+      colony.instance: 00000000-0000-4000-8000-000000000319
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-math:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-math:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: math
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000019
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000204
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000319
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-math:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Math
+      colony.instance: 00000000-0000-4000-8000-000000000319
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-math:8080
+      colony.memory: department:math
+    depends_on:
+      mock-math:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-reasoning:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: reasoning
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001a
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031a
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: reasoning
+      colony.instance: 00000000-0000-4000-8000-00000000031a
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-reasoning:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-reasoning:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: reasoning
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001a
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000207
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031a
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-reasoning:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Reasoning
+      colony.instance: 00000000-0000-4000-8000-00000000031a
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-reasoning:8080
+      colony.memory: department:reasoning
+    depends_on:
+      mock-reasoning:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-science:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: science
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001b
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031b
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: science
+      colony.instance: 00000000-0000-4000-8000-00000000031b
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-science:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-science:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: science
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001b
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000205
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031b
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-science:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Science
+      colony.instance: 00000000-0000-4000-8000-00000000031b
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-science:8080
+      colony.memory: department:science
+    depends_on:
+      mock-science:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  mock-gaming:
+    image: ai-colony-mock:m12.1
+    pull_policy: build
+    build:
+      context: mock-image
+      dockerfile: Dockerfile
+    command: ["node", "mock-cli.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: gaming
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001c
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031c
+      COLONY_BIND: 0.0.0.0
+      COLONY_MOCK_PORT: "8080"
+      COLONY_MODE: mock
+    labels:
+      colony.mode: mock
+      colony.department: gaming
+      colony.instance: 00000000-0000-4000-8000-00000000031c
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-gaming:8080
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+  agent-gaming:
+    image: ai-colony-mock:m12.1
+    pull_policy: never
+    command: ["node", "department-process.js"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: gaming
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001c
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000212
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031c
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_ENDPOINT: http://mock-gaming:8080
+      COLONY_MODE: mock
+      COLONY_ACCEPT_TASKS: "false"
+    labels:
+      colony.mode: mock
+      colony.department: Gaming
+      colony.instance: 00000000-0000-4000-8000-00000000031c
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://mock-gaming:8080
+      colony.memory: department:gaming
+    depends_on:
+      mock-gaming:
+        condition: service_healthy
+    networks: [colony-mock]
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/status').then((r)=>r.json()).then((b)=>process.exit(b.healthy&&b.mode==='mock'?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+networks:
+  colony-mock:
+    name: colony-mock
+volumes:
+  colony-model-ceo:
+  colony-model-orchestration:
+  colony-model-monitoring:
+  colony-model-evolution:
+  colony-model-weight-optimization:
+  colony-model-memory-and-forgetting:
+  colony-model-evaluation:
+  colony-model-research:
+  colony-model-math:
+  colony-model-reasoning:
+  colony-model-science:
+  colony-model-gaming:

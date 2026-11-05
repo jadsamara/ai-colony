@@ -31,7 +31,7 @@ export class MockDepartmentServer {
     this.queue.length = 0;
   }
 
-  async start(): Promise<void> {
+  async start(host = "127.0.0.1", port = 0): Promise<void> {
     this.server = createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
@@ -51,16 +51,19 @@ export class MockDepartmentServer {
         }
         this.successes += 1;
         const content = this.queue.shift() ?? JSON.stringify({ type: "final", text: "ok" });
+        const requested = body && typeof body === "object" && "model" in body && typeof body.model === "string"
+          ? body.model
+          : this.instanceId;
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify({
-          model: this.instanceId,
+          model: requested,
           choices: [{ message: { content } }],
-          usage: { total_tokens: 8 },
+          usage: { prompt_tokens: 4, completion_tokens: 4, total_tokens: 8 },
         }));
       });
     });
     await new Promise<void>((resolve) => {
-      this.server?.listen(0, "127.0.0.1", () => resolve());
+      this.server?.listen(port, host, () => resolve());
     });
     const address = this.server.address();
     this.port = typeof address === "object" && address ? address.port : 0;

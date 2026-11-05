@@ -6,6 +6,7 @@ import { createDatabase, createPersistence } from "@ai-colony/database";
 import { loadInferenceConfig, OllamaEmbeddingProvider, OllamaStatusClient, OpenAICompatibleProvider, routeFromConfig } from "@ai-colony/inference";
 import { loadWorkerConfig, RabbitMessageTransport, runMessageConsumer } from "@ai-colony/messaging";
 import { openCheckpointer } from "./checkpoint.js";
+import { applyWorkerDedicatedRouting, assertDepartmentEndpoint } from "./dedicated-route.js";
 import { compileCeoGraph, compileMonitoringGraph, compileOrchestrationGraph } from "./graphs.js";
 import { createObjectiveMemory } from "./objective-memory.js";
 import { objectiveMessageHandler } from "./runtime.js";
@@ -19,6 +20,14 @@ if (role !== "ceo" && role !== "orchestration" && role !== "specialist" && role 
 
 const messaging = loadWorkerConfig(process.env);
 const inference = loadInferenceConfig(process.env);
+const departmentSlug = process.env.COLONY_DEPARTMENT_SLUG ?? null;
+const acceptTasks = process.env.COLONY_ACCEPT_TASKS !== "false";
+try {
+  assertDepartmentEndpoint(departmentSlug, inference.baseUrl);
+} catch (error) {
+  process.stderr.write(`${error instanceof Error ? error.message : "endpoint refused"}\n`);
+  process.exit(1);
+}
 const route = routeFromConfig(inference);
 const ollamaStatus = new OllamaStatusClient({
   baseUrl: inference.baseUrl,
@@ -26,6 +35,7 @@ const ollamaStatus = new OllamaStatusClient({
   freshnessMs: inference.probeFreshnessMs,
   minIntervalMs: inference.probeMinIntervalMs,
 });
+const workerDb: { current?: ReturnType<typeof createDatabase>["db"] } = {};
 async function refreshRoute(): Promise<void> {
   const probe = await ollamaStatus.inspect();
   const assessed = assessLiveServing({
@@ -40,12 +50,16 @@ async function refreshRoute(): Promise<void> {
   route.routingResourceAllowed = assessed.resourceAllowed;
   route.routingMemoryKnown = assessed.memoryKnown;
   route.routingResourceDetail = assessed.resourceDetail;
+  if (workerDb.current) {
+    await applyWorkerDedicatedRouting(route, workerDb.current, process.env);
+  }
 }
 const policy = {
   ...messaging.policy,
   leaseMs: Math.max(messaging.policy.leaseMs, inference.timeoutMs + 30_000),
 };
 const { db, close } = createDatabase(messaging.databaseUrl);
+workerDb.current = db;
 const persistence = createPersistence(db, close);
 const provider = new OpenAICompatibleProvider({
   baseUrl: inference.baseUrl,
@@ -104,7 +118,9 @@ try {
     const graph = compileCeoGraph({ service, provider, route, workerId, checkpointer, refreshRoute });
     await loop(controller.signal, 2000, async () => {
       await service.heartbeat(workerId, role, null);
-      await runCeoPass(graph, service);
+      if (acceptTasks) {
+        await runCeoPass(graph, service);
+      }
     });
   } else if (role === "orchestration") {
     const graph = compileOrchestrationGraph({ service, route, workerId, checkpointer });
@@ -112,32 +128,45 @@ try {
     await Promise.all([
       loop(controller.signal, 2000, async () => {
         await service.heartbeat(workerId, role, null);
-        await runOrchestrationPass(graph, new Date().toISOString());
+        if (acceptTasks) {
+          await runOrchestrationPass(graph, new Date().toISOString());
+        }
       }),
-      runMessageConsumer({
+      ...(acceptTasks
+        ? [
+            runMessageConsumer({
+              persistence,
+              transport,
+              service: messages,
+              workerId,
+              policy,
+              signal: controller.signal,
+              departmentIds: () => service.orchestrationDepartment().then((id) => (id ? [id] : [])),
+            }),
+          ]
+        : []),
+    ]);
+  } else if (role === "specialist") {
+    if (!acceptTasks) {
+      await loop(controller.signal, 5000, async () => {
+        await refreshRoute();
+        await service.heartbeat(workerId, role, departmentSlug);
+      });
+    } else {
+      const transport = new RabbitMessageTransport(messaging.rabbitUrl, policy.prefetch);
+      await runMessageConsumer({
         persistence,
         transport,
         service: messages,
         workerId,
         policy,
         signal: controller.signal,
-        departmentIds: () => service.orchestrationDepartment().then((id) => (id ? [id] : [])),
-      }),
-    ]);
-  } else if (role === "specialist") {
-    const transport = new RabbitMessageTransport(messaging.rabbitUrl, policy.prefetch);
-    await runMessageConsumer({
-      persistence,
-      transport,
-      service: messages,
-      workerId,
-      policy,
-      signal: controller.signal,
-      departmentIds: async () => {
-        await service.heartbeat(workerId, role, null);
-        return service.specialistDepartments();
-      },
-    });
+        departmentIds: async () => {
+          await service.heartbeat(workerId, role, departmentSlug);
+          return service.specialistDepartments(departmentSlug);
+        },
+      });
+    }
   } else {
     const graph = compileMonitoringGraph({
       service,

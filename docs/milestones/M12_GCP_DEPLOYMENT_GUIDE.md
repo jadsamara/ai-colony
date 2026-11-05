@@ -1,24 +1,35 @@
-# M12 GCP deployment guide
+# GCP deployment guide
 
-This guide describes how the dedicated department serving plan would be deployed later. Nothing in this milestone creates a GCP resource, a GPU, a Secret Manager secret, or a running model server.
+This guide is the operator path for the dedicated department stack. No VM, disk, address, secret, or Artifact Registry image has been created. `infra/gcp/m12/main.tf` keeps `enable_paid_resources` false. Do not run `terraform apply`.
 
-## What is implemented
+Stopping the Docker containers does not stop Compute Engine billing. Stop or delete the VM when the GPU is not in use.
 
-- One serving-instance identity and one endpoint reference per active department.
-- A trusted endpoint directory. Tasks cannot supply a URL.
-- Container-shaped service records from `gcpDeploymentPlan`.
-- `infra/gcp/m12/main.tf`, with `enable_paid_resources` defaulting to false. `terraform apply` is not part of this milestone.
+## What the repository already contains
 
-## What an operator would do later
+- `deploy/docker-compose.gcp.yml`: 12 agent containers and 12 private Ollama containers. No published Ollama ports. No GPU device unless that department's device id is set in the renderer.
+- `deploy/docker-compose.mock.yml`: the same shape with mock inference and no GPU. This is the only stack that has been started. It does not load Qwen.
+- `deploy/Dockerfile.agent` and `deploy/Dockerfile.mock`.
+- `deploy/bootstrap-gcp-vm.sh` for a fresh Ubuntu GPU VM. It installs or checks Docker, Compose, the NVIDIA driver, and the NVIDIA Container Toolkit. It does not contain credentials and does not start the colony unless `COLONY_BOOTSTRAP_START=true`.
+- `pnpm colony:provision` refuses real startup until `COLONY_GPU_VRAM_BYTES` or `COLONY_HOST_RAM_BYTES` can hold the estimate in `docs/milestones/M12_GPU_CAPACITY_PLAN.md`. Those capacity figures are estimates, not measurements.
 
-1. Choose Compute Engine GPU VMs that can hold one or more dedicated serving processes. Do not assume one GPU per department, and do not assume twelve Qwen3-8B processes fit on one device.
-2. Build two images per department: the department agent process and its model-serving process. Store them in Artifact Registry.
-3. Give each department its own service account. Grant that account only its model artifact, its secret, and its log writer role.
-4. Put the serving URL in Secret Manager. The colony resolves `serving://<slug>` from that trusted config.
-5. Run the serving process and the agent process as separate containers. Do not point two departments at one Ollama daemon.
-6. Send logs to Cloud Logging and health to Cloud Monitoring. Keep the network private and authenticated.
-7. Leave `enable_paid_resources` false until that change is reviewed. Then set it in an environment-specific tfvars file, not in the default.
+## Walkthrough
 
-## Not done
+1. Create a Compute Engine GPU VM whose memory can hold the processes you intend to run. Do not assume twelve Qwen3-8B processes fit on one GPU or one VM. Do not assume GPU memory pools across devices. Leave `enable_paid_resources` false in the Terraform default.
+2. On that Ubuntu VM, install Docker and the NVIDIA runtime with `bash deploy/bootstrap-gcp-vm.sh`. Confirm `nvidia-smi` and `docker compose version`.
+3. Build `deploy/Dockerfile.agent` on the VM, or push it to Artifact Registry from a trusted build and set `COLONY_AGENT_IMAGE` plus `COLONY_AGENT_PULL_POLICY=always`. The Ollama image pin is `ollama/ollama:0.9.6`.
+4. Export `DATABASE_URL` and `RABBITMQ_URL` in the environment or from Secret Manager. Do not commit them. Copy `deploy/colony.env.example` and fill the capacity values from the machine you measured.
+5. Record the approved Qwen3-8B digest in `COLONY_MODEL_DIGESTS`. Run `pnpm colony:provision`. It prepares the plan and refuses the deploy when capacity, digests, or endpoints are unsafe. It does not download weights unless `COLONY_ALLOW_MODEL_DOWNLOAD=true` and the digest is missing rather than mismatched. A mismatched volume is left as it is.
+6. Run `pnpm colony:start`. Agents start with `COLONY_ACCEPT_TASKS=false`, so old outbox work is not consumed.
+7. Probe readiness with `pnpm colony:status` and `pnpm colony:routing:activate`. Activation writes `deploy/state/dedicated-routing.json` only when every department endpoint answers. Then restart the workers with `COLONY_DEDICATED_ROUTING=on`. A registry row marked `ready` is not itself a probe.
+8. Submit an objective only after you set `COLONY_ACCEPT_TASKS=true`. Until that variable is set on the Compose project, workers heartbeat and do not take tasks.
+9. Stop the containers with `pnpm colony:stop`. Volumes and the database are kept.
+10. Stop the VM in Compute Engine. Container shutdown does not end GPU charges.
+11. Start the VM again later. Docker is enabled on boot, and the Compose services use `restart: unless-stopped`. Run `pnpm colony:status` and activate dedicated routing again if the probes are green. Pinned tasks keep their original serving instance and model version. They are not moved to a new model silently.
 
-No project was selected, no API was enabled, and no VM, disk, address, or secret was created.
+## Isolation
+
+Each department container may call only `ollama-<slug>` or `mock-<slug>`. Dedicated routing, once activated, will not send a failed department to another department's Ollama or to the legacy shared server. Endpoint references stay `serving://<slug>` and resolve through that Compose DNS name or an operator directory, not through a task payload.
+
+## Security
+
+Use one service account per department when you move this to IAM. Grant that account its own model artifact, its own secret, and a log writer role. Put the serving URL in Secret Manager. Do not store database passwords, GitHub tokens, or GCP keys in this repository. The Compose network does not publish the model ports.

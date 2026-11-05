@@ -2,6 +2,21 @@ export { createDatabase, type Database, type DbExecutor, type DbTransaction } fr
 export { assertDisposableDatabaseUrl, assertReadOnlyInspectionUrl, createReadOnlyInspection } from "./inspection.js";
 export { createPersistence } from "./persistence.js";
 export { migrateDatabase, migrationsFolder } from "./migrate.js";
+export {
+  applyCanonicalMigration,
+  assertAdditiveMigration,
+  assertCanonicalTarget,
+  readCanonicalIdentity,
+  readMigrationFile,
+  servingConstraintNames,
+  type CanonicalIdentity,
+} from "./canonical.js";
+export {
+  ensureDedicatedInventory,
+  listDedicatedInstances,
+  recordServingStatus,
+  type ServingInventoryResult,
+} from "./serving-inventory.js";
 export { assessLedgerReadiness, ledgerSourceMigrations, type LedgerReadiness } from "./ledger-readiness.js";
 export { assessRoutingReadiness, routingSourceMigration, type RoutingReadiness, type RoutingDepartmentFinding } from "./routing-readiness.js";
 export {

@@ -179,5 +179,6 @@ function prepared() {
     maxOutputTokens: 8,
     timeoutMs: 1000,
     cachedText: null,
+    servingInstanceId: null,
   };
 }

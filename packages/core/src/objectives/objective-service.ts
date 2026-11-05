@@ -40,6 +40,7 @@ import { blockedTaskIds, chooseDispatch, readyTaskIds } from "./schedule.js";
 import { evaluateRouting } from "../routing/evaluate.js";
 import type { RoutingSelection, RoutingSnapshot, RuntimeEvidence } from "../routing/types.js";
 import { CEO_DEPARTMENT_ID, LEGACY_ROUTING_POLICY_VERSION } from "../routing/policy.js";
+import { gateDedicatedExecution, type DedicatedRoutingConfig } from "../serving/activation.js";
 import { assertObjectiveTransition, assertTaskTransition, isTerminalObjective, isTerminalTask } from "./transitions.js";
 
 export const DEFAULT_OBJECTIVE_LIMITS: ObjectiveLimits = {
@@ -66,6 +67,7 @@ export interface InferenceRoute {
   routingMemoryKnown?: boolean;
   routingResourceDetail?: string | null;
   derivedServing?: RoutingSnapshot["derived"];
+  dedicatedRouting?: DedicatedRoutingConfig;
 }
 
 export type PreparedGeneration =
@@ -86,6 +88,7 @@ export type PreparedGeneration =
       maxOutputTokens: number;
       timeoutMs: number;
       cachedText: string | null;
+      servingInstanceId: string | null;
     };
 
 const WORKER_ACTOR = "system:workflow";
@@ -803,9 +806,10 @@ export class ObjectiveService {
     });
   }
 
-  async specialistDepartments(): Promise<string[]> {
+  async specialistDepartments(onlySlug?: string | null): Promise<string[]> {
     const ids: string[] = [];
-    for (const slug of SPECIALIST_SLUGS) {
+    const slugs = onlySlug ? [onlySlug] : SPECIALIST_SLUGS;
+    for (const slug of slugs) {
       const department = await this.persistence.repos.objectives.findDepartmentBySlug(slug);
       if (department?.status === "active") {
         ids.push(department.id);
@@ -947,6 +951,7 @@ export class ObjectiveService {
         maxOutputTokens: route.maxOutputTokens,
         timeoutMs: route.timeoutMs,
         cachedText: existing.responseText,
+        servingInstanceId: null,
       };
     }
     if (
@@ -978,6 +983,11 @@ export class ObjectiveService {
       : await this.ensureRoutingDecision(repos, run, purpose, route, task);
     if (decision && decision.authorization !== "authorized") {
       await this.fail(repos, run, decision.reasonCode);
+      return { action: "done" };
+    }
+    const dedicated = await this.pinDedicatedServing(repos, run, purpose, route, task, decision);
+    if (!dedicated.ok) {
+      await this.fail(repos, run, dedicated.reason);
       return { action: "done" };
     }
     const choice = decision
@@ -1031,6 +1041,7 @@ export class ObjectiveService {
         maxOutputTokens: route.maxOutputTokens,
         timeoutMs: route.timeoutMs,
         cachedText: null,
+        servingInstanceId: dedicated.instanceId,
       };
     }
     return {
@@ -1049,7 +1060,33 @@ export class ObjectiveService {
       maxOutputTokens: route.maxOutputTokens,
       timeoutMs: route.timeoutMs,
       cachedText: null,
+      servingInstanceId: dedicated.instanceId,
     };
+  }
+
+  private async pinDedicatedServing(
+    repos: Parameters<Parameters<Persistence["transaction"]>[0]>[0],
+    run: ObjectiveRun,
+    purpose: "plan" | "correct" | "synthesize" | "specialist",
+    route: InferenceRoute,
+    task: ObjectiveTaskRecord | null,
+    decision: RoutingSelection | null,
+  ): Promise<{ ok: true; instanceId: string | null } | { ok: false; reason: string }> {
+    if (!route.dedicatedRouting?.enabled) {
+      return { ok: true, instanceId: null };
+    }
+    const stored = decision
+      ? null
+      : task
+        ? await repos.routing.findByTask(task.id)
+        : await repos.routing.findByObjectivePurpose(run.id, purpose);
+    const selection = decision ?? (stored ? selectionFromStored(stored) : null);
+    const evidence = stored?.runtimeEvidence.dedicatedModelVersion;
+    const pinnedModelVersion = typeof evidence === "string"
+      ? evidence
+      : route.dedicatedRouting.instances.find((instance) => instance.instanceId === selection?.servingInstanceId)?.modelVersion ?? null;
+    const gate = gateDedicatedExecution(selection, route.dedicatedRouting.instances, pinnedModelVersion);
+    return gate.ok ? { ok: true, instanceId: gate.instanceId } : gate;
   }
 
   private async messagesFor(
@@ -1280,6 +1317,15 @@ export class ObjectiveService {
       resourceAllowed: route.routingResourceAllowed !== false,
       memoryKnown: route.routingMemoryKnown === true,
       servingBackend: "ollama",
+      dedicated: route.dedicatedRouting?.enabled
+        ? {
+            instances: route.dedicatedRouting.instances,
+            requestedEndpoint: null,
+            requestedInstanceId: null,
+            pinnedInstanceId: null,
+            pinnedModelVersion: null,
+          }
+        : undefined,
       certifiedCapabilityCount,
       syntheticCapabilityCount,
       executionDigest: null,
@@ -1318,6 +1364,9 @@ export class ObjectiveService {
         loadedCount: evidence.loadedCount,
         policyVersion: LEGACY_ROUTING_POLICY_VERSION,
         resourceDetail: route.routingResourceDetail ?? null,
+        dedicatedModelVersion: selection.servingInstanceId
+          ? route.dedicatedRouting?.instances.find((instance) => instance.instanceId === selection.servingInstanceId)?.modelVersion ?? null
+          : null,
       },
       createdAt: this.now().toISOString(),
     };

@@ -296,6 +296,7 @@ describe("governed department routing", () => {
       maxOutputTokens: 8,
       timeoutMs: 1000,
       cachedText: null,
+      servingInstanceId: null,
     }, snapRoute());
     expect(provider.requests.map((request) => request.modelAlias)).toEqual(["specialist:v1"]);
     expect(calls).toEqual(["specialist:v1"]);
@@ -401,5 +402,6 @@ function prepared(alias: string) {
     maxOutputTokens: 8,
     timeoutMs: 1000,
     cachedText: null,
+    servingInstanceId: null,
   };
 }

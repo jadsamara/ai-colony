@@ -3,6 +3,7 @@ import {
   InferenceError,
   MessageHandlingError,
   recordReceipt,
+  resolveDedicatedProvider,
   type InferenceProvider,
   type InferenceRequest,
   type InferenceRoute,
@@ -36,8 +37,9 @@ export async function executePrepared(
     signal,
   };
   request.messages = (await service.memoryMessages(prepared)) ?? prepared.messages;
+  const selected = resolveDedicatedProvider(provider, prepared.servingInstanceId, route.dedicatedRouting);
   try {
-    const result = await provider.generate(request);
+    const result = await selected.generate(request);
     const pinnedDigest = route.routingEvidence?.digest ?? null;
     if (result.servedDigest && pinnedDigest && result.servedDigest !== pinnedDigest) {
       await service.failGeneration(prepared.requestId, "Resolved digest did not match the pinned routing decision");
