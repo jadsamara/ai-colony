@@ -1,5 +1,7 @@
 # M12.1 Docker activation
 
+Implementation commit: `1a41be527f358cd99c309541dcbf00412384e8ef`.
+
 M12 gave every active department its own agent runtime and serving-instance identity. M12.1 connects that design to the canonical database, the objective workers, and a Docker Compose deployment. No paid GCP resource was created, and no real Qwen process was started.
 
 ## Canonical migration
