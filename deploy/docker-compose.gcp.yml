@@ -752,21 +752,21 @@ services:
       timeout: 5s
       retries: 20
       start_period: 20s
-  ollama-gaming:
+  ollama-product:
     image: ollama/ollama:0.9.6
     environment:
-      COLONY_DEPARTMENT_SLUG: gaming
-      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031c
+      COLONY_DEPARTMENT_SLUG: product
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031d
       COLONY_MODEL_VERSION: qwen3-8b-base-v1
     labels:
       colony.mode: real
-      colony.department: gaming
-      colony.instance: 00000000-0000-4000-8000-00000000031c
+      colony.department: product
+      colony.instance: 00000000-0000-4000-8000-00000000031d
       colony.model: qwen3-8b-base-v1
-      colony.endpoint: http://ollama-gaming:11434
+      colony.endpoint: http://ollama-product:11434
       colony.gpu: unassigned
     volumes:
-      - colony-model-gaming:/root/.ollama
+      - colony-model-product:/root/.ollama
     networks: [colony-dedicated]
     mem_limit: 8g
     cpus: 2
@@ -777,7 +777,7 @@ services:
       timeout: 5s
       retries: 20
       start_period: 20s
-  agent-gaming:
+  agent-product:
     image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
     pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
     build:
@@ -785,37 +785,37 @@ services:
       dockerfile: deploy/Dockerfile.agent
     command: ["node", "packages/workflows/dist/cli.js", "specialist"]
     environment:
-      COLONY_DEPARTMENT_SLUG: gaming
-      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001c
-      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000212
-      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031c
+      COLONY_DEPARTMENT_SLUG: product
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001d
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000213
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031d
       COLONY_MODEL_VERSION: qwen3-8b-base-v1
       COLONY_MODE: real
       COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
       COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
       COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
-      INFERENCE_BASE_URL: http://ollama-gaming:11434
+      INFERENCE_BASE_URL: http://ollama-product:11434
       INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
       DATABASE_URL: ${DATABASE_URL:-}
       RABBITMQ_URL: ${RABBITMQ_URL:-}
     labels:
       colony.mode: real
-      colony.department: Gaming
-      colony.instance: 00000000-0000-4000-8000-00000000031c
+      colony.department: Product
+      colony.instance: 00000000-0000-4000-8000-00000000031d
       colony.model: qwen3-8b-base-v1
-      colony.endpoint: http://ollama-gaming:11434
-      colony.memory: department:gaming
+      colony.endpoint: http://ollama-product:11434
+      colony.memory: department:product
     volumes:
       - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
     depends_on:
-      ollama-gaming:
+      ollama-product:
         condition: service_healthy
     networks: [colony-dedicated]
     mem_limit: 1g
     cpus: 1
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://ollama-gaming:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://ollama-product:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 20
@@ -835,4 +835,6 @@ volumes:
   colony-model-math:
   colony-model-reasoning:
   colony-model-science:
+  colony-model-product:
+  # Historical Gaming model volume. No active service mounts it, and stop does not delete it.
   colony-model-gaming:

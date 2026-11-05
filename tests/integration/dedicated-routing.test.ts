@@ -6,6 +6,7 @@ import {
   ObjectiveService,
   bindDedicatedEndpoints,
   departmentProfiles,
+  inventoryDepartmentStatus,
   planDedicatedInstances,
   type DepartmentSource,
   type InferenceRoute,
@@ -22,7 +23,7 @@ const departments: DepartmentSource[] = SEED_DEPARTMENTS.map(([id, name, slug, ,
   id,
   name,
   slug,
-  status: "active",
+  status: inventoryDepartmentStatus(slug),
   purpose,
 }));
 const profiles = departmentProfiles(
@@ -48,8 +49,15 @@ describe("dedicated objective routing", () => {
     const second = await ensureDedicatedInventory(testDb());
     expect(first.activeDepartments).toBe(12);
     expect(first.engineeringStatus).toBeNull();
-    expect(new Set(first.instances.map((instance) => instance.endpointReference)).size).toBe(12);
-    expect(new Set(first.instances.map((instance) => instance.instanceId)).size).toBe(12);
+    expect(first.instances).toHaveLength(13);
+    expect(new Set(first.instances.map((instance) => instance.endpointReference)).size).toBe(13);
+    expect(new Set(first.instances.map((instance) => instance.instanceId)).size).toBe(13);
+    expect(first.instances.find((instance) => instance.endpointReference === "serving://product")).toMatchObject({
+      status: "configured",
+    });
+    expect(first.instances.find((instance) => instance.endpointReference === "serving://gaming")).toMatchObject({
+      status: "stopped",
+    });
     expect(second.insertedInstances).toBe(0);
     expect(second.insertedAgents).toBe(0);
   });

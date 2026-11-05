@@ -697,7 +697,7 @@ services:
       timeout: 3s
       retries: 12
       start_period: 5s
-  mock-gaming:
+  mock-product:
     image: ai-colony-mock:m12.1
     pull_policy: build
     build:
@@ -705,18 +705,18 @@ services:
       dockerfile: Dockerfile
     command: ["node", "mock-cli.js"]
     environment:
-      COLONY_DEPARTMENT_SLUG: gaming
-      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001c
-      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031c
+      COLONY_DEPARTMENT_SLUG: product
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001d
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031d
       COLONY_BIND: 0.0.0.0
       COLONY_MOCK_PORT: "8080"
       COLONY_MODE: mock
     labels:
       colony.mode: mock
-      colony.department: gaming
-      colony.instance: 00000000-0000-4000-8000-00000000031c
+      colony.department: product
+      colony.instance: 00000000-0000-4000-8000-00000000031d
       colony.model: qwen3-8b-base-v1
-      colony.endpoint: http://mock-gaming:8080
+      colony.endpoint: http://mock-product:8080
     networks: [colony-mock]
     mem_limit: 128m
     cpus: 0.25
@@ -727,28 +727,28 @@ services:
       timeout: 3s
       retries: 12
       start_period: 5s
-  agent-gaming:
+  agent-product:
     image: ai-colony-mock:m12.1
     pull_policy: never
     command: ["node", "department-process.js"]
     environment:
-      COLONY_DEPARTMENT_SLUG: gaming
-      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001c
-      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000212
-      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031c
+      COLONY_DEPARTMENT_SLUG: product
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001d
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000213
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031d
       COLONY_MODEL_VERSION: qwen3-8b-base-v1
-      COLONY_ENDPOINT: http://mock-gaming:8080
+      COLONY_ENDPOINT: http://mock-product:8080
       COLONY_MODE: mock
       COLONY_ACCEPT_TASKS: "false"
     labels:
       colony.mode: mock
-      colony.department: Gaming
-      colony.instance: 00000000-0000-4000-8000-00000000031c
+      colony.department: Product
+      colony.instance: 00000000-0000-4000-8000-00000000031d
       colony.model: qwen3-8b-base-v1
-      colony.endpoint: http://mock-gaming:8080
-      colony.memory: department:gaming
+      colony.endpoint: http://mock-product:8080
+      colony.memory: department:product
     depends_on:
-      mock-gaming:
+      mock-product:
         condition: service_healthy
     networks: [colony-mock]
     mem_limit: 128m
@@ -775,4 +775,6 @@ volumes:
   colony-model-math:
   colony-model-reasoning:
   colony-model-science:
+  colony-model-product:
+  # Historical Gaming model volume. No active service mounts it, and stop does not delete it.
   colony-model-gaming:

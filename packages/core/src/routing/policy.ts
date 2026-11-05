@@ -1,8 +1,9 @@
 import { QWEN3_8B_MODEL_ID } from "@ai-colony/contracts";
 
 /**
- * Seeded departments that existed before M10 and may use the shared Qwen3-8B
- * compatibility route when they have no active assignment.
+ * Seeded departments that may use the shared Qwen3-8B compatibility route
+ * when they have no active assignment. Archived Gaming remains so historical
+ * ids still resolve. Inactive status is denied before this list is consulted.
  * The proposed API department `engineering` is intentionally absent.
  */
 export const LEGACY_DEPARTMENT_IDS = [
@@ -18,6 +19,7 @@ export const LEGACY_DEPARTMENT_IDS = [
   "00000000-0000-4000-8000-00000000001a",
   "00000000-0000-4000-8000-00000000001b",
   "00000000-0000-4000-8000-00000000001c",
+  "00000000-0000-4000-8000-00000000001d",
 ] as const;
 
 export const LEGACY_ROUTING_POLICY_VERSION = "m10-legacy-shared-qwen3-8b-v1";

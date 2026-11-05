@@ -91,6 +91,13 @@ const SPECIALIZATIONS: Record<string, { role: string; instructions: string; tool
     tools: ["simulate_turn"],
     collaborators: ["reasoning"],
   },
+  product: {
+    role: "department_agent",
+    instructions:
+      "Identify colony gaps from authorized evidence and propose a measured improvement. Select participants from the evidence. Do not approve your own proposal, create or activate a department, promote weights, deploy infrastructure, or mark an improvement successful without independent evaluation.",
+    tools: ["propose_improvement", "select_participants", "request_evaluation"],
+    collaborators: ["orchestration", "evaluation", "monitoring", "memory-and-forgetting"],
+  },
 };
 
 export function departmentProfiles(

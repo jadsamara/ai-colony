@@ -73,14 +73,15 @@ describe("models, audit immutability, and seed", () => {
   it("seeds departments and models idempotently without resetting later state", async () => {
     const first = await seed(testDb());
     const second = await seed(testDb());
-    expect(first.departmentsInserted).toBe(12);
+    expect(first.departmentsInserted).toBe(13);
     expect(first.modelsInserted).toBe(3);
     expect(second.departmentsInserted).toBe(0);
     expect(second.modelsInserted).toBe(0);
 
     const departments = await testDb().select().from(schema.departments);
     const models = await testDb().select().from(schema.models);
-    expect(departments).toHaveLength(12);
+    expect(departments).toHaveLength(13);
+    expect(departments.filter((department) => department.status === "active")).toHaveLength(12);
     expect(models).toHaveLength(3);
     expect(
       models.every((model) => model.artifactUri === null && model.status === "not_deployed"),

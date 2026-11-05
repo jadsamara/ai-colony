@@ -9,6 +9,7 @@ import {
   composeStopInvocation,
   departmentProfiles,
   estimateDedicatedCapacity,
+  inventoryDepartmentStatus,
   limitsFromEnv,
   planDedicatedInstances,
   planModelArtifacts,
@@ -20,6 +21,7 @@ import {
 import { createDatabase } from "./client.js";
 import { applyCanonicalMigration, readMigrationFile, servingConstraintNames } from "./canonical.js";
 import { SEED_AGENTS, SEED_DEPARTMENTS } from "./seed.js";
+import { installProductDepartment } from "./product-install.js";
 import { ensureDedicatedInventory, listDedicatedInstances, recordServingStatus } from "./serving-inventory.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -53,7 +55,7 @@ const departments: DepartmentSource[] = SEED_DEPARTMENTS.map(([id, name, slug, ,
   id,
   name,
   slug,
-  status: "active",
+  status: inventoryDepartmentStatus(slug),
   purpose,
 }));
 const profiles = departmentProfiles(
@@ -300,10 +302,11 @@ async function migrateCanonical(): Promise<void> {
     throw new Error("DATABASE_URL is required");
   }
   mkdirSync(path.join(root, "deploy/state"), { recursive: true });
-  const sql = readMigrationFile(path.join(root, "packages/database/src/migrations/0012_dedicated_serving.sql"));
+  const sql = readMigrationFile(path.join(root, "packages/database/src/migrations/0013_product_department.sql"));
   const result = await applyCanonicalMigration(databaseUrl, sql);
   const { db, close } = createDatabase(databaseUrl);
   try {
+    const product = await installProductDepartment(db);
     const inventory = await ensureDedicatedInventory(db);
     const constraints = await servingConstraintNames(db);
     console.log(JSON.stringify({
@@ -314,6 +317,7 @@ async function migrateCanonical(): Promise<void> {
       insertedAgents: inventory.insertedAgents,
       insertedInstances: inventory.insertedInstances,
       engineeringStatus: inventory.engineeringStatus,
+      product,
       endpoints: inventory.instances.map((instance) => instance.endpointReference),
       constraints,
     }, null, 2));

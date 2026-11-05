@@ -49,6 +49,10 @@ export function renderDedicatedCompose(input: {
   for (const profile of input.profiles) {
     blocks.push(`  colony-model-${profile.slug}:`);
   }
+  if (!input.profiles.some((profile) => profile.slug === "gaming")) {
+    blocks.push("  # Historical Gaming model volume. No active service mounts it, and stop does not delete it.");
+    blocks.push("  colony-model-gaming:");
+  }
   return {
     fileName: input.mode === "mock" ? "deploy/docker-compose.mock.yml" : "deploy/docker-compose.gcp.yml",
     yaml: `${blocks.join("\n")}\n`,

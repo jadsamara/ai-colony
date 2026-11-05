@@ -4,6 +4,7 @@ import {
   bindDedicatedEndpoints,
   createDepartmentColony,
   departmentProfiles,
+  inventoryDepartmentStatus,
   estimateDedicatedCapacity,
   evaluateRouting,
   gcpDeploymentPlan,
@@ -21,7 +22,7 @@ const departments: DepartmentSource[] = SEED_DEPARTMENTS.map(([id, name, slug, ,
   id,
   name,
   slug,
-  status: "active",
+  status: inventoryDepartmentStatus(slug),
   purpose,
 }));
 const agents = SEED_AGENTS.map(([id, departmentId]) => ({ id, departmentId }));

@@ -80,7 +80,11 @@ export async function applyCanonicalMigration(databaseUrl: string, migrationSql:
       throw new Error(`PostgreSQL version is not 17: ${identityBefore.version}`);
     }
     let applied = false;
-    if (!identityBefore.servingTable) {
+    const improvementRows = await db.execute<{ name: string | null }>(sql`
+      select to_regclass('public.product_improvement_proposals')::text as name
+    `);
+    const improvementTable = improvementRows[0]?.name ?? null;
+    if (!identityBefore.servingTable || !improvementTable) {
       await migrateDatabase(db);
       applied = true;
     }

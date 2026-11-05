@@ -25,7 +25,8 @@ const CANONICAL_DEPARTMENTS = [
   [MATH_ID, "Math", "math", "active"],
   ["00000000-0000-4000-8000-00000000001a", "Reasoning", "reasoning", "active"],
   [SCIENCE_ID, "Science", "science", "active"],
-  ["00000000-0000-4000-8000-00000000001c", "Gaming", "gaming", "active"],
+  ["00000000-0000-4000-8000-00000000001c", "Gaming", "gaming", "archived"],
+  ["00000000-0000-4000-8000-00000000001d", "Product", "product", "active"],
   [ENGINEERING_ID, "Engineering", "engineering", "proposed"],
 ] as const;
 

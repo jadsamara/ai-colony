@@ -17,6 +17,8 @@ export {
   recordServingStatus,
   type ServingInventoryResult,
 } from "./serving-inventory.js";
+export { installProductDepartment, type ProductInstallResult } from "./product-install.js";
+export { createImprovementRepository } from "./repositories/improvements.js";
 export { assessLedgerReadiness, ledgerSourceMigrations, type LedgerReadiness } from "./ledger-readiness.js";
 export { assessRoutingReadiness, routingSourceMigration, type RoutingReadiness, type RoutingDepartmentFinding } from "./routing-readiness.js";
 export {

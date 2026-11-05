@@ -7,6 +7,7 @@ import {
   resourceBudgetSchema,
 } from "@ai-colony/contracts";
 import {
+  PRODUCT_DEPARTMENT_ID,
   departmentProfiles,
   listRoleGrants,
   PERMISSION_DESCRIPTIONS,
@@ -17,6 +18,7 @@ import {
 } from "@ai-colony/core";
 import { sql } from "drizzle-orm";
 import type { Database } from "./client.js";
+import { installProductDepartment } from "./product-install.js";
 import {
   agents,
   auditEvents,
@@ -133,6 +135,13 @@ const INITIAL_DEPARTMENTS = [
     "Game-playing and interactive simulation tasks.",
     "Own future game and simulation benchmarks.",
   ],
+  [
+    "00000000-0000-4000-8000-00000000001d",
+    "Product",
+    "product",
+    "Continuous improvement of the colony as a system.",
+    "Identify gaps, propose measured improvements, and track outcomes. Cannot approve its own proposals or create departments.",
+  ],
 ] as const;
 
 const INITIAL_MODELS = [
@@ -175,6 +184,7 @@ const FOUNDING_AGENTS = [
   ["00000000-0000-4000-8000-000000000207", "00000000-0000-4000-8000-00000000001a", "Reasoning", "department_agent", "seed.reasoning", "00000000-0000-4000-8000-000000000101", "Completes reasoning tasks."],
   ["00000000-0000-4000-8000-000000000211", "00000000-0000-4000-8000-000000000014", "Evolution", "evolution_agent", "seed.evolution", "00000000-0000-4000-8000-000000000101", "Proposes structural changes. Cannot create or activate a department."],
   ["00000000-0000-4000-8000-000000000212", "00000000-0000-4000-8000-00000000001c", "Gaming", "department_agent", "seed.gaming", "00000000-0000-4000-8000-000000000101", "Owns game and simulation tasks. Cannot reach outside the task state."],
+  ["00000000-0000-4000-8000-000000000213", "00000000-0000-4000-8000-00000000001d", "Product", "department_agent", "seed.product", "00000000-0000-4000-8000-000000000101", "Proposes colony improvements. Cannot approve them, create a department, promote weights, or deploy infrastructure."],
 ] as const;
 
 export const SEED_DEPARTMENTS = INITIAL_DEPARTMENTS;
@@ -251,6 +261,9 @@ export async function seed(db: Database): Promise<SeedResult> {
     await seedFoundationsInTx(tx);
     let departmentsInserted = 0;
     for (const [id, name, slug, description, purpose] of INITIAL_DEPARTMENTS) {
+      if (slug === "product") {
+        continue;
+      }
       const inserted = await tx
         .insert(departments)
         .values({
@@ -330,6 +343,9 @@ export async function seed(db: Database): Promise<SeedResult> {
     });
     let agentsInserted = 0;
     for (const [id, departmentId, name, role, namespace, modelId, description] of FOUNDING_AGENTS) {
+      if (departmentId === PRODUCT_DEPARTMENT_ID) {
+        continue;
+      }
       const inserted = await tx
         .insert(agents)
         .values({
@@ -374,9 +390,17 @@ export async function seed(db: Database): Promise<SeedResult> {
       });
     }
 
+    const departmentRows = await tx.select().from(departments);
+    const agentRows = await tx.select().from(agents);
     const profiles = departmentProfiles(
-      INITIAL_DEPARTMENTS.map(([id, name, slug, , purpose]) => ({ id, name, slug, status: "active", purpose })),
-      FOUNDING_AGENTS.map(([id, departmentId]) => ({ id, departmentId })),
+      departmentRows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        slug: row.slug,
+        status: row.status,
+        purpose: row.purpose,
+      })),
+      agentRows.map((row) => ({ id: row.id, departmentId: row.departmentId })),
     );
     for (const instance of planDedicatedInstances(profiles)) {
       const inserted = await tx
@@ -411,7 +435,12 @@ export async function seed(db: Database): Promise<SeedResult> {
       });
     }
 
-    return { departmentsInserted, modelsInserted, agentsInserted };
+    const installed = await installProductDepartment(tx);
+    return {
+      departmentsInserted: departmentsInserted + installed.departmentsInserted,
+      modelsInserted,
+      agentsInserted: agentsInserted + installed.agentsInserted,
+    };
   });
 }
 
@@ -474,6 +503,8 @@ export async function truncateColony(db: Database): Promise<void> {
       memories,
       inference_usage,
       inference_requests,
+      product_improvement_events,
+      product_improvement_proposals,
       department_agent_checkpoints,
       department_serving_events,
       department_serving_instances,

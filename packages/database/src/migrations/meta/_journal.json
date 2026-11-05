@@ -92,6 +92,13 @@
       "when": 1793554000000,
       "tag": "0012_dedicated_serving",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793555000000,
+      "tag": "0013_product_department",
+      "breakpoints": true
     }
   ]
 }

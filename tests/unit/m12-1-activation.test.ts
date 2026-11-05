@@ -8,6 +8,7 @@ import {
   composeStopInvocation,
   departmentProfiles,
   estimateDedicatedCapacity,
+  inventoryDepartmentStatus,
   gateDedicatedExecution,
   limitsFromEnv,
   planDedicatedInstances,
@@ -26,7 +27,7 @@ const departments: DepartmentSource[] = SEED_DEPARTMENTS.map(([id, name, slug, ,
   id,
   name,
   slug,
-  status: "active",
+  status: inventoryDepartmentStatus(slug),
   purpose,
 }));
 const profiles = departmentProfiles(
@@ -73,6 +74,16 @@ describe("M12.1 dedicated activation", () => {
     expect(real.yaml).not.toContain("nvidia");
     expect(real.yaml).not.toContain("\"11434:");
     expect(real.yaml).not.toContain("engineering");
+    expect(real.services).toContain("ollama-product");
+    expect(real.services).toContain("agent-product");
+    expect(real.services).not.toContain("ollama-gaming");
+    expect(real.services).not.toContain("agent-gaming");
+    expect(real.yaml).toContain("http://ollama-product:11434");
+    expect(real.yaml).toContain("colony-model-product:");
+    expect(real.yaml).toContain("colony-model-gaming:");
+    expect(mock.services).toContain("mock-product");
+    expect(mock.services).not.toContain("mock-gaming");
+    expect(mock.yaml).toContain("http://mock-product:8080");
     expect(real.yaml).toContain("ollama/ollama:0.9.6");
     expect(mock.yaml).toContain("COLONY_MODE: mock");
     expect(mock.yaml).not.toContain("ollama/ollama");

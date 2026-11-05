@@ -2070,3 +2070,58 @@ export const departmentAgentCheckpoints = pgTable(
   },
   (table) => [unique("department_agent_checkpoints_task_unique").on(table.agentId, table.taskId)],
 );
+
+export const productImprovementProposals = pgTable(
+  "product_improvement_proposals",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    proposedByAgentId: uuid("proposed_by_agent_id").notNull().references(() => agents.id, { onDelete: "restrict" }),
+    problem: text("problem").notNull(),
+    evidence: jsonb("evidence").$type<unknown[]>().notNull(),
+    expectedBenefit: text("expected_benefit").notNull(),
+    participants: jsonb("participants").$type<unknown[]>().notNull(),
+    estimatedCost: text("estimated_cost").notNull(),
+    risk: text("risk").notNull(),
+    successCriteria: text("success_criteria").notNull(),
+    priority: text("priority").notNull(),
+    dependencies: jsonb("dependencies").$type<string[]>().notNull(),
+    approvalRequirements: jsonb("approval_requirements").$type<string[]>().notNull(),
+    recommendsNewDepartment: boolean("recommends_new_department").notNull(),
+    status: text("status").notNull(),
+    evaluationEvidence: jsonb("evaluation_evidence").$type<Record<string, unknown> | null>(),
+    recommendation: text("recommendation"),
+    outcome: text("outcome"),
+    successful: boolean("successful").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("product_improvement_proposals_status_idx").on(table.status),
+    index("product_improvement_proposals_department_idx").on(table.departmentId),
+    check(
+      "product_improvement_proposals_status_check",
+      sql`${table.status} in ('proposed', 'under_review', 'approved', 'in_progress', 'evaluating', 'completed', 'rejected')`,
+    ),
+    check("product_improvement_proposals_priority_check", sql`${table.priority} in ('low', 'medium', 'high')`),
+    check(
+      "product_improvement_proposals_recommendation_check",
+      sql`${table.recommendation} is null or ${table.recommendation} in ('retain', 'revise', 'revert')`,
+    ),
+  ],
+);
+
+export const productImprovementEvents = pgTable(
+  "product_improvement_events",
+  {
+    id: uuid("id").primaryKey(),
+    proposalId: uuid("proposal_id").notNull().references(() => productImprovementProposals.id, { onDelete: "restrict" }),
+    eventType: text("event_type").notNull(),
+    actorId: text("actor_id").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("product_improvement_events_proposal_idx").on(table.proposalId, table.createdAt)],
+);
