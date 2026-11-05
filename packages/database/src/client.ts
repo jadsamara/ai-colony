@@ -11,7 +11,7 @@ export function createDatabase(databaseUrl: string): {
   close: () => Promise<void>;
 } {
   const client = postgres(databaseUrl, {
-    max: 10,
+    max: 3,
     idle_timeout: 20,
     connect_timeout: 10,
   });

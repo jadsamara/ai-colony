@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    env_file:
+      - ./postgres/postgres.env
+    volumes:
+      - colony-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U colony -d ai_colony"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - colony-db
+
+networks:
+  colony-db:
+    name: colony-db
+    internal: true
+
+volumes:
+  colony-postgres-data:

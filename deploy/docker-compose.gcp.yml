@@ -5,7 +5,7 @@
 name: ai-colony-dedicated
 services:
   ollama-ceo:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: ceo
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000311
@@ -73,7 +73,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-orchestration:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: orchestration
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000312
@@ -141,7 +141,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-monitoring:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: monitoring
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000313
@@ -209,7 +209,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-evolution:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: evolution
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000314
@@ -277,7 +277,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-weight-optimization:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: weight-optimization
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000315
@@ -345,7 +345,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-memory-and-forgetting:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: memory-and-forgetting
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000316
@@ -413,7 +413,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-evaluation:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: evaluation
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000317
@@ -481,7 +481,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-research:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: research
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000318
@@ -549,7 +549,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-math:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: math
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000319
@@ -617,7 +617,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-reasoning:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: reasoning
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031a
@@ -685,7 +685,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-science:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: science
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031b
@@ -753,7 +753,7 @@ services:
       retries: 20
       start_period: 20s
   ollama-product:
-    image: ollama/ollama:0.9.6
+    image: ollama/ollama:latest
     environment:
       COLONY_DEPARTMENT_SLUG: product
       COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031d

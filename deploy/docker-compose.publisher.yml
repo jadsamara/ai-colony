@@ -1,0 +1,16 @@
+services:
+  colony-publisher:
+    image: ai-colony-agent:m12.1
+    command: ["node", "packages/messaging/dist/publisher-cli.js"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      RABBITMQ_URL: ${RABBITMQ_URL:?RABBITMQ_URL is required}
+    networks:
+      - colony-db
+
+networks:
+  colony-db:
+    external: true
+    name: colony-db

@@ -1,0 +1,37 @@
+services:
+  agent-ceo:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-orchestration:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-monitoring:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-evolution:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-weight-optimization:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-memory-and-forgetting:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-evaluation:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-research:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-math:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-reasoning:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-science:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"
+  agent-product:
+    environment:
+      COLONY_ACCEPT_TASKS: "true"

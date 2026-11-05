@@ -1,0 +1,42 @@
+services:
+  agent-orchestration:
+    networks:
+      - colony-db
+  agent-evaluation:
+    networks:
+      - colony-db
+  agent-memory-and-forgetting:
+    networks:
+      - colony-db
+  agent-monitoring:
+    networks:
+      - colony-db
+  agent-research:
+    networks:
+      - colony-db
+  agent-ceo:
+    networks:
+      - colony-db
+  agent-math:
+    networks:
+      - colony-db
+  agent-product:
+    networks:
+      - colony-db
+  agent-reasoning:
+    networks:
+      - colony-db
+  agent-science:
+    networks:
+      - colony-db
+  agent-weight-optimization:
+    networks:
+      - colony-db
+  agent-evolution:
+    networks:
+      - colony-db
+
+networks:
+  colony-db:
+    external: true
+    name: colony-db

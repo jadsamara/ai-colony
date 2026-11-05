@@ -1,0 +1,21 @@
+services:
+  colony-api-test:
+    image: ai-colony-agent:m12.1
+    command: ["node", "apps/api/dist/server.js"]
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      AUTH_MODE: development
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - colony-db
+
+networks:
+  colony-db:
+    external: true
+    name: colony-db
