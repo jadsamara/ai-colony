@@ -25,7 +25,7 @@ const id = "00000000-0000-4000-8000-0000000000aa";
 
 describe("IACP schemas and delivery policy", () => {
   it("accepts all ten message payloads and rejects an empty payload", () => {
-    expect(MESSAGE_TYPES).toHaveLength(16);
+    expect(MESSAGE_TYPES).toHaveLength(17);
     expect(taskRequestPayloadSchema.parse(taskPayload()).taskId).toBe(id);
     expect(
       taskResultPayloadSchema.parse({

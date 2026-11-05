@@ -99,6 +99,34 @@
       "when": 1793555000000,
       "tag": "0013_product_department",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793556000000,
+      "tag": "0014_efficiency",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1793557000000,
+      "tag": "0015_autonomy",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793558000000,
+      "tag": "0016_group_conversations",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793559000000,
+      "tag": "0017_conversation_runtime",
+      "breakpoints": true
     }
   ]
 }

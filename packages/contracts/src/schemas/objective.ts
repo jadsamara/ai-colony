@@ -66,6 +66,7 @@ export const objectiveSchema = z.object({
   submitterPrincipalId: uuidSchema,
   objective: z.string(),
   status: objectiveStatusSchema,
+  origin: z.enum(["human", "autonomous"]),
   correlationId: uuidSchema,
   failureReason: z.string().nullable(),
   finalOutput: z.string().nullable(),
@@ -242,6 +243,62 @@ export const objectiveListQuerySchema = paginationQuerySchema.extend({
 });
 export const objectiveCancelResponseSchema = objectiveResponseSchema;
 
+const performanceDurationSchema = z.number().int().nonnegative().nullable();
+
+export const objectivePerformanceSchema = z.object({
+  objectiveId: uuidSchema,
+  executionPath: z.enum(["direct", "lightweight", "full"]).nullable(),
+  rationale: z.string().nullable(),
+  endToEndMs: performanceDurationSchema,
+  planningMs: performanceDurationSchema,
+  planningGpuMs: performanceDurationSchema,
+  inferenceRequestCount: z.number().int().nonnegative(),
+  inputTokens: z.number().int().nonnegative().nullable(),
+  outputTokens: z.number().int().nonnegative().nullable(),
+  tokenAccounting: z.enum(["observed", "partial", "unavailable"]),
+  unavailableTokenRequests: z.number().int().nonnegative(),
+  specialistGpuMs: performanceDurationSchema,
+  synthesisMs: performanceDurationSchema,
+  synthesisGpuMs: performanceDurationSchema,
+  tasks: z.array(
+    z.object({
+      taskId: uuidSchema,
+      departmentSlug: z.string(),
+      queueWaitMs: performanceDurationSchema,
+      dependencyWaitMs: performanceDurationSchema,
+      executionMs: performanceDurationSchema,
+      gpuInferenceMs: performanceDurationSchema,
+      messageDeliveryMs: performanceDurationSchema,
+    }),
+  ),
+  inferences: z.array(
+    z.object({
+      id: uuidSchema,
+      taskId: uuidSchema.nullable(),
+      purpose: z.string(),
+      departmentSlug: z.string(),
+      status: z.string(),
+      gpuLatencyMs: performanceDurationSchema,
+      inputTokens: z.number().int().nonnegative().nullable(),
+      outputTokens: z.number().int().nonnegative().nullable(),
+      tokenSource: z.enum(["observed", "unavailable", "estimated"]).nullable(),
+    }),
+  ),
+  departments: z.array(
+    z.object({
+      departmentSlug: z.string(),
+      taskCount: z.number().int().nonnegative(),
+      inferenceRequestCount: z.number().int().nonnegative(),
+      gpuInferenceMs: performanceDurationSchema,
+      executionMs: performanceDurationSchema,
+    }),
+  ),
+});
+
+export const objectivePerformanceResponseSchema = z.object({
+  performance: objectivePerformanceSchema,
+});
+
 export type ObjectiveStatus = z.infer<typeof objectiveStatusSchema>;
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export type TaskType = z.infer<typeof taskTypeSchema>;
@@ -257,3 +314,4 @@ export type InferenceHealth = z.infer<typeof inferenceHealthSchema>;
 export type LiveModelHealth = z.infer<typeof liveModelHealthSchema>;
 export type ColonyHealth = z.infer<typeof colonyHealthSchema>;
 export type MonitoringOverview = z.infer<typeof monitoringOverviewSchema>;
+export type ObjectivePerformance = z.infer<typeof objectivePerformanceSchema>;

@@ -7,6 +7,7 @@ import {
   objectiveCreateSchema,
   objectiveListQuerySchema,
   objectiveListResponseSchema,
+  objectivePerformanceResponseSchema,
   objectiveResponseSchema,
   objectiveTaskListResponseSchema,
   paginationQuerySchema,
@@ -88,6 +89,20 @@ export async function registerObjectiveRoutes(app: FastifyInstance): Promise<voi
     },
     async (request) =>
       app.services.objectives.events(requestContext(request), request.params.objectiveId, request.query),
+  );
+
+  route.get(
+    "/api/v1/objectives/:objectiveId/performance",
+    {
+      schema: {
+        tags: ["objectives"],
+        params: z.object({ objectiveId: z.string().uuid() }),
+        response: { 200: objectivePerformanceResponseSchema, ...errorResponses },
+      },
+    },
+    async (request) => ({
+      performance: await app.services.objectives.performance(requestContext(request), request.params.objectiveId),
+    }),
   );
 
   route.post(

@@ -24,6 +24,7 @@ import {
   models,
   principals,
 } from "../schema/index.js";
+import { createAutonomyRepository } from "./autonomy.js";
 import { createMemoryRepository } from "./memories.js";
 import { createEvaluationRepository } from "./evaluation.js";
 import { createLearningRepository } from "./learning.js";
@@ -593,6 +594,7 @@ export function createRepositories(db: DbExecutor): Repositories {
     learning: createLearningRepository(db),
     capability: createCapabilityRepository(db),
     routing: createRoutingRepository(db),
+    autonomy: createAutonomyRepository(db),
   };
 }
 

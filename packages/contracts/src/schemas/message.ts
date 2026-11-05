@@ -3,6 +3,7 @@ import {
   ADDRESSING_MODES,
   IACP_PAYLOAD_SCHEMA_VERSION,
   IACP_PROTOCOL_VERSION,
+  DIALOGUE_KINDS,
   MESSAGE_STATUSES,
   MESSAGE_TYPES,
 } from "../constants.js";
@@ -200,6 +201,21 @@ export const capabilityUpdatePayloadSchema = z
   })
   .strict();
 
+export const dialogueKindSchema = z.enum(DIALOGUE_KINDS);
+export type DialogueKind = z.infer<typeof dialogueKindSchema>;
+
+export const departmentDialoguePayloadSchema = z
+  .object({
+    conversationId: uuidSchema,
+    kind: dialogueKindSchema,
+    topic: text(500),
+    body: text(4000),
+    objectiveId: uuidSchema.nullable(),
+    parentMessageId: uuidSchema.nullable(),
+    addressedDepartmentId: uuidSchema.nullable().optional(),
+  })
+  .strict();
+
 export const payloadSchemaByType = {
   TASK_REQUEST: taskRequestPayloadSchema,
   TASK_RESULT: taskResultPayloadSchema,
@@ -217,6 +233,7 @@ export const payloadSchemaByType = {
   KNOWLEDGE_VALIDATION: knowledgeValidationPayloadSchema,
   LEARNING_CYCLE_RESULT: learningCycleResultPayloadSchema,
   CAPABILITY_UPDATE: capabilityUpdatePayloadSchema,
+  DEPARTMENT_DIALOGUE: departmentDialoguePayloadSchema,
 } as const;
 
 const messageFields = {
@@ -265,6 +282,7 @@ export const messageSchema = z.discriminatedUnion("messageType", [
   envelope("KNOWLEDGE_VALIDATION", knowledgeValidationPayloadSchema),
   envelope("LEARNING_CYCLE_RESULT", learningCycleResultPayloadSchema),
   envelope("CAPABILITY_UPDATE", capabilityUpdatePayloadSchema),
+  envelope("DEPARTMENT_DIALOGUE", departmentDialoguePayloadSchema),
 ]);
 
 export const messagePublishSchema = z

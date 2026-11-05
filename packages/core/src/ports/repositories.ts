@@ -28,6 +28,7 @@ import type {
   TaskType,
 } from "@ai-colony/contracts";
 import type { DecodedCursor } from "../pagination.js";
+import type { AutonomyRepository } from "../autonomy/repository.js";
 import type { CapabilityRepository } from "../capability/repository.js";
 import type { EvaluationRepository } from "../evaluation/repository.js";
 import type { LearningRepository } from "../learning/repository.js";
@@ -428,6 +429,7 @@ export interface ObjectiveRun {
   submitterPrincipalId: string;
   objective: string;
   status: ObjectiveStatus;
+  origin: "human" | "autonomous";
   correlationId: string;
   failureReason: string | null;
   finalOutput: string | null;
@@ -448,6 +450,10 @@ export interface ObjectiveRun {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  executionPath: "direct" | "lightweight" | "full" | null;
+  executionRationale: string | null;
+  planningCompletedAt: string | null;
+  synthesisStartedAt: string | null;
   updatedAt: string;
 }
 
@@ -471,8 +477,30 @@ export interface ObjectiveTaskRecord {
   leaseOwner: string | null;
   leaseUntil: string | null;
   createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
   updatedAt: string;
   objectiveCreatedAt: string;
+}
+
+export interface InferenceObservation {
+  id: string;
+  taskId: string | null;
+  purpose: string;
+  status: string;
+  createdAt: string;
+  completedAt: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  tokenSource: "observed" | "unavailable" | "estimated" | null;
+  latencyMs: number | null;
+}
+
+export interface MessageTiming {
+  id: string;
+  createdAt: string;
+  publishedAt: string | null;
+  deliveredAt: string | null;
 }
 
 export interface InferenceRow {
@@ -528,6 +556,7 @@ export interface ObjectiveRepository {
     objective: string;
     correlationId: string;
     executionAuthorized: boolean;
+    origin?: "human" | "autonomous";
     memoryProfile: "shared" | "split";
     primaryModelId: string;
     operationalModelId: string | null;
@@ -545,6 +574,10 @@ export interface ObjectiveRepository {
       planCorrections: number;
       startedAt: Date | null;
       completedAt: Date | null;
+      executionPath: ObjectiveRun["executionPath"];
+      executionRationale: string | null;
+      planningCompletedAt: Date | null;
+      synthesisStartedAt: Date | null;
     }>,
   ): Promise<ObjectiveRun>;
   listRuns(filter: {
@@ -578,6 +611,8 @@ export interface ObjectiveRepository {
     }>,
   ): Promise<void>;
   listTasks(objectiveId?: string): Promise<ObjectiveTaskRecord[]>;
+  listInferenceObservations(objectiveId: string): Promise<InferenceObservation[]>;
+  listMessageTimings(ids: string[]): Promise<MessageTiming[]>;
   lockTask(id: string): Promise<ObjectiveTaskRecord | null>;
   saveTask(
     id: string,
@@ -916,6 +951,7 @@ export interface Repositories {
   experiments: ExperimentRepository;
   capability: CapabilityRepository;
   routing: RoutingRepository;
+  autonomy: AutonomyRepository;
 }
 
 export interface Persistence {

@@ -4,12 +4,14 @@ import {
   QWEN3_4B_MODEL_ID,
   QWEN3_8B_MODEL_ID,
   objectiveLimitsSchema,
+  objectivePerformanceSchema,
   objectivePlanSchema,
   objectiveSchema,
   objectiveTaskSchema,
   type Message,
   type ObjectiveCreate,
   type ObjectiveLimits,
+  type ObjectivePerformance,
   type ObjectiveRecord,
   type ObjectiveStatus,
   type ObjectiveTask,
@@ -34,6 +36,7 @@ import type {
   ObjectiveTaskRecord,
   Persistence,
 } from "../ports/repositories.js";
+import { buildPerformance, efficiencyPlan, routeObjective } from "./efficiency.js";
 import { extractJsonObject, validatePlan } from "./plan.js";
 import { planPrompt, RESEARCH_EVIDENCE_FOOTER, specialistPrompt, synthesisPrompt, withMemory } from "./prompts.js";
 import { blockedTaskIds, chooseDispatch, readyTaskIds } from "./schedule.js";
@@ -130,10 +133,22 @@ export class ObjectiveService {
     }
   }
 
-  async submit(ctx: RequestContext, input: ObjectiveCreate): Promise<ObjectiveRecord> {
+  async submit(
+    ctx: RequestContext,
+    input: ObjectiveCreate,
+    options?: { origin?: "human" | "autonomous" },
+  ): Promise<ObjectiveRecord> {
     this.authorizer.assert(ctx.actor, "objective:submit");
+    const origin = options?.origin ?? "human";
+    if (origin === "autonomous") {
+      this.authorizer.assert(ctx.actor, "autonomy:manage");
+      const settings = await this.persistence.repos.autonomy.settings();
+      if (!settings.enabled || settings.paused) {
+        throw new DomainError("INVALID_STATE", "Autonomous goal execution is not enabled", 409);
+      }
+    }
     const limits = objectiveLimitsSchema.parse({ ...DEFAULT_OBJECTIVE_LIMITS, ...input.limits });
-    const authorized = ROLE_PERMISSIONS[ctx.actor.role].has("objective:execute");
+    const authorized = origin === "human" ? ROLE_PERMISSIONS[ctx.actor.role].has("objective:execute") : true;
     const created = await this.persistence.transaction(async (repos) => {
       const run = await repos.objectives.insertRun({
         id: randomUUID(),
@@ -141,6 +156,7 @@ export class ObjectiveService {
         objective: input.objective,
         correlationId: randomUUID(),
         executionAuthorized: authorized,
+        origin,
         memoryProfile: "shared",
         primaryModelId: QWEN3_8B_MODEL_ID,
         operationalModelId: QWEN3_4B_MODEL_ID,
@@ -198,6 +214,16 @@ export class ObjectiveService {
       limit: query.limit,
       cursor: query.cursor ? decodeCursor(query.cursor) : null,
     });
+  }
+
+  async performance(ctx: RequestContext, id: string): Promise<ObjectivePerformance> {
+    const run = await this.requireVisible(ctx, id);
+    const tasks = await this.persistence.repos.objectives.listTasks(id);
+    const inferences = await this.persistence.repos.objectives.listInferenceObservations(id);
+    const messages = await this.persistence.repos.objectives.listMessageTimings(
+      tasks.flatMap((task) => (task.requestMessageId ? [task.requestMessageId] : [])),
+    );
+    return objectivePerformanceSchema.parse(buildPerformance({ run, tasks, inferences, messages }));
   }
 
   async cancel(ctx: RequestContext, id: string): Promise<ObjectiveRecord> {
@@ -295,13 +321,21 @@ export class ObjectiveService {
           await this.fail(repos, run, "A specialist task failed");
           return { action: "done" };
         }
+        let current = run;
         if (run.status === "scheduled") {
           assertObjectiveTransition("scheduled", "running");
-          await repos.objectives.saveRun(run.id, { status: "running", startedAt: this.now() });
+          current = await repos.objectives.saveRun(run.id, {
+            status: "running",
+            ...(run.startedAt ? {} : { startedAt: this.now() }),
+          });
+        }
+        if (current.executionPath === "direct" || current.executionPath === "lightweight") {
+          await this.assembleSpecialistOutput(repos, current, tasks);
+          return { action: "done" };
         }
         assertObjectiveTransition("running", "synthesizing");
-        await repos.objectives.saveRun(run.id, { status: "synthesizing" });
-        return this.prepareTextCall(repos, { ...run, status: "synthesizing" }, "synthesize", route, workerId, null);
+        await repos.objectives.saveRun(current.id, { status: "synthesizing", synthesisStartedAt: this.now() });
+        return this.prepareTextCall(repos, { ...current, status: "synthesizing" }, "synthesize", route, workerId, null);
       }
       if (run.status === "synthesizing") {
         return this.prepareTextCall(repos, run, "synthesize", route, workerId, null);
@@ -314,6 +348,47 @@ export class ObjectiveService {
       if (latest?.valid) {
         await this.materialize(repos, { ...run, status: "planning" }, objectivePlanSchema.parse(latest.body));
         return { action: "wait" };
+      }
+      if (run.planCorrections === 0) {
+        const decision = routeObjective(run.objective);
+        if (decision.path !== "full") {
+          const context = await this.planContext(repos, run.limits.maxInferenceRequests, run.limits.maxOutputTokens);
+          const validated = validatePlan(efficiencyPlan(run.objective, decision), context);
+          if (validated.plan) {
+            await repos.objectives.insertPlan({
+              id: randomUUID(),
+              objectiveId,
+              version: (latest?.version ?? 0) + 1,
+              body: { ...validated.plan },
+              valid: true,
+              errors: [],
+            });
+            const routed = await repos.objectives.saveRun(run.id, {
+              executionPath: decision.path,
+              executionRationale: decision.rationale,
+              planningCompletedAt: this.now(),
+            });
+            await this.materialize(repos, { ...routed, status: "planning" }, validated.plan);
+            await this.event(repos, objectiveId, "objective.routed", decision.rationale);
+            await repos.audit.append({
+              eventType: "objective.routed",
+              actorId: WORKER_ACTOR,
+              actorType: "system",
+              targetType: "objective",
+              targetId: objectiveId,
+              action: "objective.routed",
+              correlationId: run.correlationId,
+              beforeState: null,
+              afterState: null,
+              metadata: {
+                executionPath: decision.path,
+                rationale: decision.rationale,
+                departments: [...decision.departments],
+              },
+            });
+            return { action: "wait" };
+          }
+        }
       }
       const purpose = run.planCorrections > 0 ? "correct" : "plan";
       return this.prepareTextCall(
@@ -510,8 +585,10 @@ export class ObjectiveService {
       }
     });
     const current = await this.persistence.repos.objectives.listTasks();
+    const rankedRuns = await this.persistence.repos.objectives.listRuns({ limit: 100, cursor: null });
+    const rank = new Map(rankedRuns.data.map((run) => [run.id, run.origin === "autonomous" ? 1 : 0]));
     const inflight = current.filter((task) => task.status === "dispatched" || task.status === "running");
-    const selected = chooseDispatch(current, {
+    const selected = chooseDispatch(current.map((task) => ({ ...task, schedulingRank: rank.get(task.objectiveId) ?? 0 })), {
       globalInflight: inflight.length,
       globalLimit: route.globalConcurrency,
       perObjective: OBJECTIVE_HARD_CAPS.maxTasks,
@@ -887,8 +964,60 @@ export class ObjectiveService {
         await this.event(repos, objectiveId, "plan.rejected", validated.errors.join("; ") || "invalid plan");
         return "invalid";
       }
+      if (!run.executionPath) {
+        await repos.objectives.saveRun(objectiveId, {
+          executionPath: "full",
+          executionRationale: "The deterministic router left this objective on CEO planning.",
+          planningCompletedAt: this.now(),
+        });
+      }
       await this.materialize(repos, run, validated.plan);
       return "accepted";
+    });
+  }
+
+  private async assembleSpecialistOutput(
+    repos: Parameters<Parameters<Persistence["transaction"]>[0]>[0],
+    run: ObjectiveRun,
+    tasks: ObjectiveTaskRecord[],
+  ): Promise<void> {
+    if (run.status === "completed") {
+      return;
+    }
+    if (tasks.some((task) => !task.resultSummary)) {
+      await this.fail(repos, run, "A specialist completed without a result");
+      return;
+    }
+    const ordered = [...tasks].sort((left, right) => left.localId.localeCompare(right.localId));
+    const output =
+      ordered.length === 1
+        ? ordered[0]!.resultSummary!
+        : ordered.map((task) => `${task.departmentSlug}: ${task.resultSummary}`).join("\n\n");
+    assertObjectiveTransition(run.status, "synthesizing");
+    await repos.objectives.saveRun(run.id, { status: "synthesizing", synthesisStartedAt: this.now() });
+    assertObjectiveTransition("synthesizing", "completed");
+    const updated = await repos.objectives.saveRun(run.id, {
+      status: "completed",
+      finalOutput: output,
+      completedAt: this.now(),
+    });
+    await this.event(
+      repos,
+      run.id,
+      "objective.completed",
+      "Specialist results were accepted without a CEO synthesis inference.",
+    );
+    await repos.audit.append({
+      eventType: "objective.completed",
+      actorId: WORKER_ACTOR,
+      actorType: "system",
+      targetType: "objective",
+      targetId: run.id,
+      action: "objective.completed",
+      correlationId: run.correlationId,
+      beforeState: snapshot(publicRun(run)),
+      afterState: snapshot(publicRun(updated)),
+      metadata: { assembly: "specialist-results", executionPath: run.executionPath },
     });
   }
 
@@ -1515,6 +1644,7 @@ function publicRun(run: ObjectiveRun): ObjectiveRecord {
     submitterPrincipalId: run.submitterPrincipalId,
     objective: run.objective,
     status: run.status,
+    origin: run.origin,
     correlationId: run.correlationId,
     failureReason: run.failureReason,
     finalOutput: run.finalOutput,

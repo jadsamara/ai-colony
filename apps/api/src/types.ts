@@ -16,6 +16,9 @@ import type {
   ExperimentService,
   TrainingService,
   InferenceRoute,
+  AutonomyService,
+  DialogueService,
+  ConversationRunner,
   ObjectiveService,
 } from "@ai-colony/core";
 
@@ -29,6 +32,9 @@ export interface AppServices {
   audit: AuditQueryService;
   messages: MessagingService;
   objectives: ObjectiveService;
+  autonomy: AutonomyService;
+  dialogue: DialogueService;
+  runner: ConversationRunner;
   memories: MemoryService;
   training: TrainingService;
   experiments: ExperimentService;

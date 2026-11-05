@@ -455,6 +455,7 @@ export const objectiveRuns = pgTable(
       .references(() => principals.id, { onDelete: "restrict" }),
     objectiveText: text("objective_text").notNull(),
     status: text("status").notNull(),
+    origin: text("origin").notNull().default("human"),
     correlationId: uuid("correlation_id").notNull(),
     failureReason: text("failure_reason"),
     finalOutput: text("final_output"),
@@ -484,14 +485,23 @@ export const objectiveRuns = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    executionPath: text("execution_path"),
+    executionRationale: text("execution_rationale"),
+    planningCompletedAt: timestamp("planning_completed_at", { withTimezone: true }),
+    synthesisStartedAt: timestamp("synthesis_started_at", { withTimezone: true }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("objective_runs_status_idx").on(table.status, table.createdAt),
     index("objective_runs_submitter_idx").on(table.submitterPrincipalId, table.createdAt),
     check("objective_runs_status_check", textIn("status", OBJECTIVE_STATUSES)),
+    check("objective_runs_origin_check", sql`${table.origin} in ('human', 'autonomous')`),
     check("objective_runs_profile_check", sql`${table.memoryProfile} in ('shared', 'split')`),
     check("objective_runs_limits_check", sql`${table.maxInferenceRequests} > 0`),
+    check(
+      "objective_runs_execution_path_check",
+      sql`${table.executionPath} is null or ${textIn("execution_path", ["direct", "lightweight", "full"])}`,
+    ),
   ],
 );
 
@@ -2124,4 +2134,249 @@ export const productImprovementEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("product_improvement_events_proposal_idx").on(table.proposalId, table.createdAt)],
+);
+
+export const colonyAutonomy = pgTable("colony_autonomy", {
+  id: text("id").primaryKey(),
+  enabled: boolean("enabled").notNull().default(false),
+  paused: boolean("paused").notNull().default(false),
+  intervalMs: integer("interval_ms").notNull(),
+  cooldownMs: integer("cooldown_ms").notNull(),
+  maxActiveGoals: integer("max_active_goals").notNull(),
+  maxInferenceRequests: integer("max_inference_requests").notNull(),
+  maxDurationMs: integer("max_duration_ms").notNull(),
+  maxConversations: integer("max_conversations").notNull(),
+  maxConversationMessages: integer("max_conversation_messages").notNull(),
+  maxConversationTokens: integer("max_conversation_tokens").notNull(),
+  maxConversationParticipants: integer("max_conversation_participants").notNull().default(12),
+  conversationExecutionEnabled: boolean("conversation_execution_enabled").notNull().default(false),
+  maxConcurrentConversationTurns: integer("max_concurrent_conversation_turns").notNull().default(1),
+  contextTokenBudget: integer("context_token_budget").notNull().default(1500),
+  lastCycleAt: timestamp("last_cycle_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const colonyGoalCycles = pgTable(
+  "colony_goal_cycles",
+  {
+    id: uuid("id").primaryKey(),
+    outcome: text("outcome").notNull(),
+    rationale: text("rationale").notNull(),
+    goalId: uuid("goal_id"),
+    prompt: jsonb("prompt").$type<Array<{ role: string; content: string }>>().notNull(),
+    responseText: text("response_text"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("colony_goal_cycles_created_idx").on(table.createdAt)],
+);
+
+export const colonyGoals = pgTable(
+  "colony_goals",
+  {
+    id: uuid("id").primaryKey(),
+    objectiveId: uuid("objective_id").notNull().references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    description: text("description").notNull(),
+    normalizedDescription: text("normalized_description").notNull(),
+    motivation: text("motivation").notNull(),
+    evidence: jsonb("evidence").$type<string[]>().notNull(),
+    hypotheses: jsonb("hypotheses").$type<string[]>().notNull(),
+    expectedBenefit: text("expected_benefit").notNull(),
+    successCriteria: jsonb("success_criteria").$type<string[]>().notNull(),
+    estimatedInferenceRequests: integer("estimated_inference_requests").notNull(),
+    departments: jsonb("departments").$type<string[]>().notNull(),
+    priority: text("priority").notNull(),
+    stopConditions: jsonb("stop_conditions").$type<string[]>().notNull(),
+    status: text("status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("colony_goals_status_idx").on(table.status, table.createdAt),
+    check("colony_goals_status_check", sql`${table.status} in ('selected', 'cancelled', 'completed', 'failed')`),
+    check("colony_goals_priority_check", sql`${table.priority} in ('low', 'medium', 'high')`),
+  ],
+);
+
+export const objectiveSubgoals = pgTable(
+  "objective_subgoals",
+  {
+    id: uuid("id").primaryKey(),
+    objectiveId: uuid("objective_id").notNull().references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "restrict" }),
+    description: text("description").notNull(),
+    status: text("status").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("objective_subgoals_key_unique").on(table.idempotencyKey),
+    index("objective_subgoals_objective_idx").on(table.objectiveId, table.createdAt),
+  ],
+);
+
+export const departmentConversations = pgTable(
+  "department_conversations",
+  {
+    id: uuid("id").primaryKey(),
+    topic: text("topic").notNull(),
+    objectiveId: uuid("objective_id").references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    openedByDepartmentId: uuid("opened_by_department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    messageCount: integer("message_count").notNull().default(0),
+    inferenceRequests: integer("inference_requests").notNull().default(0),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    maxMessages: integer("max_messages").notNull(),
+    maxTokens: integer("max_tokens").notNull(),
+    maxDurationMs: integer("max_duration_ms").notNull(),
+    closeReason: text("close_reason"),
+    finalConclusion: text("final_conclusion"),
+    remainingDisagreements: jsonb("remaining_disagreements").$type<string[]>().notNull().default([]),
+    evidenceRefs: jsonb("evidence_refs").$type<string[]>().notNull().default([]),
+    contextSummary: text("context_summary"),
+    nextSequence: integer("next_sequence").notNull().default(0),
+    outcome: text("outcome"),
+    paused: boolean("paused").notNull().default(false),
+    runnerStatus: text("runner_status").notNull().default("idle"),
+    runnerFence: integer("runner_fence").notNull().default(0),
+    runnerLeaseUntil: timestamp("runner_lease_until", { withTimezone: true }),
+    parentConversationId: uuid("parent_conversation_id"),
+    scheduledSpeakerId: uuid("scheduled_speaker_id"),
+    lastError: text("last_error"),
+    lastInferenceLatencyMs: integer("last_inference_latency_ms"),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
+    lastTurnAt: timestamp("last_turn_at", { withTimezone: true }).notNull().defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("department_conversations_status_idx").on(table.status, table.openedAt),
+    check(
+      "department_conversations_status_check",
+      sql`${table.status} in ('open', 'resolved', 'unresolved', 'terminated')`,
+    ),
+    check(
+      "department_conversations_runner_check",
+      sql`${table.runnerStatus} in ('idle', 'scheduled', 'running', 'paused', 'waiting_on_child', 'stopped')`,
+    ),
+  ],
+);
+
+export const conversationParticipants = pgTable(
+  "conversation_participants",
+  {
+    conversationId: uuid("conversation_id").notNull().references(() => departmentConversations.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    membership: text("membership").notNull().default("active"),
+    invitedByDepartmentId: uuid("invited_by_department_id").references(() => departments.id, { onDelete: "restrict" }),
+    joinedAt: timestamp("joined_at", { withTimezone: true }),
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.conversationId, table.departmentId] }),
+    check("conversation_participants_membership_check", sql`${table.membership} in ('active', 'invited', 'declined', 'removed')`),
+  ],
+);
+
+export const conversationMembershipEvents = pgTable(
+  "conversation_membership_events",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => departmentConversations.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    actorDepartmentId: uuid("actor_department_id").references(() => departments.id, { onDelete: "restrict" }),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("conversation_membership_events_conversation_idx").on(table.conversationId, table.createdAt),
+    check("conversation_membership_events_action_check", sql`${table.action} in ('joined', 'invited', 'accepted', 'declined', 'removed')`),
+  ],
+);
+
+export const conversationTurns = pgTable(
+  "conversation_turns",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => departmentConversations.id, { onDelete: "restrict" }),
+    messageId: uuid("message_id").notNull().references(() => iacpMessages.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    body: text("body").notNull(),
+    addressedDepartmentId: uuid("addressed_department_id").references(() => departments.id, { onDelete: "restrict" }),
+    sequence: integer("sequence").notNull().default(0),
+    parentMessageId: uuid("parent_message_id"),
+    prompt: jsonb("prompt").$type<Array<{ role: string; content: string }>>().notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("conversation_turns_key_unique").on(table.idempotencyKey),
+    index("conversation_turns_conversation_idx").on(table.conversationId, table.createdAt),
+  ],
+);
+
+export const conversationTurnClaims = pgTable(
+  "conversation_turn_claims",
+  {
+    idempotencyKey: text("idempotency_key").primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => departmentConversations.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    addressedDepartmentId: uuid("addressed_department_id").references(() => departments.id, { onDelete: "restrict" }),
+    parentMessageId: uuid("parent_message_id"),
+    sequence: integer("sequence").notNull(),
+    body: text("body"),
+    prompt: jsonb("prompt").$type<Array<{ role: string; content: string }> | null>(),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("conversation_turn_claims_conversation_idx").on(table.conversationId, table.sequence)],
+);
+
+export const conversationJobs = pgTable(
+  "conversation_jobs",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => departmentConversations.id, { onDelete: "restrict" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    fence: integer("fence").notNull(),
+    status: text("status").notNull(),
+    action: text("action").notNull(),
+    attempt: integer("attempt").notNull().default(0),
+    leaseToken: uuid("lease_token"),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    speakerDepartmentId: uuid("speaker_department_id").references(() => departments.id, { onDelete: "restrict" }),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("conversation_jobs_key_unique").on(table.idempotencyKey),
+    uniqueIndex("conversation_jobs_one_active").on(table.conversationId).where(sql`${table.status} in ('pending', 'leased')`),
+    index("conversation_jobs_status_idx").on(table.status, table.createdAt),
+    check("conversation_jobs_status_check", sql`${table.status} in ('pending', 'leased', 'completed', 'dead')`),
+    check("conversation_jobs_action_check", sql`${table.action} in ('speak', 'invitation')`),
+  ],
+);
+
+export const conversationContextEvents = pgTable(
+  "conversation_context_events",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => departmentConversations.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").references(() => departments.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    query: text("query").notNull(),
+    messageIds: jsonb("message_ids").$type<string[]>().notNull(),
+    tokens: integer("tokens").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("conversation_context_events_conversation_idx").on(table.conversationId, table.createdAt),
+    check("conversation_context_events_kind_check", sql`${table.kind} in ('search', 'summary')`),
+  ],
 );

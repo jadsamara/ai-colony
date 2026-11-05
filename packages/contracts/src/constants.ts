@@ -78,6 +78,20 @@ export const MESSAGE_TYPES = [
   "KNOWLEDGE_VALIDATION",
   "LEARNING_CYCLE_RESULT",
   "CAPABILITY_UPDATE",
+  "DEPARTMENT_DIALOGUE",
+] as const;
+
+export const DIALOGUE_KINDS = [
+  "question",
+  "response",
+  "proposal",
+  "challenge",
+  "evidence",
+  "counterargument",
+  "agreement",
+  "disagreement",
+  "resolution",
+  "close",
 ] as const;
 
 export const MESSAGE_STATUSES = [

@@ -27,7 +27,7 @@ export function planPrompt(
         "Each task is an object with string localId, departmentSlug, taskType, objective, and expectedOutput, plus dependsOn as an array of localId strings.",
         "localId matches [a-z][a-z0-9-] and is at most 32 characters. Do not use numbers for ids.",
         "departmentSlug and taskType must be identical and one of math, science, research, reasoning.",
-        "Create one math task for the quantitative calculation, one science task for engineering tradeoffs, and one research task for evidence review from model knowledge only.",
+        "Assign a department only when the objective needs that capability. Use math for a quantity, science for a physical or experimental judgment, research for an evidence limit, and reasoning for an argument or contradiction. Do not add a department that the objective does not need.",
         "If retrieved memory contains an illustrative energy estimate, the math task must use that number and label it as an unverified model-generated assumption.",
         "Every task must include dependsOn. Use an empty array when the task has no dependency. Use at most 8 tasks.",
         "Do not assign work to any other department.",
