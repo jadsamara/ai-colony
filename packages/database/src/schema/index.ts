@@ -43,6 +43,8 @@ import {
   PROCESSING_STATUSES,
   QUANTIZATIONS,
   ROLE_NAMES,
+  SERVING_PROVIDERS,
+  SERVING_STATUSES,
   TASK_STATUSES,
   TASK_TYPES,
 } from "./constants.js";
@@ -1587,6 +1589,45 @@ export const departmentModelAssignments = pgTable(
   ],
 );
 
+export const routingDecisions = pgTable(
+  "routing_decisions",
+  {
+    id: uuid("id").primaryKey(),
+    taskId: uuid("task_id").references(() => objectiveTasks.id, { onDelete: "restrict" }),
+    objectiveId: uuid("objective_id").notNull().references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    purpose: text("purpose").notNull(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    assignmentId: uuid("assignment_id").references(() => departmentModelAssignments.id, { onDelete: "restrict" }),
+    assignmentVersion: integer("assignment_version"),
+    registryModelId: uuid("registry_model_id").notNull().references(() => models.id, { onDelete: "restrict" }),
+    servingModel: text("serving_model").notNull(),
+    modelDigest: text("model_digest"),
+    adapterId: text("adapter_id"),
+    adapterVersion: text("adapter_version"),
+    policyVersion: text("policy_version").notNull(),
+    authorization: text("authorization").notNull(),
+    reasonCode: text("reason_code").notNull(),
+    runtimeEvidence: jsonb("runtime_evidence").$type<Record<string, unknown>>().notNull(),
+    budgetOutcome: text("budget_outcome").notNull(),
+    resourceOutcome: text("resource_outcome").notNull(),
+    fallbackStatus: text("fallback_status").notNull(),
+    executionVerification: text("execution_verification").notNull(),
+    capabilityNote: text("capability_note").notNull(),
+    servingInstanceId: uuid("serving_instance_id"),
+    endpointReference: text("endpoint_reference"),
+    agentId: uuid("agent_id"),
+    servingPolicyVersion: text("serving_policy_version"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("routing_decisions_task_unique").on(table.taskId).where(sql`${table.taskId} is not null`),
+    uniqueIndex("routing_decisions_objective_purpose_unique").on(table.objectiveId, table.purpose).where(sql`${table.taskId} is null`),
+    check("routing_decisions_authorization_check", sql`${table.authorization} in ('authorized', 'denied')`),
+    check("routing_decisions_fallback_check", sql`${table.fallbackStatus} = 'disabled'`),
+    check("routing_decisions_verification_check", sql`${table.executionVerification} in ('unverified', 'matched', 'mismatch')`),
+  ],
+);
+
 export const knowledgeTransfers = pgTable(
   "knowledge_transfers",
   {
@@ -1818,4 +1859,269 @@ export const trainingExperiments = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   () => [check("training_experiments_target_check", textIn("target", ["answer", "structured"]))],
+);
+
+export const ledgerTopics = pgTable("ledger_topics", {
+  id: uuid("id").primaryKey(),
+  departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+  provenance: text("provenance").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ledgerTopicEvents = pgTable(
+  "ledger_topic_events",
+  {
+    id: uuid("id").primaryKey(),
+    topicId: uuid("topic_id").notNull().references(() => ledgerTopics.id, { onDelete: "restrict" }),
+    eventType: text("event_type").notNull(),
+    name: text("name"),
+    description: text("description"),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("ledger_topic_events_type_check", textIn("event_type", ["rename", "describe", "deprecate"]))],
+);
+
+export const ledgerProposals = pgTable(
+  "ledger_proposals",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    payload: jsonb("payload").notNull(),
+    proposedBy: text("proposed_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("ledger_proposals_kind_check", textIn("kind", ["taxonomy", "mapping", "measurement"]))],
+);
+
+export const ledgerDecisions = pgTable(
+  "ledger_decisions",
+  {
+    id: uuid("id").primaryKey(),
+    proposalId: uuid("proposal_id").notNull().unique().references(() => ledgerProposals.id, { onDelete: "restrict" }),
+    decision: text("decision").notNull(),
+    decidedBy: text("decided_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("ledger_decisions_decision_check", textIn("decision", ["approved", "rejected"]))],
+);
+
+export const ledgerTaxonomyVersions = pgTable(
+  "ledger_taxonomy_versions",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    proposalId: uuid("proposal_id").notNull().references(() => ledgerProposals.id, { onDelete: "restrict" }),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("ledger_taxonomy_versions_unique").on(table.departmentId, table.version)],
+);
+
+export const ledgerTaxonomyEdges = pgTable(
+  "ledger_taxonomy_edges",
+  {
+    id: uuid("id").primaryKey(),
+    versionId: uuid("version_id").notNull().references(() => ledgerTaxonomyVersions.id, { onDelete: "restrict" }),
+    topicId: uuid("topic_id").notNull().references(() => ledgerTopics.id, { onDelete: "restrict" }),
+    parentTopicId: uuid("parent_topic_id").references(() => ledgerTopics.id, { onDelete: "restrict" }),
+    kind: text("kind").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    status: text("status").notNull(),
+    targetDepartmentId: uuid("target_department_id").references(() => departments.id, { onDelete: "restrict" }),
+  },
+  (table) => [
+    check("ledger_taxonomy_edges_kind_check", textIn("kind", ["parent", "cross_link"])),
+    check("ledger_taxonomy_edges_status_check", textIn("status", ["active", "deprecated"])),
+    check("ledger_taxonomy_edges_not_self", sql`${table.parentTopicId} is null or ${table.parentTopicId} <> ${table.topicId}`),
+    uniqueIndex("ledger_edge_one_parent").on(table.versionId, table.topicId).where(sql`${table.kind} = 'parent'`),
+    uniqueIndex("ledger_edge_cross_link").on(table.versionId, table.topicId, table.parentTopicId).where(sql`${table.kind} = 'cross_link'`),
+  ],
+);
+
+export const ledgerMappingVersions = pgTable(
+  "ledger_mapping_versions",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    version: integer("version").notNull(),
+    taxonomyVersionId: uuid("taxonomy_version_id").notNull().references(() => ledgerTaxonomyVersions.id, { onDelete: "restrict" }),
+    proposalId: uuid("proposal_id").notNull().references(() => ledgerProposals.id, { onDelete: "restrict" }),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("ledger_mapping_versions_unique").on(table.departmentId, table.version)],
+);
+
+export const ledgerTopicMappings = pgTable(
+  "ledger_topic_mappings",
+  {
+    id: uuid("id").primaryKey(),
+    mappingVersionId: uuid("mapping_version_id").notNull().references(() => ledgerMappingVersions.id, { onDelete: "restrict" }),
+    itemId: text("item_id").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    topicId: uuid("topic_id").notNull().references(() => ledgerTopics.id, { onDelete: "restrict" }),
+    weight: doublePrecision("weight"),
+    provenance: text("provenance").notNull(),
+  },
+  (table) => [unique("ledger_topic_mappings_item_topic_unique").on(table.mappingVersionId, table.itemId, table.topicId)],
+);
+
+export const ledgerSnapshots = pgTable("ledger_snapshots", {
+  id: uuid("id").primaryKey(),
+  departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+  topicId: uuid("topic_id").notNull().references(() => ledgerTopics.id, { onDelete: "restrict" }),
+  taxonomyVersionId: uuid("taxonomy_version_id").notNull().references(() => ledgerTaxonomyVersions.id, { onDelete: "restrict" }),
+  mappingVersionId: uuid("mapping_version_id").notNull().references(() => ledgerMappingVersions.id, { onDelete: "restrict" }),
+  evaluationRunId: uuid("evaluation_run_id").references(() => evaluationRuns.id, { onDelete: "restrict" }),
+  evidenceRef: text("evidence_ref").notNull(),
+  manifestFingerprint: text("manifest_fingerprint").notNull(),
+  manifest: jsonb("manifest").notNull(),
+  modelFamily: text("model_family"),
+  modelIdentifier: text("model_identifier"),
+  checkpointDigest: text("checkpoint_digest"),
+  adapterId: text("adapter_id"),
+  adapterDigest: text("adapter_digest"),
+  measuredAt: timestamp("measured_at", { withTimezone: true }).notNull(),
+  validity: text("validity").notNull(),
+  sampleSize: integer("sample_size").notNull(),
+  correctCount: integer("correct_count").notNull(),
+  incorrectCount: integer("incorrect_count").notNull(),
+  failureClasses: jsonb("failure_classes").$type<Record<string, number>>().notNull(),
+  accuracy: doublePrecision("accuracy").notNull(),
+  uncertaintyLow: doublePrecision("uncertainty_low").notNull(),
+  uncertaintyHigh: doublePrecision("uncertainty_high").notNull(),
+  measurementMode: text("measurement_mode").notNull(),
+  capabilityKind: text("capability_kind").notNull(),
+  items: jsonb("items").notNull(),
+  provenance: text("provenance").notNull(),
+  schemaVersion: text("schema_version").notNull(),
+  certifiedBy: text("certified_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const ledgerRetentionEvents = pgTable(
+  "ledger_retention_events",
+  {
+    id: uuid("id").primaryKey(),
+    snapshotId: uuid("snapshot_id").notNull().references(() => ledgerSnapshots.id, { onDelete: "restrict" }),
+    action: text("action").notNull(),
+    decidedBy: text("decided_by").notNull(),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [check("ledger_retention_events_action_check", textIn("action", ["retain", "revoke", "archive"]))],
+);
+
+export const departmentServingInstances = pgTable(
+  "department_serving_instances",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "restrict" }),
+    provider: text("provider").notNull(),
+    endpointReference: text("endpoint_reference").notNull(),
+    normalizedEndpoint: text("normalized_endpoint").notNull(),
+    modelRegistryId: uuid("model_registry_id").notNull().references(() => models.id, { onDelete: "restrict" }),
+    modelVersion: text("model_version").notNull(),
+    artifactDigest: text("artifact_digest"),
+    deploymentMode: text("deployment_mode").notNull(),
+    status: text("status").notNull(),
+    resourcePolicyId: text("resource_policy_id").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    unique("department_serving_instances_department_unique").on(table.departmentId),
+    unique("department_serving_instances_endpoint_ref_unique").on(table.endpointReference),
+    unique("department_serving_instances_endpoint_unique").on(table.normalizedEndpoint),
+    check("department_serving_instances_provider_check", textIn("provider", SERVING_PROVIDERS)),
+    check("department_serving_instances_status_check", textIn("status", SERVING_STATUSES)),
+    check("department_serving_instances_mode_check", sql`${table.deploymentMode} = 'dedicated'`),
+  ],
+);
+
+export const departmentServingEvents = pgTable("department_serving_events", {
+  id: uuid("id").primaryKey(),
+  instanceId: uuid("instance_id").notNull().references(() => departmentServingInstances.id, { onDelete: "restrict" }),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  actorId: text("actor_id").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const departmentAgentCheckpoints = pgTable(
+  "department_agent_checkpoints",
+  {
+    id: uuid("id").primaryKey(),
+    agentId: uuid("agent_id").notNull().references(() => agents.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    taskId: uuid("task_id").notNull(),
+    servingInstanceId: uuid("serving_instance_id").notNull().references(() => departmentServingInstances.id, { onDelete: "restrict" }),
+    modelVersion: text("model_version").notNull(),
+    endpointReference: text("endpoint_reference").notNull(),
+    state: jsonb("state").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("department_agent_checkpoints_task_unique").on(table.agentId, table.taskId)],
+);
+
+export const productImprovementProposals = pgTable(
+  "product_improvement_proposals",
+  {
+    id: uuid("id").primaryKey(),
+    departmentId: uuid("department_id").notNull().references(() => departments.id, { onDelete: "restrict" }),
+    proposedByAgentId: uuid("proposed_by_agent_id").notNull().references(() => agents.id, { onDelete: "restrict" }),
+    problem: text("problem").notNull(),
+    evidence: jsonb("evidence").$type<unknown[]>().notNull(),
+    expectedBenefit: text("expected_benefit").notNull(),
+    participants: jsonb("participants").$type<unknown[]>().notNull(),
+    estimatedCost: text("estimated_cost").notNull(),
+    risk: text("risk").notNull(),
+    successCriteria: text("success_criteria").notNull(),
+    priority: text("priority").notNull(),
+    dependencies: jsonb("dependencies").$type<string[]>().notNull(),
+    approvalRequirements: jsonb("approval_requirements").$type<string[]>().notNull(),
+    recommendsNewDepartment: boolean("recommends_new_department").notNull(),
+    status: text("status").notNull(),
+    evaluationEvidence: jsonb("evaluation_evidence").$type<Record<string, unknown> | null>(),
+    recommendation: text("recommendation"),
+    outcome: text("outcome"),
+    successful: boolean("successful").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("product_improvement_proposals_status_idx").on(table.status),
+    index("product_improvement_proposals_department_idx").on(table.departmentId),
+    check(
+      "product_improvement_proposals_status_check",
+      sql`${table.status} in ('proposed', 'under_review', 'approved', 'in_progress', 'evaluating', 'completed', 'rejected')`,
+    ),
+    check("product_improvement_proposals_priority_check", sql`${table.priority} in ('low', 'medium', 'high')`),
+    check(
+      "product_improvement_proposals_recommendation_check",
+      sql`${table.recommendation} is null or ${table.recommendation} in ('retain', 'revise', 'revert')`,
+    ),
+  ],
+);
+
+export const productImprovementEvents = pgTable(
+  "product_improvement_events",
+  {
+    id: uuid("id").primaryKey(),
+    proposalId: uuid("proposal_id").notNull().references(() => productImprovementProposals.id, { onDelete: "restrict" }),
+    eventType: text("event_type").notNull(),
+    actorId: text("actor_id").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("product_improvement_events_proposal_idx").on(table.proposalId, table.createdAt)],
 );

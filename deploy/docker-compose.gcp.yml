@@ -1,0 +1,840 @@
+# Generated dedicated department deployment.
+# Ollama and mock endpoints are private to the compose network.
+# colony stop uses `docker compose stop` and never deletes volumes.
+# MODE=real. Do not start this file until provision accepts the GPU capacity limits.
+name: ai-colony-dedicated
+services:
+  ollama-ceo:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: ceo
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000311
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: ceo
+      colony.instance: 00000000-0000-4000-8000-000000000311
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-ceo:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-ceo:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-ceo:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "ceo"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: ceo
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000011
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000201
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000311
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-ceo:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: CEO
+      colony.instance: 00000000-0000-4000-8000-000000000311
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-ceo:11434
+      colony.memory: department:ceo
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-ceo:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-ceo:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-orchestration:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: orchestration
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000312
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: orchestration
+      colony.instance: 00000000-0000-4000-8000-000000000312
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-orchestration:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-orchestration:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-orchestration:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "orchestration"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: orchestration
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000012
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000202
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000312
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-orchestration:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Orchestration
+      colony.instance: 00000000-0000-4000-8000-000000000312
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-orchestration:11434
+      colony.memory: department:orchestration
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-orchestration:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-orchestration:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-monitoring:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: monitoring
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000313
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: monitoring
+      colony.instance: 00000000-0000-4000-8000-000000000313
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-monitoring:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-monitoring:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-monitoring:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "monitoring"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: monitoring
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000013
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000203
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000313
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-monitoring:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Monitoring
+      colony.instance: 00000000-0000-4000-8000-000000000313
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-monitoring:11434
+      colony.memory: department:monitoring
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-monitoring:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-monitoring:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-evolution:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: evolution
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000314
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: evolution
+      colony.instance: 00000000-0000-4000-8000-000000000314
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-evolution:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-evolution:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-evolution:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "specialist"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: evolution
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000014
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000211
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000314
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-evolution:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Evolution
+      colony.instance: 00000000-0000-4000-8000-000000000314
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-evolution:11434
+      colony.memory: department:evolution
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-evolution:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-evolution:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-weight-optimization:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: weight-optimization
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000315
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: weight-optimization
+      colony.instance: 00000000-0000-4000-8000-000000000315
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-weight-optimization:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-weight-optimization:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-weight-optimization:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "specialist"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: weight-optimization
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000015
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000208
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000315
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-weight-optimization:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Weight Optimization
+      colony.instance: 00000000-0000-4000-8000-000000000315
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-weight-optimization:11434
+      colony.memory: department:weight-optimization
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-weight-optimization:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-weight-optimization:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-memory-and-forgetting:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: memory-and-forgetting
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000316
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: memory-and-forgetting
+      colony.instance: 00000000-0000-4000-8000-000000000316
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-memory-and-forgetting:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-memory-and-forgetting:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-memory-and-forgetting:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "specialist"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: memory-and-forgetting
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000016
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000210
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000316
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-memory-and-forgetting:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Memory & Forgetting
+      colony.instance: 00000000-0000-4000-8000-000000000316
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-memory-and-forgetting:11434
+      colony.memory: department:memory-and-forgetting
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-memory-and-forgetting:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-memory-and-forgetting:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-evaluation:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: evaluation
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000317
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: evaluation
+      colony.instance: 00000000-0000-4000-8000-000000000317
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-evaluation:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-evaluation:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-evaluation:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "specialist"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: evaluation
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000017
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000209
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000317
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-evaluation:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Evaluation
+      colony.instance: 00000000-0000-4000-8000-000000000317
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-evaluation:11434
+      colony.memory: department:evaluation
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-evaluation:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-evaluation:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-research:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: research
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000318
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: research
+      colony.instance: 00000000-0000-4000-8000-000000000318
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-research:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-research:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-research:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "specialist"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: research
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000018
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000206
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000318
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-research:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Research
+      colony.instance: 00000000-0000-4000-8000-000000000318
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-research:11434
+      colony.memory: department:research
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-research:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-research:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-math:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: math
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000319
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: math
+      colony.instance: 00000000-0000-4000-8000-000000000319
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-math:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-math:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-math:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "specialist"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: math
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-000000000019
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000204
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-000000000319
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-math:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Math
+      colony.instance: 00000000-0000-4000-8000-000000000319
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-math:11434
+      colony.memory: department:math
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-math:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-math:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-reasoning:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: reasoning
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031a
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: reasoning
+      colony.instance: 00000000-0000-4000-8000-00000000031a
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-reasoning:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-reasoning:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-reasoning:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "specialist"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: reasoning
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001a
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000207
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031a
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-reasoning:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Reasoning
+      colony.instance: 00000000-0000-4000-8000-00000000031a
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-reasoning:11434
+      colony.memory: department:reasoning
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-reasoning:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-reasoning:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-science:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: science
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031b
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: science
+      colony.instance: 00000000-0000-4000-8000-00000000031b
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-science:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-science:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-science:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "specialist"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: science
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001b
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000205
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031b
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-science:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Science
+      colony.instance: 00000000-0000-4000-8000-00000000031b
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-science:11434
+      colony.memory: department:science
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-science:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-science:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  ollama-product:
+    image: ollama/ollama:0.9.6
+    environment:
+      COLONY_DEPARTMENT_SLUG: product
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031d
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+    labels:
+      colony.mode: real
+      colony.department: product
+      colony.instance: 00000000-0000-4000-8000-00000000031d
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-product:11434
+      colony.gpu: unassigned
+    volumes:
+      - colony-model-product:/root/.ollama
+    networks: [colony-dedicated]
+    mem_limit: 8g
+    cpus: 2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  agent-product:
+    image: ${COLONY_AGENT_IMAGE:-ai-colony-agent:m12.1}
+    pull_policy: ${COLONY_AGENT_PULL_POLICY:-build}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.agent
+    command: ["node", "packages/workflows/dist/cli.js", "specialist"]
+    environment:
+      COLONY_DEPARTMENT_SLUG: product
+      COLONY_DEPARTMENT_ID: 00000000-0000-4000-8000-00000000001d
+      COLONY_AGENT_ID: 00000000-0000-4000-8000-000000000213
+      COLONY_INSTANCE_ID: 00000000-0000-4000-8000-00000000031d
+      COLONY_MODEL_VERSION: qwen3-8b-base-v1
+      COLONY_MODE: real
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      INFERENCE_BASE_URL: http://ollama-product:11434
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      DATABASE_URL: ${DATABASE_URL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    labels:
+      colony.mode: real
+      colony.department: Product
+      colony.instance: 00000000-0000-4000-8000-00000000031d
+      colony.model: qwen3-8b-base-v1
+      colony.endpoint: http://ollama-product:11434
+      colony.memory: department:product
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    depends_on:
+      ollama-product:
+        condition: service_healthy
+    networks: [colony-dedicated]
+    mem_limit: 1g
+    cpus: 1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://ollama-product:11434/api/version').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+networks:
+  colony-dedicated:
+    name: colony-dedicated
+volumes:
+  colony-model-ceo:
+  colony-model-orchestration:
+  colony-model-monitoring:
+  colony-model-evolution:
+  colony-model-weight-optimization:
+  colony-model-memory-and-forgetting:
+  colony-model-evaluation:
+  colony-model-research:
+  colony-model-math:
+  colony-model-reasoning:
+  colony-model-science:
+  colony-model-product:
+  # Historical Gaming model volume. No active service mounts it, and stop does not delete it.
+  colony-model-gaming:

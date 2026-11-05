@@ -1,10 +1,32 @@
 export { createDatabase, type Database, type DbExecutor, type DbTransaction } from "./client.js";
+export { assertDisposableDatabaseUrl, assertReadOnlyInspectionUrl, createReadOnlyInspection } from "./inspection.js";
 export { createPersistence } from "./persistence.js";
 export { migrateDatabase, migrationsFolder } from "./migrate.js";
+export {
+  applyCanonicalMigration,
+  assertAdditiveMigration,
+  assertCanonicalTarget,
+  readCanonicalIdentity,
+  readMigrationFile,
+  servingConstraintNames,
+  type CanonicalIdentity,
+} from "./canonical.js";
+export {
+  ensureDedicatedInventory,
+  listDedicatedInstances,
+  recordServingStatus,
+  type ServingInventoryResult,
+} from "./serving-inventory.js";
+export { installProductDepartment, type ProductInstallResult } from "./product-install.js";
+export { createImprovementRepository } from "./repositories/improvements.js";
+export { assessLedgerReadiness, ledgerSourceMigrations, type LedgerReadiness } from "./ledger-readiness.js";
+export { assessRoutingReadiness, routingSourceMigration, type RoutingReadiness, type RoutingDepartmentFinding } from "./routing-readiness.js";
 export {
   seed,
   seedFoundations,
   truncateColony,
+  SEED_AGENTS,
+  SEED_DEPARTMENTS,
   SEED_DEPARTMENT_BUDGET,
   type SeedResult,
 } from "./seed.js";

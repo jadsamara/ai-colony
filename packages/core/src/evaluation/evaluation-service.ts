@@ -11,7 +11,11 @@ import { sha256Text } from "../training/dataset.js";
 import { sha256File } from "../training/files.js";
 import type { TrainingProvider } from "../training/provider.js";
 import { assertNotSelfDecision } from "../training/transitions.js";
-import { decideGate, GATE_POLICY, gatePolicyHash } from "./gate.js";
+import { colonyRunContract, legacyManifest, readStoredContract } from "./colony-manifest.js";
+import { compareManifests } from "./compare.js";
+import { parseEvaluationManifest } from "./manifest.js";
+import { analyzePairedRuns, type AlignedItem } from "./paired.js";
+import { applyGateIfComparable, decideGate, GATE_POLICY, gatePolicyHash } from "./gate.js";
 import { gradeArithmetic } from "./score.js";
 import { claimSignificance, mcnemarExact, pairedCounts, wilsonInterval } from "./stats.js";
 
@@ -185,6 +189,37 @@ export class EvaluationService {
       historicalM5RowPreserved: true,
     };
     const runId = randomUUID();
+    const maxOutputTokens = numberField(version.decoding.maxTokens);
+    const temperature = numberField(version.decoding.temperature);
+    if (maxOutputTokens === null || temperature === null || loaded.trainable.contextLength < 1 || loaded.trainable.precision.length < 1) {
+      throw new DomainError("EVALUATION_FAILED", "The benchmark or checkpoint is missing a recorded evaluation setting", 422);
+    }
+    const contract = colonyRunContract({
+      runId,
+      recordedAt: this.now().toISOString(),
+      family: loaded.trainable.modelFamily,
+      identifier: loaded.trainable.revision,
+      alias: loaded.trainable.displayName,
+      checkpointId: loaded.trainable.id,
+      checkpointDigest: baseSha,
+      adapterId: loaded.adapter.id,
+      adapterVersion: `rank-${loaded.adapter.rank}`,
+      adapterDigest: adapterSha,
+      quantization: loaded.trainable.precision,
+      backendId: loaded.trainable.framework,
+      backendVersion: loaded.trainable.frameworkVersion,
+      benchmarkId: version.suiteId,
+      benchmarkVersion: String(version.version),
+      itemSetFingerprint: version.contentHash,
+      itemCount: items.length,
+      promptTemplateDigest: version.promptTemplateHash,
+      scorerId: version.scorerId,
+      scorerVersion: version.scorerVersion,
+      maxOutputTokens,
+      temperature,
+      contextWindow: loaded.trainable.contextLength,
+    });
+    const summaryWithContract = { ...summary, contract };
     const reportId = randomUUID();
     const createdAt = this.now().toISOString();
     await this.persistence.transaction(async (repos) => {
@@ -197,7 +232,7 @@ export class EvaluationService {
         adapterSha256: adapterSha,
         source: input.source,
         status: "completed",
-        decoding: version.decoding,
+        decoding: { ...version.decoding, evaluationContract: { baseline: contract.baseline, candidate: contract.candidate } },
         createdBy: ctx.actor.principalId,
         error: null,
         createdAt,
@@ -209,10 +244,10 @@ export class EvaluationService {
           resultRow(runId, row.ordinal, "candidate", row.candidateRaw, row.candidate),
         ]),
       );
-      await repos.evaluation.insertReport({ id: reportId, runId, summary, createdAt });
+      await repos.evaluation.insertReport({ id: reportId, runId, summary: summaryWithContract, createdAt });
     });
     await this.notify(ctx, loaded.candidate.id, "inconclusive", summary.taskCandidate - summary.taskBaseline);
-    return { runId, reportId, summary };
+    return { runId, reportId, summary: summaryWithContract };
   }
 
   async getReport(ctx: RequestContext, runId: string) {
@@ -235,6 +270,23 @@ export class EvaluationService {
         ? results
         : results.map((row) => ({ ordinal: row.ordinal, role: row.role, taskCorrect: row.taskCorrect, formatValid: row.formatValid, strictIntegerMatch: row.strictIntegerMatch, ambiguous: row.ambiguous })),
     };
+  }
+
+  async compare(
+    ctx: RequestContext,
+    input: { baseline: unknown; candidate: unknown; items?: AlignedItem[] },
+  ) {
+    this.authorizer.assert(ctx.actor, "evaluation:read");
+    try {
+      const baseline = parseEvaluationManifest(input.baseline);
+      const candidate = parseEvaluationManifest(input.candidate);
+      if (!input.items) {
+        return compareManifests(baseline, candidate);
+      }
+      return analyzePairedRuns({ baseline, candidate, items: input.items });
+    } catch (error) {
+      throw new DomainError("EVALUATION_FAILED", error instanceof Error ? error.message : "Invalid evaluation contract", 422);
+    }
   }
 
   async decide(ctx: RequestContext, runId: string) {
@@ -262,14 +314,41 @@ export class EvaluationService {
       this.fileSha(loaded.trainable.artifactUri) === run.baseSha256 &&
       sha256File(this.roots.artifacts, join(this.roots.artifacts, loaded.artifact.relativePath)) === run.adapterSha256;
     const contaminated = await this.persistence.repos.evaluation.isArtifactContaminated(loaded.artifact.id);
-    const decision = decideGate({
+    const stored = readStoredContract(run.decoding);
+    const manifests = stored ?? {
+      baseline: legacyManifest({
+        decoding: run.decoding,
+        benchmarkId: version.suiteId,
+        benchmarkVersion: String(version.version),
+        itemSetFingerprint: version.contentHash,
+        promptTemplateDigest: version.promptTemplateHash,
+        scorerId: version.scorerId,
+        scorerVersion: version.scorerVersion,
+        checkpointDigest: run.baseSha256,
+        adapterDigest: null,
+      }),
+      candidate: legacyManifest({
+        decoding: run.decoding,
+        benchmarkId: version.suiteId,
+        benchmarkVersion: String(version.version),
+        itemSetFingerprint: version.contentHash,
+        promptTemplateDigest: version.promptTemplateHash,
+        scorerId: version.scorerId,
+        scorerVersion: version.scorerVersion,
+        checkpointDigest: run.baseSha256,
+        adapterDigest: run.adapterSha256,
+      }),
+    };
+    const comparison = compareManifests(manifests.baseline, manifests.candidate);
+    const gateInput = {
       domain: version.domain,
       paired,
       baselineFormat: rate(baseline.map((row) => row.formatValid)),
       candidateFormat: rate(candidateRows.map((row) => row.formatValid)),
       checksumsMatch,
       contaminated,
-    });
+    };
+    const decision = !checksumsMatch || contaminated ? decideGate(gateInput) : applyGateIfComparable(comparison, gateInput);
     const row = {
       id: randomUUID(),
       candidateId: candidate.id,
@@ -295,7 +374,7 @@ export class EvaluationService {
     });
     const verdict = decision.decision === "PASS" ? "pass" : decision.decision === "INCONCLUSIVE" ? "inconclusive" : "fail";
     await this.notify(ctx, candidate.id, verdict, paired.difference);
-    return { ...row, critical: decision.critical, warnings: decision.warnings, paired };
+    return { ...row, critical: decision.critical, warnings: decision.warnings, paired, comparison };
   }
 
   async quarantine(ctx: RequestContext, candidateId: string, reason: string) {
@@ -782,6 +861,10 @@ export class EvaluationService {
       metadata: {},
     });
   }
+}
+
+function numberField(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function rate(flags: boolean[]): number {

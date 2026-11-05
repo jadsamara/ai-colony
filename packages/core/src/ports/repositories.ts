@@ -28,6 +28,7 @@ import type {
   TaskType,
 } from "@ai-colony/contracts";
 import type { DecodedCursor } from "../pagination.js";
+import type { CapabilityRepository } from "../capability/repository.js";
 import type { EvaluationRepository } from "../evaluation/repository.js";
 import type { LearningRepository } from "../learning/repository.js";
 import type { TrainingRepository } from "../training/repository.js";
@@ -687,6 +688,7 @@ export interface ObjectiveRepository {
     probedAt: Date | null;
   }): Promise<void>;
   listRuntimes(): Promise<RuntimeRow[]>;
+  latestCompletedInferenceAt(): Promise<Date | null>;
   heartbeat(input: { workerId: string; role: string; beatAt: Date; detail: string | null }): Promise<void>;
   listHeartbeats(): Promise<HeartbeatRow[]>;
   findDepartmentBySlug(slug: string): Promise<{ id: string; slug: string; status: string } | null>;
@@ -862,6 +864,41 @@ export interface ExperimentRepository {
   list(): Promise<StoredExperiment[]>;
 }
 
+export interface StoredRoutingDecision {
+  id: string;
+  taskId: string | null;
+  objectiveId: string;
+  purpose: string;
+  departmentId: string;
+  assignmentId: string | null;
+  assignmentVersion: number | null;
+  registryModelId: string;
+  servingModel: string;
+  modelDigest: string | null;
+  adapterId: string | null;
+  adapterVersion: string | null;
+  policyVersion: string;
+  authorization: "authorized" | "denied";
+  reasonCode: string;
+  budgetOutcome: string;
+  resourceOutcome: string;
+  fallbackStatus: "disabled";
+  executionVerification: "unverified" | "matched" | "mismatch";
+  capabilityNote: string;
+  runtimeEvidence: Record<string, unknown>;
+  createdAt: string;
+  servingInstanceId: string | null;
+  endpointReference: string | null;
+  agentId: string | null;
+  servingPolicyVersion: string | null;
+}
+
+export interface RoutingRepository {
+  insert(row: StoredRoutingDecision): Promise<void>;
+  findByTask(taskId: string): Promise<StoredRoutingDecision | null>;
+  findByObjectivePurpose(objectiveId: string, purpose: string): Promise<StoredRoutingDecision | null>;
+}
+
 export interface Repositories {
   departments: DepartmentRepository;
   agents: AgentRepository;
@@ -877,6 +914,8 @@ export interface Repositories {
   evaluation: EvaluationRepository;
   learning: LearningRepository;
   experiments: ExperimentRepository;
+  capability: CapabilityRepository;
+  routing: RoutingRepository;
 }
 
 export interface Persistence {

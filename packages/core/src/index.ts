@@ -91,7 +91,40 @@ export type {
 } from "./evaluation/repository.js";
 export { gradeArithmetic } from "./evaluation/score.js";
 export { claimSignificance, mcnemarExact, pairedCounts, wilsonInterval } from "./evaluation/stats.js";
-export { decideGate, GATE_POLICY, gatePolicyHash } from "./evaluation/gate.js";
+export { applyGateIfComparable, decideGate, GATE_POLICY, gatePolicyHash } from "./evaluation/gate.js";
+export { compareManifests } from "./evaluation/compare.js";
+export { classifyItem, summarizeItems } from "./evaluation/classify.js";
+export {
+  configurationFingerprint,
+  contentDigest,
+  EVALUATION_CONTRACT_VERSION,
+  itemSetFingerprint,
+  parseEvaluationManifest,
+  type EvaluationManifest,
+} from "./evaluation/manifest.js";
+export { colonyRunContract, legacyManifest } from "./evaluation/colony-manifest.js";
+export { analyzePairedRuns } from "./evaluation/paired.js";
+export { CapabilityLedgerService, separateModelIdentity } from "./capability/service.js";
+export { MemoryCapabilityRepository, type CapabilityRepository } from "./capability/repository.js";
+export { holmAdjust, applyHolm } from "./capability/holm.js";
+export { discordantPairWilsonInterval, newcombePairedDifference, NEWCOMBE_Z } from "./capability/interval.js";
+export { validateTaxonomyGraph, reconstructTaxonomy } from "./capability/taxonomy.js";
+export { compareCertifiedSnapshots } from "./capability/compare.js";
+export { SNAPSHOT_SCHEMA_VERSION } from "./capability/types.js";
+export type {
+  LedgerDecision,
+  LedgerEdge,
+  LedgerMapping,
+  LedgerMappingVersion,
+  LedgerProposal,
+  LedgerRetentionEvent,
+  LedgerSnapshot,
+  LedgerTaxonomyVersion,
+  LedgerTopic,
+  LedgerTopicEvent,
+  ModelIdentitySeparation,
+  TaxonomyNode,
+} from "./capability/types.js";
 export { assessDeployment, improvementPolicyHash, verifyImprovement, IMPROVEMENT_POLICY } from "./evaluation/improvement.js";
 export type { DeploymentEligibility, ImprovementClass, ImprovementEvidence, ImprovementVerdict } from "./evaluation/improvement.js";
 export { ScriptedTrainingProvider, type ScriptedTrainingOptions } from "./training/scripted-provider.js";
@@ -118,6 +151,34 @@ export { AgentRuntime } from "./runtime/agent-runtime.js";
 export { LifecycleOnlyExecutor } from "./runtime/lifecycle-only-executor.js";
 export { assembleAgentStatus, type AgentExecutor, type RuntimeSession } from "./runtime/status.js";
 export { isStaleRuntime } from "./runtime/stale.js";
+export {
+  artifactPresence,
+  describeModelHealth,
+  inferenceReadiness,
+  ollamaManifestPath,
+  type ModelObservation,
+  type PersistedRuntimeStatus,
+} from "./runtime/model-health.js";
+export {
+  assessApi,
+  assessDispatcher,
+  assessPostgres,
+  assessRegistry,
+  assessTraining,
+  assessWorkers,
+  buildRuntimeReport,
+  type ComponentHealth,
+} from "./runtime/colony-health.js";
+export {
+  API_PROCESS,
+  DISPATCHER_PROCESS,
+  TRAINING_PROCESS,
+  WORKER_PROCESS,
+  commandLines,
+  processSeen,
+  tcpReachable,
+} from "./runtime/local-signals.js";
+export { summarizeOutbox, type OutboxObservation, type OutboxSummary } from "./messaging/outbox-summary.js";
 export type { InferenceWorkerPort, TrainingWorkerPort } from "./runtime/worker-ports.js";
 export {
   assertRecipientAgentEligible,
@@ -214,4 +275,103 @@ export type {
   PrincipalRepository,
   StoredMessage,
   Repositories,
+  RoutingRepository,
+  StoredRoutingDecision,
 } from "./ports/repositories.js";
+export { evaluateRouting, inferencePathClass } from "./routing/evaluate.js";
+export {
+  ADVISORY_MACHINE_MEMORY_BYTES,
+  LARGE_ARTIFACT_BYTES,
+  RESERVED_HEADROOM_BYTES,
+  assessLiveServing,
+  type CatalogModel,
+  type LiveServingAssessment,
+} from "./routing/resources.js";
+export {
+  CEO_DEPARTMENT_ID,
+  LEGACY_DEPARTMENT_IDS,
+  LEGACY_ROUTING_POLICY_VERSION,
+  ROUTING_EVIDENCE_TTL_MS,
+  SHARED_QWEN3_8B_MODEL_ID,
+  isLegacyDepartment,
+} from "./routing/policy.js";
+export type { RoutingSelection, RoutingSnapshot, RuntimeEvidence, DerivedServingArtifact } from "./routing/types.js";
+export { normalizeEndpoint, endpointReferenceFor, dedicatedInstanceId } from "./serving/endpoints.js";
+export { httpDepartmentClient } from "./serving/http.js";
+export { departmentProfiles, planDedicatedInstances } from "./serving/inventory.js";
+export { bindDedicatedEndpoints, assertNoSharedServing, type TrustedEndpointDirectory } from "./serving/plan.js";
+export { estimateDedicatedCapacity, gcpDeploymentPlan, type CapacityEstimate, type GcpServicePlan } from "./serving/capacity.js";
+export {
+  dedicatedRoutingEnabled,
+  gateDedicatedExecution,
+  probeServingEndpoint,
+  readActivation,
+  resolveDedicatedProvider,
+  writeActivationAtomic,
+  type ActivationRecord,
+  type DedicatedRoutingConfig,
+} from "./serving/activation.js";
+export { assertDedicatedCapacity, limitsFromEnv, type CapacityLimits, type PreflightResult } from "./serving/preflight.js";
+export { planModelArtifacts, type ArtifactObservation, type ArtifactPlan } from "./serving/provision.js";
+export {
+  AGENT_IMAGE,
+  MOCK_IMAGE,
+  OLLAMA_IMAGE,
+  STOP_ARGS,
+  composeStopInvocation,
+  renderDedicatedCompose,
+  type ComposeDocument,
+} from "./serving/compose.js";
+export {
+  DepartmentAgentRuntime,
+  DepartmentColony,
+  MemoryStore,
+  InMemoryCheckpoints,
+  createDepartmentColony,
+  type DepartmentModelClient,
+  type CheckpointStore,
+} from "./serving/runtime.js";
+export {
+  DEDICATED_SERVING_POLICY_VERSION,
+  type AgentCheckpoint,
+  type AgentMessage,
+  type AgentSource,
+  type DedicatedRoutingContext,
+  type DedicatedServingInstance,
+  type DepartmentProfile,
+  type DepartmentSource,
+} from "./serving/types.js";
+export {
+  EVALUATION_DEPARTMENT_ID,
+  GAMING_AGENT_ID,
+  GAMING_DEPARTMENT_ID,
+  GAMING_ENDPOINT_REFERENCE,
+  GAMING_SERVING_INSTANCE_ID,
+  PRODUCT_AGENT_ID,
+  PRODUCT_DEPARTMENT_ID,
+  PRODUCT_ENDPOINT_REFERENCE,
+  PRODUCT_MOCK_ENDPOINT,
+  PRODUCT_MODEL_VERSION,
+  PRODUCT_REAL_ENDPOINT,
+  PRODUCT_SERVING_INSTANCE_ID,
+  inventoryDepartmentStatus,
+} from "./product/identity.js";
+export {
+  IMPROVEMENT_STATUSES,
+  IMPROVEMENT_TRANSITIONS,
+  ImprovementService,
+  buildProposal,
+  createMemoryImprovementStore,
+  recommendParticipants,
+  suggestPriority,
+  type ColonySignal,
+  type DispatchedWork,
+  type EvaluationEvidence,
+  type GovernedMemoryProposal,
+  type ImprovementEvent,
+  type ImprovementProposal,
+  type ImprovementStatus,
+  type ImprovementStore,
+  type ParticipantRecommendation,
+  type ProposalDraft,
+} from "./product/improvements.js";

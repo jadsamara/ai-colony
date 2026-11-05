@@ -24,11 +24,12 @@ export async function closeTestDb(): Promise<void> {
 }
 
 export async function ensureTestDatabase(): Promise<void> {
+  const databaseName = new URL(TEST_DATABASE_URL).pathname.replace(/^\//, "");
   const admin = postgres(ADMIN_DATABASE_URL, { max: 1 });
   try {
-    const existing = await admin`select 1 from pg_database where datname = 'ai_colony_test'`;
+    const existing = await admin`select 1 from pg_database where datname = ${databaseName}`;
     if (existing.length === 0) {
-      await admin.unsafe("CREATE DATABASE ai_colony_test");
+      await admin.unsafe(`CREATE DATABASE ${databaseName}`);
     }
   } finally {
     await admin.end();

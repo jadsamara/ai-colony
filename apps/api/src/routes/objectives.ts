@@ -15,6 +15,7 @@ import {
 } from "@ai-colony/contracts";
 import { OpenAICompatibleProvider } from "@ai-colony/inference";
 import { errorResponses, requestContext } from "./common.js";
+import { currentModelHealth } from "./live-model.js";
 
 export async function registerObjectiveRoutes(app: FastifyInstance): Promise<void> {
   const route = app.withTypeProvider<ZodTypeProvider>();
@@ -138,7 +139,10 @@ export async function registerObjectiveRoutes(app: FastifyInstance): Promise<voi
         response: { 200: inferenceHealthSchema, ...errorResponses },
       },
     },
-    async (request) => app.services.objectives.health(requestContext(request), inference.route),
+    async (request) => {
+      const persisted = await app.services.objectives.health(requestContext(request), inference.route);
+      return { ...persisted, live: await currentModelHealth(app, request, persisted.models) };
+    },
   );
 
   route.post(
@@ -178,6 +182,9 @@ export async function registerObjectiveRoutes(app: FastifyInstance): Promise<voi
         response: { 200: monitoringOverviewSchema, ...errorResponses },
       },
     },
-    async (request) => app.services.objectives.overview(requestContext(request), inference.staleAfterMs),
+    async (request) => {
+      const overview = await app.services.objectives.overview(requestContext(request), inference.staleAfterMs);
+      return { ...overview, live: await currentModelHealth(app, request, overview.models) };
+    },
   );
 }

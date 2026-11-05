@@ -100,6 +100,7 @@ export class OpenAICompatibleProvider implements InferenceProvider {
     }
     const body = (await response.json()) as {
       model?: string;
+      digest?: string;
       choices?: Array<{ message?: { content?: string } }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
@@ -117,6 +118,7 @@ export class OpenAICompatibleProvider implements InferenceProvider {
     return {
       text,
       servedModel: body.model,
+      servedDigest: typeof body.digest === "string" ? body.digest : null,
       usage: normalizeUsage({
         promptTokens: body.usage?.prompt_tokens,
         completionTokens: body.usage?.completion_tokens,

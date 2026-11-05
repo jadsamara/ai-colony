@@ -22,6 +22,7 @@ import {
   DEFAULT_MEMORY_LIMITS,
   MemoryService,
   EvaluationService,
+  CapabilityLedgerService,
   CollaborationService,
   DepartmentLearningService,
   MlxTrainingProvider,
@@ -43,10 +44,12 @@ import { registerAgentRoutes } from "./routes/agents.js";
 import { registerDepartmentRoutes } from "./routes/departments.js";
 import { registerGovernanceRoutes } from "./routes/governance.js";
 import { registerHealthRoutes } from "./routes/health.js";
+import { registerRuntimeHealthRoutes } from "./routes/runtime-health.js";
 import { registerMessageRoutes } from "./routes/messages.js";
 import { registerMemoryRoutes } from "./routes/memories.js";
 import { registerModelRoutes } from "./routes/models.js";
 import { registerEvaluationRoutes } from "./routes/evaluation.js";
+import { registerCapabilityRoutes } from "./routes/capabilities.js";
 import { registerLearningRoutes } from "./routes/learning.js";
 import { registerExperimentRoutes } from "./routes/experiments.js";
 import { registerTrainingRoutes } from "./routes/training.js";
@@ -116,6 +119,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const training = new TrainingService(options.persistence, authorizer, trainingProvider, messages, trainingRoots);
   const experiments = new ExperimentService(options.persistence, authorizer);
   const evaluation = new EvaluationService(options.persistence, authorizer, trainingProvider, messages, trainingRoots);
+  const ledger = new CapabilityLedgerService(options.persistence, authorizer);
   const learning = new DepartmentLearningService(options.persistence, authorizer, messages, training, evaluation, memories);
   const collaboration = new CollaborationService(options.persistence, authorizer, memories, messages);
   app.decorate("services", {
@@ -138,11 +142,15 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       apiKey: inferenceConfig.apiKey,
       primaryModelId: QWEN3_8B_MODEL_ID,
       staleAfterMs: options.config.runtimeStaleAfterMs,
+      probeTimeoutMs: inferenceConfig.probeTimeoutMs,
+      probeFreshnessMs: inferenceConfig.probeFreshnessMs,
+      probeMinIntervalMs: inferenceConfig.probeMinIntervalMs,
       route: routeFromConfig(inferenceConfig),
     },
     training,
     experiments,
     evaluation,
+    ledger,
     learning,
     collaboration,
   });
@@ -176,6 +184,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   registerCorrelation(app);
   registerErrors(app);
   registerAuth(app, options.config);
+  await registerRuntimeHealthRoutes(app);
   await registerHealthRoutes(
     app,
     options.checkReady ??
@@ -193,6 +202,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await registerTrainingRoutes(app);
   await registerExperimentRoutes(app);
   await registerEvaluationRoutes(app);
+  await registerCapabilityRoutes(app);
   await registerLearningRoutes(app);
   await registerModelRoutes(app);
   await registerMessageRoutes(app);

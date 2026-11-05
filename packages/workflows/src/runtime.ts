@@ -3,6 +3,7 @@ import {
   InferenceError,
   MessageHandlingError,
   recordReceipt,
+  resolveDedicatedProvider,
   type InferenceProvider,
   type InferenceRequest,
   type InferenceRoute,
@@ -36,8 +37,18 @@ export async function executePrepared(
     signal,
   };
   request.messages = (await service.memoryMessages(prepared)) ?? prepared.messages;
+  const selected = resolveDedicatedProvider(provider, prepared.servingInstanceId, route.dedicatedRouting);
   try {
-    const result = await provider.generate(request);
+    const result = await selected.generate(request);
+    const pinnedDigest = route.routingEvidence?.digest ?? null;
+    if (result.servedDigest && pinnedDigest && result.servedDigest !== pinnedDigest) {
+      await service.failGeneration(prepared.requestId, "Resolved digest did not match the pinned routing decision");
+      throw new InferenceError("identity_mismatch", "Resolved digest did not match the pinned routing decision", false);
+    }
+    if (result.servedModel !== request.modelAlias) {
+      await service.failGeneration(prepared.requestId, "Served model did not match the pinned routing decision");
+      throw new InferenceError("identity_mismatch", "Served model did not match the pinned routing decision", false);
+    }
     await service.completeGeneration({
       requestId: prepared.requestId,
       text: result.text,
@@ -48,7 +59,9 @@ export async function executePrepared(
     });
     return result.text;
   } catch (error) {
-    await service.failGeneration(prepared.requestId, error instanceof Error ? error.message : "inference failed");
+    if (!(error instanceof InferenceError) || error.code !== "identity_mismatch") {
+      await service.failGeneration(prepared.requestId, error instanceof Error ? error.message : "inference failed");
+    }
     if (error instanceof InferenceError && error.retryable) {
       throw new MessageHandlingError(error.message, false);
     }
@@ -62,8 +75,12 @@ export function objectiveMessageHandler(input: {
   route: InferenceRoute;
   workerId: string;
   role: "specialist" | "orchestration";
+  refreshRoute?: () => Promise<void>;
 }): MessageHandler {
   return async (message: Message) => {
+    if (input.refreshRoute) {
+      await input.refreshRoute();
+    }
     if (
       input.role === "specialist" &&
       message.messageType === "TASK_REQUEST" &&

@@ -27,10 +27,12 @@ import {
 import { createMemoryRepository } from "./memories.js";
 import { createEvaluationRepository } from "./evaluation.js";
 import { createLearningRepository } from "./learning.js";
+import { createCapabilityRepository } from "./capability.js";
 import { createExperimentRepository } from "./experiments.js";
 import { createTrainingRepository } from "./training.js";
 import { createMessageRepository } from "./messages.js";
 import { createObjectiveRepository } from "./objectives.js";
+import { createRoutingRepository } from "./routing.js";
 import {
   mapAgent,
   mapApproval,
@@ -589,6 +591,8 @@ export function createRepositories(db: DbExecutor): Repositories {
     experiments: createExperimentRepository(db),
     evaluation: createEvaluationRepository(db),
     learning: createLearningRepository(db),
+    capability: createCapabilityRepository(db),
+    routing: createRoutingRepository(db),
   };
 }
 

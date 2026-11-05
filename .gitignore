@@ -5,6 +5,9 @@ coverage/
 *.log
 .DS_Store
 .drizzle/
+deploy/state/
+deploy/colony.env
+deploy/mock-image/
 .pnpm-store/
 services/training/.venv/
 services/training/artifacts/

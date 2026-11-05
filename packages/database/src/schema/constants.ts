@@ -148,3 +148,7 @@ export const INFERENCE_REQUEST_STATUSES = [
 ] as const;
 
 export const TOKEN_SOURCES = ["observed", "unavailable", "estimated"] as const;
+
+export const SERVING_PROVIDERS = ["ollama", "vllm", "sglang"] as const;
+
+export const SERVING_STATUSES = ["configured", "starting", "ready", "unavailable", "stopped"] as const;
