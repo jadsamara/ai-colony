@@ -5,7 +5,7 @@
 -- Dumped from database version 17.5 (Homebrew)
 -- Dumped by pg_dump version 17.0
 
--- Started on 2026-11-05 00:04:18 EST
+-- Started on 2026-11-05 00:20:50 EST
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -18,6 +18,2393 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- TOC entry 8 (class 2615 OID 20910)
+-- Name: drizzle; Type: SCHEMA; Schema: -; Owner: colony
+--
+
+CREATE SCHEMA drizzle;
+
+
+ALTER SCHEMA drizzle OWNER TO colony;
+
+--
+-- TOC entry 3 (class 3079 OID 38346)
+-- Name: postgres_fdw; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS postgres_fdw WITH SCHEMA public;
+
+
+--
+-- TOC entry 5303 (class 0 OID 0)
+-- Dependencies: 3
+-- Name: EXTENSION postgres_fdw; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION postgres_fdw IS 'foreign-data wrapper for remote PostgreSQL servers';
+
+
+--
+-- TOC entry 2 (class 3079 OID 37825)
+-- Name: vector; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+
+
+--
+-- TOC entry 5304 (class 0 OID 0)
+-- Dependencies: 2
+-- Name: EXTENSION vector; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION vector IS 'vector data type and ivfflat and hnsw access methods';
+
+
+--
+-- TOC entry 350 (class 1255 OID 21108)
+-- Name: colony_reject_audit_mutation(); Type: FUNCTION; Schema: public; Owner: colony
+--
+
+CREATE FUNCTION public.colony_reject_audit_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'audit_events are append-only and cannot be updated or deleted';
+END;
+$$;
+
+
+ALTER FUNCTION public.colony_reject_audit_mutation() OWNER TO colony;
+
+--
+-- TOC entry 429 (class 1255 OID 87763)
+-- Name: colony_reject_published_benchmark(); Type: FUNCTION; Schema: public; Owner: colony
+--
+
+CREATE FUNCTION public.colony_reject_published_benchmark() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.status <> 'draft' THEN
+    RAISE EXCEPTION 'published benchmark versions are immutable';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.colony_reject_published_benchmark() OWNER TO colony;
+
+--
+-- TOC entry 335 (class 1255 OID 60701)
+-- Name: colony_reject_training_mutation(); Type: FUNCTION; Schema: public; Owner: colony
+--
+
+CREATE FUNCTION public.colony_reject_training_mutation() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION '% is immutable', TG_TABLE_NAME;
+END;
+$$;
+
+
+ALTER FUNCTION public.colony_reject_training_mutation() OWNER TO colony;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 223 (class 1259 OID 20912)
+-- Name: __drizzle_migrations; Type: TABLE; Schema: drizzle; Owner: colony
+--
+
+CREATE TABLE drizzle.__drizzle_migrations (
+    id integer NOT NULL,
+    hash text NOT NULL,
+    created_at bigint
+);
+
+
+ALTER TABLE drizzle.__drizzle_migrations OWNER TO colony;
+
+--
+-- TOC entry 222 (class 1259 OID 20911)
+-- Name: __drizzle_migrations_id_seq; Type: SEQUENCE; Schema: drizzle; Owner: colony
+--
+
+CREATE SEQUENCE drizzle.__drizzle_migrations_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE drizzle.__drizzle_migrations_id_seq OWNER TO colony;
+
+--
+-- TOC entry 5305 (class 0 OID 0)
+-- Dependencies: 222
+-- Name: __drizzle_migrations_id_seq; Type: SEQUENCE OWNED BY; Schema: drizzle; Owner: colony
+--
+
+ALTER SEQUENCE drizzle.__drizzle_migrations_id_seq OWNED BY drizzle.__drizzle_migrations.id;
+
+
+--
+-- TOC entry 224 (class 1259 OID 20920)
+-- Name: agent_lifecycle_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.agent_lifecycle_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    agent_id uuid NOT NULL,
+    from_status text NOT NULL,
+    to_status text NOT NULL,
+    reason text NOT NULL,
+    actor_id text NOT NULL,
+    actor_type text NOT NULL,
+    correlation_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agent_lifecycle_events_actor_check CHECK ((actor_type = ANY (ARRAY['system'::text, 'human'::text, 'agent'::text]))),
+    CONSTRAINT agent_lifecycle_events_from_check CHECK ((from_status = ANY (ARRAY['registered'::text, 'initializing'::text, 'idle'::text, 'running'::text, 'paused'::text, 'stopping'::text, 'stopped'::text, 'failed'::text, 'archived'::text]))),
+    CONSTRAINT agent_lifecycle_events_to_check CHECK ((to_status = ANY (ARRAY['registered'::text, 'initializing'::text, 'idle'::text, 'running'::text, 'paused'::text, 'stopping'::text, 'stopped'::text, 'failed'::text, 'archived'::text])))
+);
+
+
+ALTER TABLE public.agent_lifecycle_events OWNER TO colony;
+
+--
+-- TOC entry 225 (class 1259 OID 20932)
+-- Name: agents; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.agents (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    name text NOT NULL,
+    role_name text NOT NULL,
+    description text NOT NULL,
+    capabilities jsonb NOT NULL,
+    model_id uuid,
+    adapter_version text,
+    memory_namespace text NOT NULL,
+    compute_budget jsonb NOT NULL,
+    parameter_budget jsonb NOT NULL,
+    status text NOT NULL,
+    performance_metrics jsonb NOT NULL,
+    parent_agent_id uuid,
+    specification_version text NOT NULL,
+    runtime_owner text,
+    runtime_heartbeat_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agents_parent_not_self CHECK (((parent_agent_id IS NULL) OR (parent_agent_id <> id))),
+    CONSTRAINT agents_role_check CHECK ((role_name = ANY (ARRAY['system_administrator'::text, 'ceo_agent'::text, 'orchestration_agent'::text, 'evolution_agent'::text, 'monitoring_agent'::text, 'department_agent'::text, 'read_only_observer'::text]))),
+    CONSTRAINT agents_status_check CHECK ((status = ANY (ARRAY['registered'::text, 'initializing'::text, 'idle'::text, 'running'::text, 'paused'::text, 'stopping'::text, 'stopped'::text, 'failed'::text, 'archived'::text])))
+);
+
+
+ALTER TABLE public.agents OWNER TO colony;
+
+--
+-- TOC entry 226 (class 1259 OID 20948)
+-- Name: approval_requests; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.approval_requests (
+    id uuid NOT NULL,
+    approval_type text NOT NULL,
+    target_type text NOT NULL,
+    target_id uuid NOT NULL,
+    payload jsonb NOT NULL,
+    status text NOT NULL,
+    requested_by uuid NOT NULL,
+    decided_by uuid,
+    decision_reason text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    consumed_at timestamp with time zone,
+    CONSTRAINT approval_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
+    CONSTRAINT approval_requests_target_type_check CHECK ((target_type = ANY (ARRAY['department'::text, 'agent'::text]))),
+    CONSTRAINT approval_requests_type_check CHECK ((approval_type = ANY (ARRAY['department_create'::text, 'department_activate'::text, 'budget_change'::text])))
+);
+
+
+ALTER TABLE public.approval_requests OWNER TO colony;
+
+--
+-- TOC entry 275 (class 1259 OID 87529)
+-- Name: artifact_contamination; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.artifact_contamination (
+    id uuid NOT NULL,
+    artifact_id uuid NOT NULL,
+    forgetting_request_id uuid NOT NULL,
+    relation text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.artifact_contamination OWNER TO colony;
+
+--
+-- TOC entry 227 (class 1259 OID 20959)
+-- Name: audit_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.audit_events (
+    event_id uuid DEFAULT gen_random_uuid() NOT NULL,
+    event_type text NOT NULL,
+    actor_id text NOT NULL,
+    actor_type text NOT NULL,
+    target_type text NOT NULL,
+    target_id text NOT NULL,
+    action text NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() NOT NULL,
+    correlation_id text NOT NULL,
+    before_state jsonb,
+    after_state jsonb,
+    metadata jsonb NOT NULL,
+    CONSTRAINT audit_events_actor_type_check CHECK ((actor_type = ANY (ARRAY['system'::text, 'human'::text, 'agent'::text])))
+);
+
+
+ALTER TABLE public.audit_events OWNER TO colony;
+
+--
+-- TOC entry 276 (class 1259 OID 87539)
+-- Name: benchmark_items; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.benchmark_items (
+    id uuid NOT NULL,
+    version_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    domain text NOT NULL,
+    prompt text NOT NULL,
+    expected text NOT NULL,
+    prompt_hash text NOT NULL,
+    sealed boolean NOT NULL
+);
+
+
+ALTER TABLE public.benchmark_items OWNER TO colony;
+
+--
+-- TOC entry 277 (class 1259 OID 87548)
+-- Name: benchmark_suites; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.benchmark_suites (
+    id uuid NOT NULL,
+    slug text NOT NULL,
+    name text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.benchmark_suites OWNER TO colony;
+
+--
+-- TOC entry 278 (class 1259 OID 87558)
+-- Name: benchmark_versions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.benchmark_versions (
+    id uuid NOT NULL,
+    suite_id uuid NOT NULL,
+    version integer NOT NULL,
+    description text NOT NULL,
+    domain text NOT NULL,
+    source text NOT NULL,
+    license text NOT NULL,
+    protocol text NOT NULL,
+    scorer_id text NOT NULL,
+    scorer_version text NOT NULL,
+    content_hash text NOT NULL,
+    prompt_template_hash text NOT NULL,
+    decoding jsonb NOT NULL,
+    thresholds jsonb NOT NULL,
+    status text NOT NULL,
+    sealed boolean NOT NULL,
+    created_by text NOT NULL,
+    approved_by text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT benchmark_versions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'retired'::text])))
+);
+
+
+ALTER TABLE public.benchmark_versions OWNER TO colony;
+
+--
+-- TOC entry 263 (class 1259 OID 60450)
+-- Name: candidate_evaluations; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.candidate_evaluations (
+    id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    baseline jsonb NOT NULL,
+    candidate jsonb NOT NULL,
+    acceptance_met boolean NOT NULL,
+    criteria jsonb NOT NULL,
+    report jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.candidate_evaluations OWNER TO colony;
+
+--
+-- TOC entry 279 (class 1259 OID 87569)
+-- Name: candidate_gate_decisions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.candidate_gate_decisions (
+    id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    report_id uuid NOT NULL,
+    decision text NOT NULL,
+    rationale text NOT NULL,
+    policy_hash text NOT NULL,
+    decided_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT candidate_gate_decisions_decision_check CHECK ((decision = ANY (ARRAY['PASS'::text, 'FAIL'::text, 'INCONCLUSIVE'::text, 'QUARANTINED'::text])))
+);
+
+
+ALTER TABLE public.candidate_gate_decisions OWNER TO colony;
+
+--
+-- TOC entry 289 (class 1259 OID 107439)
+-- Name: capability_gaps; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.capability_gaps (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    capability_id uuid,
+    task_category text NOT NULL,
+    fingerprint text NOT NULL,
+    evidence jsonb NOT NULL,
+    failure_count integer NOT NULL,
+    severity text NOT NULL,
+    impact text NOT NULL,
+    baseline jsonb NOT NULL,
+    proposed_method text NOT NULL,
+    resources jsonb NOT NULL,
+    status text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT capability_gaps_method_check CHECK ((proposed_method = ANY (ARRAY['memory_acquisition'::text, 'memory_consolidation'::text, 'workflow'::text, 'retrieval'::text, 'lora'::text, 'knowledge_transfer'::text, 'no_action'::text]))),
+    CONSTRAINT capability_gaps_severity_check CHECK ((severity = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text]))),
+    CONSTRAINT capability_gaps_status_check CHECK ((status = ANY (ARRAY['observed'::text, 'validated'::text, 'rejected'::text, 'aggregated'::text])))
+);
+
+
+ALTER TABLE public.capability_gaps OWNER TO colony;
+
+--
+-- TOC entry 251 (class 1259 OID 33233)
+-- Name: checkpoint_blobs; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.checkpoint_blobs (
+    thread_id text NOT NULL,
+    checkpoint_ns text DEFAULT ''::text NOT NULL,
+    channel text NOT NULL,
+    version text NOT NULL,
+    type text NOT NULL,
+    blob bytea
+);
+
+
+ALTER TABLE public.checkpoint_blobs OWNER TO colony;
+
+--
+-- TOC entry 249 (class 1259 OID 33215)
+-- Name: checkpoint_migrations; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.checkpoint_migrations (
+    v integer NOT NULL
+);
+
+
+ALTER TABLE public.checkpoint_migrations OWNER TO colony;
+
+--
+-- TOC entry 252 (class 1259 OID 33241)
+-- Name: checkpoint_writes; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.checkpoint_writes (
+    thread_id text NOT NULL,
+    checkpoint_ns text DEFAULT ''::text NOT NULL,
+    checkpoint_id text NOT NULL,
+    task_id text NOT NULL,
+    idx integer NOT NULL,
+    channel text NOT NULL,
+    type text,
+    blob bytea NOT NULL,
+    task_path text DEFAULT ''::text NOT NULL
+);
+
+
+ALTER TABLE public.checkpoint_writes OWNER TO colony;
+
+--
+-- TOC entry 250 (class 1259 OID 33224)
+-- Name: checkpoints; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.checkpoints (
+    thread_id text NOT NULL,
+    checkpoint_ns text DEFAULT ''::text NOT NULL,
+    checkpoint_id text NOT NULL,
+    parent_checkpoint_id text,
+    type text,
+    checkpoint jsonb NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL
+);
+
+
+ALTER TABLE public.checkpoints OWNER TO colony;
+
+--
+-- TOC entry 300 (class 1259 OID 131698)
+-- Name: collaboration_contexts; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.collaboration_contexts (
+    id uuid NOT NULL,
+    classification text NOT NULL,
+    owner_department_id uuid NOT NULL,
+    status text NOT NULL,
+    purpose text NOT NULL,
+    expires_at timestamp with time zone,
+    idempotency_key text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    closed_at timestamp with time zone,
+    CONSTRAINT collaboration_contexts_class_check CHECK ((classification = ANY (ARRAY['consultation'::text, 'specialist'::text, 'joint'::text]))),
+    CONSTRAINT collaboration_contexts_status_check CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text, 'expired'::text])))
+);
+
+
+ALTER TABLE public.collaboration_contexts OWNER TO colony;
+
+--
+-- TOC entry 301 (class 1259 OID 131710)
+-- Name: collaboration_entries; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.collaboration_entries (
+    id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    author_department_id uuid NOT NULL,
+    kind text NOT NULL,
+    content text NOT NULL,
+    provenance text NOT NULL,
+    status text NOT NULL,
+    expires_at timestamp with time zone,
+    promoted_memory_id uuid,
+    source_memory_id uuid,
+    idempotency_key text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT collaboration_entries_kind_check CHECK ((kind = ANY (ARRAY['request_context'::text, 'answer'::text, 'contribution'::text, 'shared_decision'::text]))),
+    CONSTRAINT collaboration_entries_provenance_check CHECK ((provenance = ANY (ARRAY['model_generated'::text, 'system_observed'::text, 'user_provided'::text, 'externally_verified'::text]))),
+    CONSTRAINT collaboration_entries_status_check CHECK ((status = ANY (ARRAY['active'::text, 'expired'::text, 'archived'::text, 'promoted'::text])))
+);
+
+
+ALTER TABLE public.collaboration_entries OWNER TO colony;
+
+--
+-- TOC entry 302 (class 1259 OID 131723)
+-- Name: collaboration_participants; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.collaboration_participants (
+    id uuid NOT NULL,
+    context_id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    role text NOT NULL,
+    status text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT collaboration_participants_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'contributor'::text]))),
+    CONSTRAINT collaboration_participants_status_check CHECK ((status = ANY (ARRAY['invited'::text, 'active'::text, 'removed'::text])))
+);
+
+
+ALTER TABLE public.collaboration_participants OWNER TO colony;
+
+--
+-- TOC entry 320 (class 1259 OID 154311)
+-- Name: department_agent_checkpoints; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.department_agent_checkpoints (
+    id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    task_id uuid NOT NULL,
+    serving_instance_id uuid NOT NULL,
+    model_version text NOT NULL,
+    endpoint_reference text NOT NULL,
+    state jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.department_agent_checkpoints OWNER TO colony;
+
+--
+-- TOC entry 290 (class 1259 OID 107453)
+-- Name: department_capabilities; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.department_capabilities (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    slug text NOT NULL,
+    domain text NOT NULL,
+    task_type text NOT NULL,
+    description text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.department_capabilities OWNER TO colony;
+
+--
+-- TOC entry 291 (class 1259 OID 107463)
+-- Name: department_capability_versions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.department_capability_versions (
+    id uuid NOT NULL,
+    capability_id uuid NOT NULL,
+    version integer NOT NULL,
+    status text NOT NULL,
+    tool_names jsonb NOT NULL,
+    required_permissions jsonb NOT NULL,
+    evidence jsonb NOT NULL,
+    evaluation_run_id uuid,
+    benchmark_version_id uuid,
+    reliability jsonb NOT NULL,
+    resources jsonb NOT NULL,
+    improvement_kind text NOT NULL,
+    approved_by text,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT department_capability_versions_kind_check CHECK ((improvement_kind = ANY (ARRAY['MEMORY_IMPROVEMENT'::text, 'RETRIEVAL_IMPROVEMENT'::text, 'WORKFLOW_IMPROVEMENT'::text, 'TOOL_IMPROVEMENT'::text, 'MODEL_WEIGHT_IMPROVEMENT'::text, 'NO_VERIFIED_IMPROVEMENT'::text]))),
+    CONSTRAINT department_capability_versions_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'experimental'::text, 'evaluated'::text, 'approved'::text, 'rejected'::text, 'revoked'::text, 'superseded'::text])))
+);
+
+
+ALTER TABLE public.department_capability_versions OWNER TO colony;
+
+--
+-- TOC entry 292 (class 1259 OID 107475)
+-- Name: department_model_assignments; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.department_model_assignments (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    role text NOT NULL,
+    registry_model_id uuid NOT NULL,
+    trainable_model_id uuid,
+    candidate_id uuid,
+    adapter_sha256 text,
+    model_family text NOT NULL,
+    version integer NOT NULL,
+    status text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT department_model_assignments_role_check CHECK ((role = ANY (ARRAY['shared_base'::text, 'experimental_adapter'::text, 'capability_adapter'::text, 'fallback'::text]))),
+    CONSTRAINT department_model_assignments_status_check CHECK ((status = ANY (ARRAY['active'::text, 'superseded'::text, 'rejected'::text])))
+);
+
+
+ALTER TABLE public.department_model_assignments OWNER TO colony;
+
+--
+-- TOC entry 319 (class 1259 OID 154298)
+-- Name: department_serving_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.department_serving_events (
+    id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    from_status text NOT NULL,
+    to_status text NOT NULL,
+    actor_id text NOT NULL,
+    reason text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.department_serving_events OWNER TO colony;
+
+--
+-- TOC entry 318 (class 1259 OID 154265)
+-- Name: department_serving_instances; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.department_serving_instances (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    provider text NOT NULL,
+    endpoint_reference text NOT NULL,
+    normalized_endpoint text NOT NULL,
+    model_registry_id uuid NOT NULL,
+    model_version text NOT NULL,
+    artifact_digest text,
+    deployment_mode text NOT NULL,
+    status text NOT NULL,
+    resource_policy_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT department_serving_instances_mode_check CHECK ((deployment_mode = 'dedicated'::text)),
+    CONSTRAINT department_serving_instances_provider_check CHECK ((provider = ANY (ARRAY['ollama'::text, 'vllm'::text, 'sglang'::text]))),
+    CONSTRAINT department_serving_instances_status_check CHECK ((status = ANY (ARRAY['configured'::text, 'starting'::text, 'ready'::text, 'unavailable'::text, 'stopped'::text])))
+);
+
+
+ALTER TABLE public.department_serving_instances OWNER TO colony;
+
+--
+-- TOC entry 228 (class 1259 OID 20969)
+-- Name: departments; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.departments (
+    id uuid NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    description text NOT NULL,
+    purpose text NOT NULL,
+    parent_department_id uuid,
+    status text NOT NULL,
+    department_type text NOT NULL,
+    creation_source text NOT NULL,
+    created_by text NOT NULL,
+    resource_budget jsonb NOT NULL,
+    policy_ref text,
+    metadata jsonb NOT NULL,
+    specification_version text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT departments_creation_source_check CHECK ((creation_source = ANY (ARRAY['seed'::text, 'api'::text]))),
+    CONSTRAINT departments_parent_not_self CHECK (((parent_department_id IS NULL) OR (parent_department_id <> id))),
+    CONSTRAINT departments_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'provisioning'::text, 'active'::text, 'paused'::text, 'deprecated'::text, 'archived'::text, 'failed'::text]))),
+    CONSTRAINT departments_type_check CHECK ((department_type = ANY (ARRAY['system'::text, 'specialized'::text, 'temporary'::text, 'experimental'::text])))
+);
+
+
+ALTER TABLE public.departments OWNER TO colony;
+
+--
+-- TOC entry 303 (class 1259 OID 131735)
+-- Name: deployment_decisions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.deployment_decisions (
+    id uuid NOT NULL,
+    cycle_id uuid NOT NULL,
+    improvement_decision_id uuid,
+    purpose text NOT NULL,
+    eligibility text NOT NULL,
+    adopted boolean NOT NULL,
+    rationale text NOT NULL,
+    decided_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT deployment_decisions_eligibility_check CHECK ((eligibility = ANY (ARRAY['eligible'::text, 'ineligible'::text, 'exceptional'::text]))),
+    CONSTRAINT deployment_decisions_purpose_check CHECK ((purpose = ANY (ARRAY['improvement'::text, 'exceptional'::text])))
+);
+
+
+ALTER TABLE public.deployment_decisions OWNER TO colony;
+
+--
+-- TOC entry 280 (class 1259 OID 87578)
+-- Name: evaluation_item_results; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.evaluation_item_results (
+    id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    role text NOT NULL,
+    raw_output text NOT NULL,
+    task_correct boolean NOT NULL,
+    format_valid boolean NOT NULL,
+    strict_integer_match boolean NOT NULL,
+    ambiguous boolean NOT NULL,
+    equation_value text,
+    CONSTRAINT evaluation_item_results_role_check CHECK ((role = ANY (ARRAY['baseline'::text, 'candidate'::text])))
+);
+
+
+ALTER TABLE public.evaluation_item_results OWNER TO colony;
+
+--
+-- TOC entry 281 (class 1259 OID 87588)
+-- Name: evaluation_reports; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.evaluation_reports (
+    id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    summary jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.evaluation_reports OWNER TO colony;
+
+--
+-- TOC entry 282 (class 1259 OID 87598)
+-- Name: evaluation_runs; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.evaluation_runs (
+    id uuid NOT NULL,
+    benchmark_version_id uuid NOT NULL,
+    candidate_id uuid,
+    trainable_model_id uuid,
+    base_sha256 text NOT NULL,
+    adapter_sha256 text,
+    source text NOT NULL,
+    status text NOT NULL,
+    decoding jsonb NOT NULL,
+    created_by text NOT NULL,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT evaluation_runs_source_check CHECK ((source = ANY (ARRAY['live'::text, 'historical'::text]))),
+    CONSTRAINT evaluation_runs_status_check CHECK ((status = ANY (ARRAY['completed'::text, 'failed'::text])))
+);
+
+
+ALTER TABLE public.evaluation_runs OWNER TO colony;
+
+--
+-- TOC entry 283 (class 1259 OID 87608)
+-- Name: experimental_route_versions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.experimental_route_versions (
+    id uuid NOT NULL,
+    route_id uuid NOT NULL,
+    version integer NOT NULL,
+    kind text NOT NULL,
+    candidate_id uuid,
+    trainable_model_id uuid NOT NULL,
+    adapter_sha256 text,
+    base_sha256 text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT experimental_route_versions_kind_check CHECK ((kind = ANY (ARRAY['baseline'::text, 'candidate'::text])))
+);
+
+
+ALTER TABLE public.experimental_route_versions OWNER TO colony;
+
+--
+-- TOC entry 284 (class 1259 OID 87619)
+-- Name: experimental_routes; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.experimental_routes (
+    id uuid NOT NULL,
+    slug text NOT NULL,
+    current_version integer,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.experimental_routes OWNER TO colony;
+
+--
+-- TOC entry 285 (class 1259 OID 87629)
+-- Name: forgetting_requests; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.forgetting_requests (
+    id uuid NOT NULL,
+    memory_id uuid NOT NULL,
+    status text NOT NULL,
+    idempotency_key text NOT NULL,
+    impact jsonb NOT NULL,
+    requested_by text NOT NULL,
+    approved_by text,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT forgetting_requests_status_check CHECK ((status = ANY (ARRAY['requested'::text, 'approved'::text, 'completed'::text, 'rejected'::text, 'failed'::text])))
+);
+
+
+ALTER TABLE public.forgetting_requests OWNER TO colony;
+
+--
+-- TOC entry 304 (class 1259 OID 131747)
+-- Name: improvement_decisions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.improvement_decisions (
+    id uuid NOT NULL,
+    evaluation_run_id uuid,
+    cycle_id uuid,
+    policy_version text NOT NULL,
+    policy_hash text NOT NULL,
+    safety_gate text NOT NULL,
+    safety_gate_version text NOT NULL,
+    classification text NOT NULL,
+    deployment_eligibility text NOT NULL,
+    baseline_ref text,
+    candidate_id uuid,
+    sample_count integer NOT NULL,
+    effect_size double precision NOT NULL,
+    uncertainty jsonb NOT NULL,
+    retention jsonb NOT NULL,
+    evidence jsonb NOT NULL,
+    rationale text NOT NULL,
+    decided_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT improvement_decisions_class_check CHECK ((classification = ANY (ARRAY['VERIFIED_IMPROVEMENT'::text, 'NO_VERIFIED_IMPROVEMENT'::text, 'VERIFIED_REGRESSION'::text, 'INCONCLUSIVE'::text, 'EVALUATION_INVALID'::text]))),
+    CONSTRAINT improvement_decisions_eligibility_check CHECK ((deployment_eligibility = ANY (ARRAY['eligible'::text, 'ineligible'::text, 'exceptional'::text])))
+);
+
+
+ALTER TABLE public.improvement_decisions OWNER TO colony;
+
+--
+-- TOC entry 239 (class 1259 OID 28462)
+-- Name: inference_requests; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.inference_requests (
+    id uuid NOT NULL,
+    objective_id uuid NOT NULL,
+    task_id uuid,
+    attempt integer NOT NULL,
+    purpose text NOT NULL,
+    registry_model_id uuid NOT NULL,
+    intended_model_id uuid NOT NULL,
+    requested_alias text NOT NULL,
+    status text NOT NULL,
+    reserved_output_tokens integer NOT NULL,
+    idempotency_key text NOT NULL,
+    response_text text,
+    error text,
+    lease_owner text,
+    lease_until timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    CONSTRAINT inference_requests_purpose_check CHECK ((purpose = ANY (ARRAY['plan'::text, 'correct'::text, 'specialist'::text, 'synthesize'::text, 'monitor'::text]))),
+    CONSTRAINT inference_requests_status_check CHECK ((status = ANY (ARRAY['reserved'::text, 'running'::text, 'completed'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+
+ALTER TABLE public.inference_requests OWNER TO colony;
+
+--
+-- TOC entry 240 (class 1259 OID 28474)
+-- Name: inference_usage; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.inference_usage (
+    request_id uuid NOT NULL,
+    input_tokens integer,
+    output_tokens integer,
+    token_source text NOT NULL,
+    served_model text NOT NULL,
+    latency_ms integer NOT NULL,
+    estimated_cost_usd_micros bigint,
+    override_applied boolean NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT inference_usage_source_check CHECK ((token_source = ANY (ARRAY['observed'::text, 'unavailable'::text, 'estimated'::text])))
+);
+
+
+ALTER TABLE public.inference_usage OWNER TO colony;
+
+--
+-- TOC entry 293 (class 1259 OID 107487)
+-- Name: knowledge_transfers; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.knowledge_transfers (
+    id uuid NOT NULL,
+    origin_department_id uuid NOT NULL,
+    destination_department_id uuid NOT NULL,
+    source_memory_id uuid,
+    summary text NOT NULL,
+    provenance text NOT NULL,
+    trust text NOT NULL,
+    evidence jsonb NOT NULL,
+    status text NOT NULL,
+    version integer NOT NULL,
+    restrictions text NOT NULL,
+    idempotency_key text NOT NULL,
+    cycle_id uuid,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT knowledge_transfers_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'accepted'::text, 'rejected'::text])))
+);
+
+
+ALTER TABLE public.knowledge_transfers OWNER TO colony;
+
+--
+-- TOC entry 294 (class 1259 OID 107498)
+-- Name: knowledge_validations; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.knowledge_validations (
+    id uuid NOT NULL,
+    transfer_id uuid NOT NULL,
+    decision text NOT NULL,
+    decided_by text NOT NULL,
+    reason text NOT NULL,
+    accepted_memory_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT knowledge_validations_decision_check CHECK ((decision = ANY (ARRAY['accept'::text, 'reject'::text])))
+);
+
+
+ALTER TABLE public.knowledge_validations OWNER TO colony;
+
+--
+-- TOC entry 295 (class 1259 OID 107509)
+-- Name: learning_budgets; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.learning_budgets (
+    id uuid NOT NULL,
+    cycle_id uuid NOT NULL,
+    max_inference_calls integer NOT NULL,
+    max_training_steps integer NOT NULL,
+    max_runtime_ms integer NOT NULL,
+    used_inference_calls integer NOT NULL,
+    used_training_steps integer NOT NULL,
+    used_runtime_ms integer NOT NULL
+);
+
+
+ALTER TABLE public.learning_budgets OWNER TO colony;
+
+--
+-- TOC entry 296 (class 1259 OID 107516)
+-- Name: learning_cycle_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.learning_cycle_events (
+    id uuid NOT NULL,
+    cycle_id uuid NOT NULL,
+    from_status text NOT NULL,
+    to_status text NOT NULL,
+    actor_id text NOT NULL,
+    reason text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.learning_cycle_events OWNER TO colony;
+
+--
+-- TOC entry 297 (class 1259 OID 107524)
+-- Name: learning_cycles; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.learning_cycles (
+    id uuid NOT NULL,
+    objective_id uuid,
+    department_id uuid NOT NULL,
+    status text NOT NULL,
+    method text NOT NULL,
+    outcome_kind text,
+    training_run_id uuid,
+    evaluation_run_id uuid,
+    gate_decision text,
+    transfer_id uuid,
+    memory_id uuid,
+    idempotency_key text NOT NULL,
+    correlation_id text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT learning_cycles_method_check CHECK ((method = ANY (ARRAY['memory_acquisition'::text, 'memory_consolidation'::text, 'workflow'::text, 'retrieval'::text, 'lora'::text, 'knowledge_transfer'::text, 'no_action'::text]))),
+    CONSTRAINT learning_cycles_status_check CHECK ((status = ANY (ARRAY['OBSERVED'::text, 'GAP_VALIDATED'::text, 'OBJECTIVE_CREATED'::text, 'METHOD_SELECTED'::text, 'PROPOSAL_PENDING'::text, 'AWAITING_APPROVAL'::text, 'APPROVED'::text, 'EXECUTING'::text, 'EVALUATING'::text, 'AWAITING_PROMOTION'::text, 'ADOPTED'::text, 'REJECTED'::text, 'INCONCLUSIVE'::text, 'FAILED'::text, 'CANCELLED'::text])))
+);
+
+
+ALTER TABLE public.learning_cycles OWNER TO colony;
+
+--
+-- TOC entry 298 (class 1259 OID 107537)
+-- Name: learning_objectives; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.learning_objectives (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    gap_id uuid NOT NULL,
+    capability_id uuid,
+    version integer NOT NULL,
+    weakness text NOT NULL,
+    mechanism text NOT NULL,
+    criteria jsonb NOT NULL,
+    benchmark_version_id uuid,
+    baseline_ref text,
+    budget jsonb NOT NULL,
+    status text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT learning_objectives_mechanism_check CHECK ((mechanism = ANY (ARRAY['memory_acquisition'::text, 'memory_consolidation'::text, 'workflow'::text, 'retrieval'::text, 'lora'::text, 'knowledge_transfer'::text, 'no_action'::text])))
+);
+
+
+ALTER TABLE public.learning_objectives OWNER TO colony;
+
+--
+-- TOC entry 299 (class 1259 OID 107548)
+-- Name: learning_outcomes; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.learning_outcomes (
+    id uuid NOT NULL,
+    cycle_id uuid NOT NULL,
+    kind text NOT NULL,
+    verified boolean NOT NULL,
+    summary text NOT NULL,
+    evidence jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT learning_outcomes_kind_check CHECK ((kind = ANY (ARRAY['MEMORY_IMPROVEMENT'::text, 'RETRIEVAL_IMPROVEMENT'::text, 'WORKFLOW_IMPROVEMENT'::text, 'TOOL_IMPROVEMENT'::text, 'MODEL_WEIGHT_IMPROVEMENT'::text, 'NO_VERIFIED_IMPROVEMENT'::text])))
+);
+
+
+ALTER TABLE public.learning_outcomes OWNER TO colony;
+
+--
+-- TOC entry 310 (class 1259 OID 153965)
+-- Name: ledger_decisions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_decisions (
+    id uuid NOT NULL,
+    proposal_id uuid NOT NULL,
+    decision text NOT NULL,
+    decided_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ledger_decisions_decision_check CHECK ((decision = ANY (ARRAY['approved'::text, 'rejected'::text])))
+);
+
+
+ALTER TABLE public.ledger_decisions OWNER TO colony;
+
+--
+-- TOC entry 313 (class 1259 OID 153999)
+-- Name: ledger_mapping_versions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_mapping_versions (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    version integer NOT NULL,
+    taxonomy_version_id uuid NOT NULL,
+    proposal_id uuid NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.ledger_mapping_versions OWNER TO colony;
+
+--
+-- TOC entry 309 (class 1259 OID 153956)
+-- Name: ledger_proposals; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_proposals (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    kind text NOT NULL,
+    payload jsonb NOT NULL,
+    proposed_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ledger_proposals_kind_check CHECK ((kind = ANY (ARRAY['taxonomy'::text, 'mapping'::text, 'measurement'::text])))
+);
+
+
+ALTER TABLE public.ledger_proposals OWNER TO colony;
+
+--
+-- TOC entry 316 (class 1259 OID 154032)
+-- Name: ledger_retention_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_retention_events (
+    id uuid NOT NULL,
+    snapshot_id uuid NOT NULL,
+    action text NOT NULL,
+    decided_by text NOT NULL,
+    reason text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ledger_retention_events_action_check CHECK ((action = ANY (ARRAY['retain'::text, 'revoke'::text, 'archive'::text])))
+);
+
+
+ALTER TABLE public.ledger_retention_events OWNER TO colony;
+
+--
+-- TOC entry 315 (class 1259 OID 154020)
+-- Name: ledger_snapshots; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_snapshots (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    topic_id uuid NOT NULL,
+    taxonomy_version_id uuid NOT NULL,
+    mapping_version_id uuid NOT NULL,
+    evaluation_run_id uuid,
+    evidence_ref text NOT NULL,
+    manifest_fingerprint text NOT NULL,
+    manifest jsonb NOT NULL,
+    model_family text,
+    model_identifier text,
+    checkpoint_digest text,
+    adapter_id text,
+    adapter_digest text,
+    measured_at timestamp with time zone NOT NULL,
+    validity text NOT NULL,
+    sample_size integer NOT NULL,
+    correct_count integer NOT NULL,
+    incorrect_count integer NOT NULL,
+    failure_classes jsonb NOT NULL,
+    accuracy double precision NOT NULL,
+    uncertainty_low double precision NOT NULL,
+    uncertainty_high double precision NOT NULL,
+    measurement_mode text NOT NULL,
+    capability_kind text NOT NULL,
+    items jsonb NOT NULL,
+    provenance text NOT NULL,
+    schema_version text NOT NULL,
+    certified_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ledger_snapshots_counts_check CHECK (((sample_size > 0) AND (correct_count >= 0) AND (incorrect_count >= 0) AND ((correct_count + incorrect_count) = sample_size) AND (accuracy >= (0)::double precision) AND (accuracy <= (1)::double precision))),
+    CONSTRAINT ledger_snapshots_kind_check CHECK ((capability_kind = ANY (ARRAY['model'::text, 'agent_system'::text]))),
+    CONSTRAINT ledger_snapshots_mode_check CHECK ((measurement_mode = ANY (ARRAY['closed_book'::text, 'retrieval_assisted'::text]))),
+    CONSTRAINT ledger_snapshots_validity_check CHECK ((validity = ANY (ARRAY['valid'::text, 'invalid'::text, 'incomplete'::text])))
+);
+
+
+ALTER TABLE public.ledger_snapshots OWNER TO colony;
+
+--
+-- TOC entry 312 (class 1259 OID 153986)
+-- Name: ledger_taxonomy_edges; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_taxonomy_edges (
+    id uuid NOT NULL,
+    version_id uuid NOT NULL,
+    topic_id uuid NOT NULL,
+    parent_topic_id uuid,
+    kind text NOT NULL,
+    name text NOT NULL,
+    description text,
+    status text NOT NULL,
+    target_department_id uuid,
+    CONSTRAINT ledger_taxonomy_edges_kind_check CHECK ((kind = ANY (ARRAY['parent'::text, 'cross_link'::text]))),
+    CONSTRAINT ledger_taxonomy_edges_not_self CHECK (((parent_topic_id IS NULL) OR (parent_topic_id <> topic_id))),
+    CONSTRAINT ledger_taxonomy_edges_shape_check CHECK ((((kind = 'parent'::text) AND (target_department_id IS NULL)) OR ((kind = 'cross_link'::text) AND (parent_topic_id IS NOT NULL)))),
+    CONSTRAINT ledger_taxonomy_edges_status_check CHECK ((status = ANY (ARRAY['active'::text, 'deprecated'::text])))
+);
+
+
+ALTER TABLE public.ledger_taxonomy_edges OWNER TO colony;
+
+--
+-- TOC entry 311 (class 1259 OID 153976)
+-- Name: ledger_taxonomy_versions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_taxonomy_versions (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    version integer NOT NULL,
+    proposal_id uuid NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.ledger_taxonomy_versions OWNER TO colony;
+
+--
+-- TOC entry 308 (class 1259 OID 153947)
+-- Name: ledger_topic_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_topic_events (
+    id uuid NOT NULL,
+    topic_id uuid NOT NULL,
+    event_type text NOT NULL,
+    name text,
+    description text,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ledger_topic_events_type_check CHECK ((event_type = ANY (ARRAY['rename'::text, 'describe'::text, 'deprecate'::text])))
+);
+
+
+ALTER TABLE public.ledger_topic_events OWNER TO colony;
+
+--
+-- TOC entry 314 (class 1259 OID 154009)
+-- Name: ledger_topic_mappings; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_topic_mappings (
+    id uuid NOT NULL,
+    mapping_version_id uuid NOT NULL,
+    item_id text NOT NULL,
+    content_digest text NOT NULL,
+    topic_id uuid NOT NULL,
+    weight double precision,
+    provenance text NOT NULL,
+    CONSTRAINT ledger_topic_mappings_digest_check CHECK ((content_digest ~ '^[a-f0-9]{64}$'::text)),
+    CONSTRAINT ledger_topic_mappings_weight_check CHECK (((weight IS NULL) OR ((weight > (0)::double precision) AND (weight <= (1)::double precision))))
+);
+
+
+ALTER TABLE public.ledger_topic_mappings OWNER TO colony;
+
+--
+-- TOC entry 307 (class 1259 OID 153939)
+-- Name: ledger_topics; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.ledger_topics (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    provenance text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.ledger_topics OWNER TO colony;
+
+--
+-- TOC entry 286 (class 1259 OID 87640)
+-- Name: lineage_edges; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.lineage_edges (
+    id uuid NOT NULL,
+    from_type text NOT NULL,
+    from_id text NOT NULL,
+    to_type text NOT NULL,
+    to_id text NOT NULL,
+    relation text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT lineage_edges_relation_check CHECK ((relation = ANY (ARRAY['definitely_used'::text, 'potentially_used'::text, 'not_used'::text])))
+);
+
+
+ALTER TABLE public.lineage_edges OWNER TO colony;
+
+--
+-- TOC entry 253 (class 1259 OID 38153)
+-- Name: memories; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memories (
+    id uuid NOT NULL,
+    scope text NOT NULL,
+    category text NOT NULL,
+    owner_agent_id uuid,
+    department_id uuid,
+    title text NOT NULL,
+    summary text NOT NULL,
+    content text NOT NULL,
+    provenance text NOT NULL,
+    status text NOT NULL,
+    quality_score double precision,
+    embedding_model text,
+    embedding_dimensions integer,
+    content_hash text NOT NULL,
+    idempotency_key text NOT NULL,
+    superseded_by uuid,
+    origin_agent_id uuid,
+    created_by text NOT NULL,
+    embedding_error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT memories_category_check CHECK ((category = ANY (ARRAY['episodic'::text, 'semantic'::text, 'procedural'::text, 'failure'::text, 'operational'::text]))),
+    CONSTRAINT memories_provenance_check CHECK ((provenance = ANY (ARRAY['model_generated'::text, 'system_observed'::text, 'user_provided'::text, 'externally_verified'::text]))),
+    CONSTRAINT memories_scope_check CHECK ((scope = ANY (ARRAY['agent'::text, 'department'::text, 'colony'::text]))),
+    CONSTRAINT memories_scope_owner_check CHECK ((((scope = 'agent'::text) AND (owner_agent_id IS NOT NULL) AND (department_id IS NOT NULL)) OR ((scope = 'department'::text) AND (owner_agent_id IS NULL) AND (department_id IS NOT NULL)) OR ((scope = 'colony'::text) AND (owner_agent_id IS NULL) AND (department_id IS NULL)))),
+    CONSTRAINT memories_status_check CHECK ((status = ANY (ARRAY['candidate'::text, 'validated'::text, 'disputed'::text, 'superseded'::text, 'archived'::text, 'expired'::text, 'forgetting_requested'::text, 'forgotten'::text])))
+);
+
+
+ALTER TABLE public.memories OWNER TO colony;
+
+--
+-- TOC entry 254 (class 1259 OID 38169)
+-- Name: memory_consolidation_records; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_consolidation_records (
+    id uuid NOT NULL,
+    keeper_id uuid NOT NULL,
+    merged_ids uuid[] NOT NULL,
+    kind text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.memory_consolidation_records OWNER TO colony;
+
+--
+-- TOC entry 255 (class 1259 OID 38177)
+-- Name: memory_contradictions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_contradictions (
+    memory_id uuid NOT NULL,
+    other_memory_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.memory_contradictions OWNER TO colony;
+
+--
+-- TOC entry 256 (class 1259 OID 38183)
+-- Name: memory_embedding_usage; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_embedding_usage (
+    id uuid NOT NULL,
+    model_name text NOT NULL,
+    vector_count integer NOT NULL,
+    latency_ms integer NOT NULL,
+    success boolean NOT NULL,
+    error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.memory_embedding_usage OWNER TO colony;
+
+--
+-- TOC entry 257 (class 1259 OID 38191)
+-- Name: memory_embeddings; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_embeddings (
+    memory_id uuid NOT NULL,
+    model_name text NOT NULL,
+    dimensions integer NOT NULL,
+    embedding public.vector(768) NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.memory_embeddings OWNER TO colony;
+
+--
+-- TOC entry 305 (class 1259 OID 131757)
+-- Name: memory_ownership; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_ownership (
+    memory_id uuid NOT NULL,
+    originating_department_id uuid,
+    primary_owner_department_id uuid NOT NULL,
+    recipient_department_id uuid,
+    classification text NOT NULL,
+    collaboration_id uuid,
+    retention_policy text NOT NULL,
+    promotion_reason text NOT NULL,
+    validation_status text NOT NULL,
+    source_message_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT memory_ownership_class_check CHECK ((classification = ANY (ARRAY['consultation'::text, 'specialist'::text, 'joint'::text]))),
+    CONSTRAINT memory_ownership_validation_check CHECK ((validation_status = ANY (ARRAY['validated'::text, 'unverified'::text])))
+);
+
+
+ALTER TABLE public.memory_ownership OWNER TO colony;
+
+--
+-- TOC entry 258 (class 1259 OID 38199)
+-- Name: memory_promotion_requests; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_promotion_requests (
+    id uuid NOT NULL,
+    memory_id uuid NOT NULL,
+    from_scope text NOT NULL,
+    to_scope text NOT NULL,
+    status text NOT NULL,
+    reason text NOT NULL,
+    proposed_by text NOT NULL,
+    decided_by text,
+    decision_reason text,
+    created_memory_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone
+);
+
+
+ALTER TABLE public.memory_promotion_requests OWNER TO colony;
+
+--
+-- TOC entry 259 (class 1259 OID 38207)
+-- Name: memory_retrieval_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_retrieval_events (
+    id uuid NOT NULL,
+    objective_id uuid,
+    task_id uuid,
+    actor_id text NOT NULL,
+    query_hash text NOT NULL,
+    mode text NOT NULL,
+    hit_count integer NOT NULL,
+    latency_ms integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.memory_retrieval_events OWNER TO colony;
+
+--
+-- TOC entry 260 (class 1259 OID 38215)
+-- Name: memory_retrieval_hits; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_retrieval_hits (
+    event_id uuid NOT NULL,
+    memory_id uuid NOT NULL,
+    rank integer NOT NULL,
+    score double precision NOT NULL
+);
+
+
+ALTER TABLE public.memory_retrieval_hits OWNER TO colony;
+
+--
+-- TOC entry 261 (class 1259 OID 38220)
+-- Name: memory_revisions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_revisions (
+    id uuid NOT NULL,
+    memory_id uuid NOT NULL,
+    revision integer NOT NULL,
+    status text NOT NULL,
+    summary text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.memory_revisions OWNER TO colony;
+
+--
+-- TOC entry 262 (class 1259 OID 38230)
+-- Name: memory_sources; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.memory_sources (
+    id uuid NOT NULL,
+    memory_id uuid NOT NULL,
+    objective_id uuid,
+    task_id uuid,
+    message_id uuid,
+    source_memory_id uuid,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.memory_sources OWNER TO colony;
+
+--
+-- TOC entry 235 (class 1259 OID 24926)
+-- Name: message_dead_letters; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.message_dead_letters (
+    id uuid NOT NULL,
+    message_id uuid,
+    reason text NOT NULL,
+    detail text NOT NULL,
+    attempt_count integer NOT NULL,
+    status text NOT NULL,
+    redriven_at timestamp with time zone,
+    redriven_by text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT message_dead_letters_status_check CHECK ((status = ANY (ARRAY['open'::text, 'redriven'::text])))
+);
+
+
+ALTER TABLE public.message_dead_letters OWNER TO colony;
+
+--
+-- TOC entry 236 (class 1259 OID 24936)
+-- Name: message_delivery_attempts; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.message_delivery_attempts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    message_id uuid NOT NULL,
+    attempt integer NOT NULL,
+    outcome text NOT NULL,
+    error text,
+    worker_id text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.message_delivery_attempts OWNER TO colony;
+
+--
+-- TOC entry 237 (class 1259 OID 24945)
+-- Name: message_outbox; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.message_outbox (
+    id uuid NOT NULL,
+    message_id uuid NOT NULL,
+    attempt integer NOT NULL,
+    status text NOT NULL,
+    available_at timestamp with time zone NOT NULL,
+    claimed_by text,
+    claimed_at timestamp with time zone,
+    lease_until timestamp with time zone,
+    publish_attempts integer DEFAULT 0 NOT NULL,
+    last_error text,
+    published_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT message_outbox_attempt_check CHECK ((attempt > 0)),
+    CONSTRAINT message_outbox_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'publishing'::text, 'published'::text, 'failed'::text])))
+);
+
+
+ALTER TABLE public.message_outbox OWNER TO colony;
+
+--
+-- TOC entry 238 (class 1259 OID 24959)
+-- Name: message_processing_records; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.message_processing_records (
+    message_id uuid NOT NULL,
+    status text NOT NULL,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    owner text,
+    lease_until timestamp with time zone,
+    last_error text,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT message_processing_status_check CHECK ((status = ANY (ARRAY['processing'::text, 'recorded'::text, 'acknowledged'::text, 'rejected'::text, 'expired'::text, 'dead_lettered'::text, 'retry_scheduled'::text])))
+);
+
+
+ALTER TABLE public.message_processing_records OWNER TO colony;
+
+--
+-- TOC entry 234 (class 1259 OID 24910)
+-- Name: messages; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.messages (
+    id uuid NOT NULL,
+    protocol_version text NOT NULL,
+    message_type text NOT NULL,
+    sender_agent_id uuid NOT NULL,
+    sender_department_id uuid NOT NULL,
+    recipient_agent_id uuid,
+    recipient_department_id uuid,
+    addressing_mode text NOT NULL,
+    inbox_department_id uuid NOT NULL,
+    correlation_id uuid NOT NULL,
+    causation_id uuid,
+    reply_to_message_id uuid,
+    priority integer NOT NULL,
+    payload jsonb NOT NULL,
+    payload_schema_version text NOT NULL,
+    payload_hash text NOT NULL,
+    idempotency_key text,
+    metadata jsonb NOT NULL,
+    status text NOT NULL,
+    expires_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT messages_addressing_check CHECK ((((addressing_mode = 'agent'::text) AND (recipient_agent_id IS NOT NULL) AND (recipient_department_id IS NULL)) OR ((addressing_mode = 'department'::text) AND (recipient_department_id IS NOT NULL) AND (recipient_agent_id IS NULL)))),
+    CONSTRAINT messages_addressing_mode_check CHECK ((addressing_mode = ANY (ARRAY['agent'::text, 'department'::text]))),
+    CONSTRAINT messages_payload_schema_check CHECK ((payload_schema_version = '1.0'::text)),
+    CONSTRAINT messages_priority_check CHECK (((priority >= 0) AND (priority <= 9))),
+    CONSTRAINT messages_protocol_check CHECK ((protocol_version = '1.0'::text)),
+    CONSTRAINT messages_status_check CHECK ((status = ANY (ARRAY['accepted'::text, 'published'::text, 'delivered'::text, 'acknowledged'::text, 'rejected'::text, 'expired'::text, 'dead_lettered'::text]))),
+    CONSTRAINT messages_type_check CHECK ((message_type = ANY (ARRAY['TASK_REQUEST'::text, 'TASK_RESULT'::text, 'COLLABORATION_REQUEST'::text, 'KNOWLEDGE_SHARE'::text, 'TRAINING_REQUEST'::text, 'MODEL_CANDIDATE'::text, 'EVALUATION_RESULT'::text, 'RESOURCE_REQUEST'::text, 'HEALTH_ALERT'::text, 'EVOLUTION_PROPOSAL'::text, 'CAPABILITY_GAP'::text, 'LEARNING_OBJECTIVE'::text, 'KNOWLEDGE_TRANSFER'::text, 'KNOWLEDGE_VALIDATION'::text, 'LEARNING_CYCLE_RESULT'::text, 'CAPABILITY_UPDATE'::text])))
+);
+
+
+ALTER TABLE public.messages OWNER TO colony;
+
+--
+-- TOC entry 264 (class 1259 OID 60460)
+-- Name: model_adapters; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.model_adapters (
+    id uuid NOT NULL,
+    artifact_id uuid NOT NULL,
+    base_trainable_model_id uuid NOT NULL,
+    rank integer NOT NULL,
+    alpha double precision NOT NULL,
+    dropout double precision NOT NULL,
+    target_modules jsonb NOT NULL,
+    trainable_parameters bigint NOT NULL,
+    framework text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT model_adapters_parameters_check CHECK ((trainable_parameters > 0)),
+    CONSTRAINT model_adapters_rank_check CHECK (((rank >= 1) AND (rank <= 16)))
+);
+
+
+ALTER TABLE public.model_adapters OWNER TO colony;
+
+--
+-- TOC entry 265 (class 1259 OID 60472)
+-- Name: model_candidates; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.model_candidates (
+    id uuid NOT NULL,
+    adapter_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    status text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT model_candidates_status_check CHECK ((status = ANY (ARRAY['experimental'::text, 'rejected'::text, 'approved'::text, 'retired'::text, 'revoked'::text, 'quarantined'::text])))
+);
+
+
+ALTER TABLE public.model_candidates OWNER TO colony;
+
+--
+-- TOC entry 266 (class 1259 OID 60484)
+-- Name: model_promotion_requests; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.model_promotion_requests (
+    id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    status text NOT NULL,
+    proposed_by text NOT NULL,
+    decided_by text,
+    reason text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decided_at timestamp with time zone,
+    CONSTRAINT model_promotion_requests_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'approved'::text, 'rejected'::text])))
+);
+
+
+ALTER TABLE public.model_promotion_requests OWNER TO colony;
+
+--
+-- TOC entry 241 (class 1259 OID 28483)
+-- Name: model_runtimes; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.model_runtimes (
+    model_id uuid NOT NULL,
+    runtime_status text NOT NULL,
+    endpoint_url text,
+    expected_alias text,
+    loaded_model_id text,
+    last_error text,
+    probed_at timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT model_runtimes_status_check CHECK ((runtime_status = ANY (ARRAY['not_deployed'::text, 'loading'::text, 'ready'::text, 'unavailable'::text, 'failed'::text])))
+);
+
+
+ALTER TABLE public.model_runtimes OWNER TO colony;
+
+--
+-- TOC entry 267 (class 1259 OID 60493)
+-- Name: model_version_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.model_version_events (
+    id uuid NOT NULL,
+    trainable_model_id uuid,
+    candidate_id uuid,
+    run_id uuid,
+    event_type text NOT NULL,
+    actor_id text NOT NULL,
+    detail jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.model_version_events OWNER TO colony;
+
+--
+-- TOC entry 229 (class 1259 OID 20986)
+-- Name: models; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.models (
+    id uuid NOT NULL,
+    lineage_id uuid NOT NULL,
+    version integer NOT NULL,
+    display_name text NOT NULL,
+    model_family text NOT NULL,
+    provider text NOT NULL,
+    parameter_count bigint NOT NULL,
+    model_type text NOT NULL,
+    artifact_uri text,
+    deployment_target text NOT NULL,
+    status text NOT NULL,
+    quantization text,
+    context_window integer,
+    capabilities jsonb NOT NULL,
+    trainable boolean NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT models_context_window_check CHECK (((context_window IS NULL) OR ((context_window > 0) AND (context_window <= 10000000)))),
+    CONSTRAINT models_deployment_target_check CHECK ((deployment_target = ANY (ARRAY['none'::text, 'local'::text, 'cloud-run'::text, 'external'::text]))),
+    CONSTRAINT models_parameter_count_check CHECK ((parameter_count >= 0)),
+    CONSTRAINT models_quantization_check CHECK (((quantization IS NULL) OR (quantization = ANY (ARRAY['none'::text, 'int8'::text, 'int4'::text, 'fp8'::text, 'fp16'::text, 'bf16'::text, 'fp32'::text])))),
+    CONSTRAINT models_status_check CHECK ((status = ANY (ARRAY['registered'::text, 'not_deployed'::text, 'deploying'::text, 'available'::text, 'unavailable'::text, 'deprecated'::text]))),
+    CONSTRAINT models_version_check CHECK ((version >= 1))
+);
+
+
+ALTER TABLE public.models OWNER TO colony;
+
+--
+-- TOC entry 242 (class 1259 OID 28492)
+-- Name: objective_plans; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.objective_plans (
+    id uuid NOT NULL,
+    objective_id uuid NOT NULL,
+    version integer NOT NULL,
+    body jsonb NOT NULL,
+    valid boolean NOT NULL,
+    errors jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.objective_plans OWNER TO colony;
+
+--
+-- TOC entry 243 (class 1259 OID 28502)
+-- Name: objective_runs; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.objective_runs (
+    id uuid NOT NULL,
+    submitter_principal_id uuid NOT NULL,
+    objective_text text NOT NULL,
+    status text NOT NULL,
+    correlation_id uuid NOT NULL,
+    failure_reason text,
+    final_output text,
+    execution_authorized boolean NOT NULL,
+    plan_corrections integer DEFAULT 0 NOT NULL,
+    memory_profile text NOT NULL,
+    primary_model_id uuid NOT NULL,
+    operational_model_id uuid,
+    max_inference_requests integer NOT NULL,
+    max_output_tokens integer NOT NULL,
+    max_estimated_tokens integer NOT NULL,
+    max_task_attempts integer NOT NULL,
+    max_concurrent_tasks integer NOT NULL,
+    max_duration_ms integer NOT NULL,
+    consumed_requests integer DEFAULT 0 NOT NULL,
+    reserved_requests integer DEFAULT 0 NOT NULL,
+    consumed_input_tokens integer DEFAULT 0 NOT NULL,
+    consumed_output_tokens integer DEFAULT 0 NOT NULL,
+    estimated_input_tokens integer DEFAULT 0 NOT NULL,
+    estimated_output_tokens integer DEFAULT 0 NOT NULL,
+    reserved_output_tokens integer DEFAULT 0 NOT NULL,
+    estimated_cost_usd_micros bigint,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    started_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT objective_runs_limits_check CHECK ((max_inference_requests > 0)),
+    CONSTRAINT objective_runs_profile_check CHECK ((memory_profile = ANY (ARRAY['shared'::text, 'split'::text]))),
+    CONSTRAINT objective_runs_status_check CHECK ((status = ANY (ARRAY['submitted'::text, 'planning'::text, 'awaiting_approval'::text, 'scheduled'::text, 'running'::text, 'synthesizing'::text, 'completed'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+
+ALTER TABLE public.objective_runs OWNER TO colony;
+
+--
+-- TOC entry 244 (class 1259 OID 28522)
+-- Name: objective_tasks; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.objective_tasks (
+    id uuid NOT NULL,
+    objective_id uuid NOT NULL,
+    local_id text NOT NULL,
+    department_id uuid NOT NULL,
+    department_slug text NOT NULL,
+    task_type text NOT NULL,
+    objective_text text NOT NULL,
+    expected_output text NOT NULL,
+    depends_on uuid[] NOT NULL,
+    status text NOT NULL,
+    attempt integer NOT NULL,
+    assigned_agent_id uuid,
+    request_message_id uuid,
+    error text,
+    result_summary text,
+    deadline timestamp with time zone,
+    lease_owner text,
+    lease_until timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    started_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    CONSTRAINT objective_tasks_attempt_check CHECK ((attempt > 0)),
+    CONSTRAINT objective_tasks_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text, 'dispatched'::text, 'running'::text, 'completed'::text, 'failed'::text, 'timed_out'::text, 'cancelled'::text]))),
+    CONSTRAINT objective_tasks_type_check CHECK ((task_type = ANY (ARRAY['math'::text, 'science'::text, 'research'::text, 'reasoning'::text])))
+);
+
+
+ALTER TABLE public.objective_tasks OWNER TO colony;
+
+--
+-- TOC entry 230 (class 1259 OID 21003)
+-- Name: permissions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.permissions (
+    name text NOT NULL,
+    description text NOT NULL
+);
+
+
+ALTER TABLE public.permissions OWNER TO colony;
+
+--
+-- TOC entry 231 (class 1259 OID 21010)
+-- Name: principals; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.principals (
+    id uuid NOT NULL,
+    principal_type text NOT NULL,
+    display_name text NOT NULL,
+    role_name text NOT NULL,
+    agent_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT principals_role_check CHECK ((role_name = ANY (ARRAY['system_administrator'::text, 'ceo_agent'::text, 'orchestration_agent'::text, 'evolution_agent'::text, 'monitoring_agent'::text, 'department_agent'::text, 'read_only_observer'::text]))),
+    CONSTRAINT principals_type_check CHECK ((principal_type = ANY (ARRAY['system'::text, 'human'::text, 'agent'::text])))
+);
+
+
+ALTER TABLE public.principals OWNER TO colony;
+
+--
+-- TOC entry 322 (class 1259 OID 154405)
+-- Name: product_improvement_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.product_improvement_events (
+    id uuid NOT NULL,
+    proposal_id uuid NOT NULL,
+    event_type text NOT NULL,
+    actor_id text NOT NULL,
+    from_status text,
+    to_status text,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.product_improvement_events OWNER TO colony;
+
+--
+-- TOC entry 321 (class 1259 OID 154380)
+-- Name: product_improvement_proposals; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.product_improvement_proposals (
+    id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    proposed_by_agent_id uuid NOT NULL,
+    problem text NOT NULL,
+    evidence jsonb NOT NULL,
+    expected_benefit text NOT NULL,
+    participants jsonb NOT NULL,
+    estimated_cost text NOT NULL,
+    risk text NOT NULL,
+    success_criteria text NOT NULL,
+    priority text NOT NULL,
+    dependencies jsonb NOT NULL,
+    approval_requirements jsonb NOT NULL,
+    recommends_new_department boolean NOT NULL,
+    status text NOT NULL,
+    evaluation_evidence jsonb,
+    recommendation text,
+    outcome text,
+    successful boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT product_improvement_proposals_priority_check CHECK ((priority = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text]))),
+    CONSTRAINT product_improvement_proposals_recommendation_check CHECK (((recommendation IS NULL) OR (recommendation = ANY (ARRAY['retain'::text, 'revise'::text, 'revert'::text])))),
+    CONSTRAINT product_improvement_proposals_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'under_review'::text, 'approved'::text, 'in_progress'::text, 'evaluating'::text, 'completed'::text, 'rejected'::text])))
+);
+
+
+ALTER TABLE public.product_improvement_proposals OWNER TO colony;
+
+--
+-- TOC entry 287 (class 1259 OID 87651)
+-- Name: retention_policies; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.retention_policies (
+    id uuid NOT NULL,
+    name text NOT NULL,
+    version integer NOT NULL,
+    scope text,
+    provenance text,
+    max_age_days integer,
+    status text NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT retention_policies_status_check CHECK ((status = 'published'::text))
+);
+
+
+ALTER TABLE public.retention_policies OWNER TO colony;
+
+--
+-- TOC entry 232 (class 1259 OID 21022)
+-- Name: role_permissions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.role_permissions (
+    role_name text NOT NULL,
+    permission_name text NOT NULL
+);
+
+
+ALTER TABLE public.role_permissions OWNER TO colony;
+
+--
+-- TOC entry 233 (class 1259 OID 21029)
+-- Name: roles; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.roles (
+    name text NOT NULL,
+    description text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.roles OWNER TO colony;
+
+--
+-- TOC entry 288 (class 1259 OID 87662)
+-- Name: rollback_requests; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.rollback_requests (
+    id uuid NOT NULL,
+    route_id uuid NOT NULL,
+    from_version integer NOT NULL,
+    to_version integer NOT NULL,
+    status text NOT NULL,
+    reason text NOT NULL,
+    requested_by text NOT NULL,
+    approved_by text,
+    error text,
+    verification jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    finished_at timestamp with time zone,
+    CONSTRAINT rollback_requests_status_check CHECK ((status = ANY (ARRAY['requested'::text, 'approved'::text, 'completed'::text, 'failed'::text])))
+);
+
+
+ALTER TABLE public.rollback_requests OWNER TO colony;
+
+--
+-- TOC entry 317 (class 1259 OID 154186)
+-- Name: routing_decisions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.routing_decisions (
+    id uuid NOT NULL,
+    task_id uuid,
+    objective_id uuid NOT NULL,
+    purpose text NOT NULL,
+    department_id uuid NOT NULL,
+    assignment_id uuid,
+    assignment_version integer,
+    registry_model_id uuid NOT NULL,
+    serving_model text NOT NULL,
+    model_digest text,
+    adapter_id text,
+    adapter_version text,
+    policy_version text NOT NULL,
+    "authorization" text NOT NULL,
+    reason_code text NOT NULL,
+    runtime_evidence jsonb NOT NULL,
+    budget_outcome text NOT NULL,
+    resource_outcome text NOT NULL,
+    fallback_status text NOT NULL,
+    execution_verification text NOT NULL,
+    capability_note text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    serving_instance_id uuid,
+    endpoint_reference text,
+    agent_id uuid,
+    serving_policy_version text,
+    CONSTRAINT routing_decisions_authorization_check CHECK (("authorization" = ANY (ARRAY['authorized'::text, 'denied'::text]))),
+    CONSTRAINT routing_decisions_fallback_check CHECK ((fallback_status = 'disabled'::text)),
+    CONSTRAINT routing_decisions_verification_check CHECK ((execution_verification = ANY (ARRAY['unverified'::text, 'matched'::text, 'mismatch'::text])))
+);
+
+
+ALTER TABLE public.routing_decisions OWNER TO colony;
+
+--
+-- TOC entry 245 (class 1259 OID 28536)
+-- Name: task_assignments; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.task_assignments (
+    id uuid NOT NULL,
+    task_id uuid NOT NULL,
+    agent_id uuid NOT NULL,
+    department_id uuid NOT NULL,
+    attempt integer NOT NULL,
+    assigned_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.task_assignments OWNER TO colony;
+
+--
+-- TOC entry 246 (class 1259 OID 28542)
+-- Name: task_results; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.task_results (
+    id uuid NOT NULL,
+    task_id uuid NOT NULL,
+    attempt integer NOT NULL,
+    status text NOT NULL,
+    summary text NOT NULL,
+    message_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.task_results OWNER TO colony;
+
+--
+-- TOC entry 268 (class 1259 OID 60501)
+-- Name: trainable_models; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.trainable_models (
+    id uuid NOT NULL,
+    registry_model_id uuid NOT NULL,
+    kind text NOT NULL,
+    display_name text NOT NULL,
+    model_family text NOT NULL,
+    source text NOT NULL,
+    revision text NOT NULL,
+    parameter_count bigint NOT NULL,
+    "precision" text NOT NULL,
+    architecture text NOT NULL,
+    tokenizer_id text NOT NULL,
+    context_length integer NOT NULL,
+    framework text NOT NULL,
+    framework_version text NOT NULL,
+    artifact_uri text NOT NULL,
+    sha256 text NOT NULL,
+    license text NOT NULL,
+    available_locally boolean NOT NULL,
+    eligible_for_training boolean NOT NULL,
+    serving_ready boolean NOT NULL,
+    compatibility jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT trainable_models_context_check CHECK ((context_length > 0)),
+    CONSTRAINT trainable_models_kind_check CHECK ((kind = 'trainable_checkpoint'::text)),
+    CONSTRAINT trainable_models_parameter_count_check CHECK ((parameter_count > 0)),
+    CONSTRAINT trainable_models_sha_check CHECK ((char_length(sha256) = 64))
+);
+
+
+ALTER TABLE public.trainable_models OWNER TO colony;
+
+--
+-- TOC entry 269 (class 1259 OID 60515)
+-- Name: training_artifacts; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.training_artifacts (
+    id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    kind text NOT NULL,
+    relative_path text NOT NULL,
+    sha256 text NOT NULL,
+    byte_size integer NOT NULL,
+    format text NOT NULL,
+    metadata jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT training_artifacts_format_check CHECK ((format = ANY (ARRAY['safetensors'::text, 'float32-bin'::text]))),
+    CONSTRAINT training_artifacts_kind_check CHECK ((kind = ANY (ARRAY['adapter'::text, 'checkpoint'::text]))),
+    CONSTRAINT training_artifacts_sha_check CHECK ((char_length(sha256) = 64)),
+    CONSTRAINT training_artifacts_size_check CHECK (((byte_size > 0) AND (byte_size <= 200000000)))
+);
+
+
+ALTER TABLE public.training_artifacts OWNER TO colony;
+
+--
+-- TOC entry 270 (class 1259 OID 60529)
+-- Name: training_dataset_versions; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.training_dataset_versions (
+    id uuid NOT NULL,
+    dataset_id uuid NOT NULL,
+    version integer NOT NULL,
+    content_hash text NOT NULL,
+    split_seed integer NOT NULL,
+    status text NOT NULL,
+    train_count integer NOT NULL,
+    validation_count integer NOT NULL,
+    test_count integer NOT NULL,
+    criteria jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT training_dataset_versions_counts_check CHECK (((train_count >= 0) AND (validation_count >= 0) AND (test_count >= 0))),
+    CONSTRAINT training_dataset_versions_hash_check CHECK ((char_length(content_hash) = 64)),
+    CONSTRAINT training_dataset_versions_status_check CHECK ((status = 'sealed'::text)),
+    CONSTRAINT training_dataset_versions_version_check CHECK ((version >= 1))
+);
+
+
+ALTER TABLE public.training_dataset_versions OWNER TO colony;
+
+--
+-- TOC entry 271 (class 1259 OID 60543)
+-- Name: training_datasets; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.training_datasets (
+    id uuid NOT NULL,
+    name text NOT NULL,
+    task_domain text NOT NULL,
+    idempotency_key text,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.training_datasets OWNER TO colony;
+
+--
+-- TOC entry 272 (class 1259 OID 60553)
+-- Name: training_examples; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.training_examples (
+    id uuid NOT NULL,
+    version_id uuid NOT NULL,
+    split text NOT NULL,
+    group_key text NOT NULL,
+    source text NOT NULL,
+    license text NOT NULL,
+    input_text text NOT NULL,
+    expected_output text NOT NULL,
+    validation_status text NOT NULL,
+    source_memory_id uuid,
+    source_objective_id uuid,
+    content_hash text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT training_examples_hash_check CHECK ((char_length(content_hash) = 64)),
+    CONSTRAINT training_examples_source_check CHECK ((source = ANY (ARRAY['curated_arithmetic'::text, 'supplied'::text, 'memory'::text, 'objective_trace'::text]))),
+    CONSTRAINT training_examples_split_check CHECK ((split = ANY (ARRAY['train'::text, 'validation'::text, 'test'::text]))),
+    CONSTRAINT training_examples_validation_check CHECK ((validation_status = 'verified'::text))
+);
+
+
+ALTER TABLE public.training_examples OWNER TO colony;
+
+--
+-- TOC entry 306 (class 1259 OID 132748)
+-- Name: training_experiments; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.training_experiments (
+    id uuid NOT NULL,
+    idempotency_key text NOT NULL,
+    method_id text NOT NULL,
+    model_id text NOT NULL,
+    model_revision text NOT NULL,
+    adapter_sha256 text,
+    problem text NOT NULL,
+    dataset_size integer NOT NULL,
+    learning_rate double precision NOT NULL,
+    steps integer NOT NULL,
+    exposures double precision NOT NULL,
+    target text NOT NULL,
+    seed integer NOT NULL,
+    dev_accuracy double precision,
+    baseline_accuracy double precision,
+    sealed_accuracy double precision,
+    retention_ok boolean,
+    failure_class text,
+    recommendation text NOT NULL,
+    evidence_path text NOT NULL,
+    stopped boolean DEFAULT false NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT training_experiments_target_check CHECK ((target = ANY (ARRAY['answer'::text, 'structured'::text])))
+);
+
+
+ALTER TABLE public.training_experiments OWNER TO colony;
+
+--
+-- TOC entry 273 (class 1259 OID 60569)
+-- Name: training_run_metrics; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.training_run_metrics (
+    id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    step integer NOT NULL,
+    train_loss double precision,
+    validation_loss double precision,
+    learning_rate double precision,
+    recorded_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT training_run_metrics_step_check CHECK ((step >= 0))
+);
+
+
+ALTER TABLE public.training_run_metrics OWNER TO colony;
+
+--
+-- TOC entry 274 (class 1259 OID 60576)
+-- Name: training_runs; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.training_runs (
+    id uuid NOT NULL,
+    dataset_version_id uuid NOT NULL,
+    trainable_model_id uuid NOT NULL,
+    parent_run_id uuid,
+    profile text NOT NULL,
+    status text NOT NULL,
+    idempotency_key text NOT NULL,
+    seed integer NOT NULL,
+    attempt integer NOT NULL,
+    max_attempts integer NOT NULL,
+    config jsonb NOT NULL,
+    approved_by text,
+    approved_at timestamp with time zone,
+    started_at timestamp with time zone,
+    finished_at timestamp with time zone,
+    error text,
+    cancel_requested boolean DEFAULT false NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT training_runs_attempt_check CHECK (((attempt >= 1) AND (attempt <= max_attempts))),
+    CONSTRAINT training_runs_seed_check CHECK ((seed >= 0)),
+    CONSTRAINT training_runs_status_check CHECK ((status = ANY (ARRAY['proposed'::text, 'awaiting_approval'::text, 'queued'::text, 'preparing'::text, 'training'::text, 'evaluating'::text, 'completed'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+
+ALTER TABLE public.training_runs OWNER TO colony;
+
+--
+-- TOC entry 247 (class 1259 OID 28552)
+-- Name: worker_heartbeats; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.worker_heartbeats (
+    worker_id text NOT NULL,
+    role text NOT NULL,
+    beat_at timestamp with time zone NOT NULL,
+    detail text
+);
+
+
+ALTER TABLE public.worker_heartbeats OWNER TO colony;
+
+--
+-- TOC entry 248 (class 1259 OID 28559)
+-- Name: workflow_events; Type: TABLE; Schema: public; Owner: colony
+--
+
+CREATE TABLE public.workflow_events (
+    id uuid NOT NULL,
+    objective_id uuid,
+    event_type text NOT NULL,
+    summary text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.workflow_events OWNER TO colony;
+
+--
+-- TOC entry 4195 (class 2604 OID 20915)
+-- Name: __drizzle_migrations id; Type: DEFAULT; Schema: drizzle; Owner: colony
+--
+
+ALTER TABLE ONLY drizzle.__drizzle_migrations ALTER COLUMN id SET DEFAULT nextval('drizzle.__drizzle_migrations_id_seq'::regclass);
+
 
 --
 -- TOC entry 5198 (class 0 OID 20912)
@@ -8025,7 +10412,3875 @@ e8626b80-a3e9-434d-92a7-61659a0545b2	3f12c0c7-5d45-49c5-b274-96faf9549bfe	object
 SELECT pg_catalog.setval('drizzle.__drizzle_migrations_id_seq', 14, true);
 
 
--- Completed on 2026-11-05 00:04:18 EST
+--
+-- TOC entry 4454 (class 2606 OID 20919)
+-- Name: __drizzle_migrations __drizzle_migrations_pkey; Type: CONSTRAINT; Schema: drizzle; Owner: colony
+--
+
+ALTER TABLE ONLY drizzle.__drizzle_migrations
+    ADD CONSTRAINT __drizzle_migrations_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4457 (class 2606 OID 20931)
+-- Name: agent_lifecycle_events agent_lifecycle_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.agent_lifecycle_events
+    ADD CONSTRAINT agent_lifecycle_events_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4461 (class 2606 OID 20947)
+-- Name: agents agents_department_name_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.agents
+    ADD CONSTRAINT agents_department_name_unique UNIQUE (department_id, name);
+
+
+--
+-- TOC entry 4463 (class 2606 OID 20945)
+-- Name: agents agents_memory_namespace_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.agents
+    ADD CONSTRAINT agents_memory_namespace_unique UNIQUE (memory_namespace);
+
+
+--
+-- TOC entry 4466 (class 2606 OID 20943)
+-- Name: agents agents_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.agents
+    ADD CONSTRAINT agents_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4472 (class 2606 OID 20958)
+-- Name: approval_requests approval_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.approval_requests
+    ADD CONSTRAINT approval_requests_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4659 (class 2606 OID 87538)
+-- Name: artifact_contamination artifact_contamination_artifact_request_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.artifact_contamination
+    ADD CONSTRAINT artifact_contamination_artifact_request_unique UNIQUE (artifact_id, forgetting_request_id);
+
+
+--
+-- TOC entry 4661 (class 2606 OID 87536)
+-- Name: artifact_contamination artifact_contamination_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.artifact_contamination
+    ADD CONSTRAINT artifact_contamination_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4479 (class 2606 OID 20968)
+-- Name: audit_events audit_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT audit_events_pkey PRIMARY KEY (event_id);
+
+
+--
+-- TOC entry 4663 (class 2606 OID 87545)
+-- Name: benchmark_items benchmark_items_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.benchmark_items
+    ADD CONSTRAINT benchmark_items_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4665 (class 2606 OID 87547)
+-- Name: benchmark_items benchmark_items_version_ordinal_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.benchmark_items
+    ADD CONSTRAINT benchmark_items_version_ordinal_unique UNIQUE (version_id, ordinal);
+
+
+--
+-- TOC entry 4667 (class 2606 OID 87555)
+-- Name: benchmark_suites benchmark_suites_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.benchmark_suites
+    ADD CONSTRAINT benchmark_suites_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4669 (class 2606 OID 87557)
+-- Name: benchmark_suites benchmark_suites_slug_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.benchmark_suites
+    ADD CONSTRAINT benchmark_suites_slug_unique UNIQUE (slug);
+
+
+--
+-- TOC entry 4671 (class 2606 OID 87566)
+-- Name: benchmark_versions benchmark_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.benchmark_versions
+    ADD CONSTRAINT benchmark_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4673 (class 2606 OID 87568)
+-- Name: benchmark_versions benchmark_versions_suite_version_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.benchmark_versions
+    ADD CONSTRAINT benchmark_versions_suite_version_unique UNIQUE (suite_id, version);
+
+
+--
+-- TOC entry 4607 (class 2606 OID 60459)
+-- Name: candidate_evaluations candidate_evaluations_candidate_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.candidate_evaluations
+    ADD CONSTRAINT candidate_evaluations_candidate_unique UNIQUE (candidate_id);
+
+
+--
+-- TOC entry 4609 (class 2606 OID 60457)
+-- Name: candidate_evaluations candidate_evaluations_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.candidate_evaluations
+    ADD CONSTRAINT candidate_evaluations_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4675 (class 2606 OID 87577)
+-- Name: candidate_gate_decisions candidate_gate_decisions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.candidate_gate_decisions
+    ADD CONSTRAINT candidate_gate_decisions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4709 (class 2606 OID 107452)
+-- Name: capability_gaps capability_gaps_fingerprint_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.capability_gaps
+    ADD CONSTRAINT capability_gaps_fingerprint_unique UNIQUE (department_id, fingerprint);
+
+
+--
+-- TOC entry 4711 (class 2606 OID 107450)
+-- Name: capability_gaps capability_gaps_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.capability_gaps
+    ADD CONSTRAINT capability_gaps_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4573 (class 2606 OID 33240)
+-- Name: checkpoint_blobs checkpoint_blobs_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.checkpoint_blobs
+    ADD CONSTRAINT checkpoint_blobs_pkey PRIMARY KEY (thread_id, checkpoint_ns, channel, version);
+
+
+--
+-- TOC entry 4569 (class 2606 OID 33223)
+-- Name: checkpoint_migrations checkpoint_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.checkpoint_migrations
+    ADD CONSTRAINT checkpoint_migrations_pkey PRIMARY KEY (v);
+
+
+--
+-- TOC entry 4575 (class 2606 OID 33248)
+-- Name: checkpoint_writes checkpoint_writes_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.checkpoint_writes
+    ADD CONSTRAINT checkpoint_writes_pkey PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx);
+
+
+--
+-- TOC entry 4571 (class 2606 OID 33232)
+-- Name: checkpoints checkpoints_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.checkpoints
+    ADD CONSTRAINT checkpoints_pkey PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id);
+
+
+--
+-- TOC entry 4752 (class 2606 OID 131709)
+-- Name: collaboration_contexts collaboration_contexts_idempotency_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_contexts
+    ADD CONSTRAINT collaboration_contexts_idempotency_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4754 (class 2606 OID 131707)
+-- Name: collaboration_contexts collaboration_contexts_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_contexts
+    ADD CONSTRAINT collaboration_contexts_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4757 (class 2606 OID 131722)
+-- Name: collaboration_entries collaboration_entries_idempotency_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_entries
+    ADD CONSTRAINT collaboration_entries_idempotency_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4759 (class 2606 OID 131720)
+-- Name: collaboration_entries collaboration_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_entries
+    ADD CONSTRAINT collaboration_entries_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4761 (class 2606 OID 131734)
+-- Name: collaboration_participants collaboration_participants_context_department_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_participants
+    ADD CONSTRAINT collaboration_participants_context_department_unique UNIQUE (context_id, department_id);
+
+
+--
+-- TOC entry 4763 (class 2606 OID 131732)
+-- Name: collaboration_participants collaboration_participants_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_participants
+    ADD CONSTRAINT collaboration_participants_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4822 (class 2606 OID 154319)
+-- Name: department_agent_checkpoints department_agent_checkpoints_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_agent_checkpoints
+    ADD CONSTRAINT department_agent_checkpoints_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4824 (class 2606 OID 154321)
+-- Name: department_agent_checkpoints department_agent_checkpoints_task_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_agent_checkpoints
+    ADD CONSTRAINT department_agent_checkpoints_task_unique UNIQUE (agent_id, task_id);
+
+
+--
+-- TOC entry 4713 (class 2606 OID 107460)
+-- Name: department_capabilities department_capabilities_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_capabilities
+    ADD CONSTRAINT department_capabilities_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4715 (class 2606 OID 107462)
+-- Name: department_capabilities department_capabilities_slug_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_capabilities
+    ADD CONSTRAINT department_capabilities_slug_unique UNIQUE (department_id, slug);
+
+
+--
+-- TOC entry 4717 (class 2606 OID 107472)
+-- Name: department_capability_versions department_capability_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_capability_versions
+    ADD CONSTRAINT department_capability_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4719 (class 2606 OID 107474)
+-- Name: department_capability_versions department_capability_versions_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_capability_versions
+    ADD CONSTRAINT department_capability_versions_unique UNIQUE (capability_id, version);
+
+
+--
+-- TOC entry 4721 (class 2606 OID 107484)
+-- Name: department_model_assignments department_model_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_model_assignments
+    ADD CONSTRAINT department_model_assignments_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4723 (class 2606 OID 107486)
+-- Name: department_model_assignments department_model_assignments_version_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_model_assignments
+    ADD CONSTRAINT department_model_assignments_version_unique UNIQUE (department_id, version);
+
+
+--
+-- TOC entry 4820 (class 2606 OID 154305)
+-- Name: department_serving_events department_serving_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_serving_events
+    ADD CONSTRAINT department_serving_events_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4812 (class 2606 OID 154278)
+-- Name: department_serving_instances department_serving_instances_department_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_serving_instances
+    ADD CONSTRAINT department_serving_instances_department_unique UNIQUE (department_id);
+
+
+--
+-- TOC entry 4814 (class 2606 OID 154280)
+-- Name: department_serving_instances department_serving_instances_endpoint_ref_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_serving_instances
+    ADD CONSTRAINT department_serving_instances_endpoint_ref_unique UNIQUE (endpoint_reference);
+
+
+--
+-- TOC entry 4816 (class 2606 OID 154282)
+-- Name: department_serving_instances department_serving_instances_endpoint_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_serving_instances
+    ADD CONSTRAINT department_serving_instances_endpoint_unique UNIQUE (normalized_endpoint);
+
+
+--
+-- TOC entry 4818 (class 2606 OID 154276)
+-- Name: department_serving_instances department_serving_instances_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_serving_instances
+    ADD CONSTRAINT department_serving_instances_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4483 (class 2606 OID 20983)
+-- Name: departments departments_name_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT departments_name_unique UNIQUE (name);
+
+
+--
+-- TOC entry 4486 (class 2606 OID 20981)
+-- Name: departments departments_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT departments_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4488 (class 2606 OID 20985)
+-- Name: departments departments_slug_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT departments_slug_unique UNIQUE (slug);
+
+
+--
+-- TOC entry 4765 (class 2606 OID 131746)
+-- Name: deployment_decisions deployment_decisions_cycle_purpose_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.deployment_decisions
+    ADD CONSTRAINT deployment_decisions_cycle_purpose_unique UNIQUE (cycle_id, purpose);
+
+
+--
+-- TOC entry 4767 (class 2606 OID 131744)
+-- Name: deployment_decisions deployment_decisions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.deployment_decisions
+    ADD CONSTRAINT deployment_decisions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4677 (class 2606 OID 87585)
+-- Name: evaluation_item_results evaluation_item_results_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_item_results
+    ADD CONSTRAINT evaluation_item_results_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4679 (class 2606 OID 87587)
+-- Name: evaluation_item_results evaluation_item_results_run_ordinal_role_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_item_results
+    ADD CONSTRAINT evaluation_item_results_run_ordinal_role_unique UNIQUE (run_id, ordinal, role);
+
+
+--
+-- TOC entry 4681 (class 2606 OID 87595)
+-- Name: evaluation_reports evaluation_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_reports
+    ADD CONSTRAINT evaluation_reports_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4683 (class 2606 OID 87597)
+-- Name: evaluation_reports evaluation_reports_run_id_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_reports
+    ADD CONSTRAINT evaluation_reports_run_id_unique UNIQUE (run_id);
+
+
+--
+-- TOC entry 4685 (class 2606 OID 87607)
+-- Name: evaluation_runs evaluation_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_runs
+    ADD CONSTRAINT evaluation_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4687 (class 2606 OID 87616)
+-- Name: experimental_route_versions experimental_route_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.experimental_route_versions
+    ADD CONSTRAINT experimental_route_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4689 (class 2606 OID 87618)
+-- Name: experimental_route_versions experimental_route_versions_route_version_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.experimental_route_versions
+    ADD CONSTRAINT experimental_route_versions_route_version_unique UNIQUE (route_id, version);
+
+
+--
+-- TOC entry 4691 (class 2606 OID 87626)
+-- Name: experimental_routes experimental_routes_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.experimental_routes
+    ADD CONSTRAINT experimental_routes_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4693 (class 2606 OID 87628)
+-- Name: experimental_routes experimental_routes_slug_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.experimental_routes
+    ADD CONSTRAINT experimental_routes_slug_unique UNIQUE (slug);
+
+
+--
+-- TOC entry 4695 (class 2606 OID 87639)
+-- Name: forgetting_requests forgetting_requests_idempotency_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.forgetting_requests
+    ADD CONSTRAINT forgetting_requests_idempotency_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4697 (class 2606 OID 87637)
+-- Name: forgetting_requests forgetting_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.forgetting_requests
+    ADD CONSTRAINT forgetting_requests_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4769 (class 2606 OID 131756)
+-- Name: improvement_decisions improvement_decisions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.improvement_decisions
+    ADD CONSTRAINT improvement_decisions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4533 (class 2606 OID 28473)
+-- Name: inference_requests inference_requests_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.inference_requests
+    ADD CONSTRAINT inference_requests_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4536 (class 2606 OID 28471)
+-- Name: inference_requests inference_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.inference_requests
+    ADD CONSTRAINT inference_requests_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4538 (class 2606 OID 28482)
+-- Name: inference_usage inference_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.inference_usage
+    ADD CONSTRAINT inference_usage_pkey PRIMARY KEY (request_id);
+
+
+--
+-- TOC entry 4725 (class 2606 OID 107497)
+-- Name: knowledge_transfers knowledge_transfers_idempotency_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_transfers
+    ADD CONSTRAINT knowledge_transfers_idempotency_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4727 (class 2606 OID 107495)
+-- Name: knowledge_transfers knowledge_transfers_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_transfers
+    ADD CONSTRAINT knowledge_transfers_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4729 (class 2606 OID 107506)
+-- Name: knowledge_validations knowledge_validations_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_validations
+    ADD CONSTRAINT knowledge_validations_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4731 (class 2606 OID 107508)
+-- Name: knowledge_validations knowledge_validations_transfer_id_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_validations
+    ADD CONSTRAINT knowledge_validations_transfer_id_unique UNIQUE (transfer_id);
+
+
+--
+-- TOC entry 4733 (class 2606 OID 107515)
+-- Name: learning_budgets learning_budgets_cycle_id_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_budgets
+    ADD CONSTRAINT learning_budgets_cycle_id_unique UNIQUE (cycle_id);
+
+
+--
+-- TOC entry 4735 (class 2606 OID 107513)
+-- Name: learning_budgets learning_budgets_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_budgets
+    ADD CONSTRAINT learning_budgets_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4737 (class 2606 OID 107523)
+-- Name: learning_cycle_events learning_cycle_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_cycle_events
+    ADD CONSTRAINT learning_cycle_events_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4740 (class 2606 OID 107536)
+-- Name: learning_cycles learning_cycles_idempotency_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_cycles
+    ADD CONSTRAINT learning_cycles_idempotency_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4742 (class 2606 OID 107534)
+-- Name: learning_cycles learning_cycles_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_cycles
+    ADD CONSTRAINT learning_cycles_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4744 (class 2606 OID 107545)
+-- Name: learning_objectives learning_objectives_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_objectives
+    ADD CONSTRAINT learning_objectives_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4746 (class 2606 OID 107547)
+-- Name: learning_objectives learning_objectives_version_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_objectives
+    ADD CONSTRAINT learning_objectives_version_unique UNIQUE (gap_id, version);
+
+
+--
+-- TOC entry 4748 (class 2606 OID 107558)
+-- Name: learning_outcomes learning_outcomes_cycle_id_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_outcomes
+    ADD CONSTRAINT learning_outcomes_cycle_id_unique UNIQUE (cycle_id);
+
+
+--
+-- TOC entry 4750 (class 2606 OID 107556)
+-- Name: learning_outcomes learning_outcomes_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_outcomes
+    ADD CONSTRAINT learning_outcomes_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4784 (class 2606 OID 153973)
+-- Name: ledger_decisions ledger_decisions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_decisions
+    ADD CONSTRAINT ledger_decisions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4786 (class 2606 OID 153975)
+-- Name: ledger_decisions ledger_decisions_proposal_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_decisions
+    ADD CONSTRAINT ledger_decisions_proposal_unique UNIQUE (proposal_id);
+
+
+--
+-- TOC entry 4796 (class 2606 OID 154006)
+-- Name: ledger_mapping_versions ledger_mapping_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_mapping_versions
+    ADD CONSTRAINT ledger_mapping_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4798 (class 2606 OID 154008)
+-- Name: ledger_mapping_versions ledger_mapping_versions_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_mapping_versions
+    ADD CONSTRAINT ledger_mapping_versions_unique UNIQUE (department_id, version);
+
+
+--
+-- TOC entry 4782 (class 2606 OID 153964)
+-- Name: ledger_proposals ledger_proposals_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_proposals
+    ADD CONSTRAINT ledger_proposals_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4806 (class 2606 OID 154040)
+-- Name: ledger_retention_events ledger_retention_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_retention_events
+    ADD CONSTRAINT ledger_retention_events_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4804 (class 2606 OID 154031)
+-- Name: ledger_snapshots ledger_snapshots_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_snapshots
+    ADD CONSTRAINT ledger_snapshots_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4794 (class 2606 OID 153996)
+-- Name: ledger_taxonomy_edges ledger_taxonomy_edges_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_taxonomy_edges
+    ADD CONSTRAINT ledger_taxonomy_edges_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4788 (class 2606 OID 153983)
+-- Name: ledger_taxonomy_versions ledger_taxonomy_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_taxonomy_versions
+    ADD CONSTRAINT ledger_taxonomy_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4790 (class 2606 OID 153985)
+-- Name: ledger_taxonomy_versions ledger_taxonomy_versions_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_taxonomy_versions
+    ADD CONSTRAINT ledger_taxonomy_versions_unique UNIQUE (department_id, version);
+
+
+--
+-- TOC entry 4780 (class 2606 OID 153955)
+-- Name: ledger_topic_events ledger_topic_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_topic_events
+    ADD CONSTRAINT ledger_topic_events_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4800 (class 2606 OID 154019)
+-- Name: ledger_topic_mappings ledger_topic_mappings_item_topic_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_topic_mappings
+    ADD CONSTRAINT ledger_topic_mappings_item_topic_unique UNIQUE (mapping_version_id, item_id, topic_id);
+
+
+--
+-- TOC entry 4802 (class 2606 OID 154017)
+-- Name: ledger_topic_mappings ledger_topic_mappings_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_topic_mappings
+    ADD CONSTRAINT ledger_topic_mappings_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4778 (class 2606 OID 153946)
+-- Name: ledger_topics ledger_topics_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_topics
+    ADD CONSTRAINT ledger_topics_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4699 (class 2606 OID 87650)
+-- Name: lineage_edges lineage_edges_identity_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.lineage_edges
+    ADD CONSTRAINT lineage_edges_identity_unique UNIQUE (from_type, from_id, to_type, to_id, relation);
+
+
+--
+-- TOC entry 4701 (class 2606 OID 87648)
+-- Name: lineage_edges lineage_edges_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.lineage_edges
+    ADD CONSTRAINT lineage_edges_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4579 (class 2606 OID 38168)
+-- Name: memories memories_idempotency_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memories
+    ADD CONSTRAINT memories_idempotency_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4582 (class 2606 OID 38166)
+-- Name: memories memories_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memories
+    ADD CONSTRAINT memories_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4585 (class 2606 OID 38176)
+-- Name: memory_consolidation_records memory_consolidation_records_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_consolidation_records
+    ADD CONSTRAINT memory_consolidation_records_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4587 (class 2606 OID 38182)
+-- Name: memory_contradictions memory_contradictions_memory_id_other_memory_id_pk; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_contradictions
+    ADD CONSTRAINT memory_contradictions_memory_id_other_memory_id_pk PRIMARY KEY (memory_id, other_memory_id);
+
+
+--
+-- TOC entry 4589 (class 2606 OID 38190)
+-- Name: memory_embedding_usage memory_embedding_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_embedding_usage
+    ADD CONSTRAINT memory_embedding_usage_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4591 (class 2606 OID 38198)
+-- Name: memory_embeddings memory_embeddings_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_embeddings
+    ADD CONSTRAINT memory_embeddings_pkey PRIMARY KEY (memory_id);
+
+
+--
+-- TOC entry 4772 (class 2606 OID 131766)
+-- Name: memory_ownership memory_ownership_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_ownership
+    ADD CONSTRAINT memory_ownership_pkey PRIMARY KEY (memory_id);
+
+
+--
+-- TOC entry 4593 (class 2606 OID 38206)
+-- Name: memory_promotion_requests memory_promotion_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_promotion_requests
+    ADD CONSTRAINT memory_promotion_requests_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4595 (class 2606 OID 38214)
+-- Name: memory_retrieval_events memory_retrieval_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_retrieval_events
+    ADD CONSTRAINT memory_retrieval_events_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4597 (class 2606 OID 38219)
+-- Name: memory_retrieval_hits memory_retrieval_hits_event_id_memory_id_pk; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_retrieval_hits
+    ADD CONSTRAINT memory_retrieval_hits_event_id_memory_id_pk PRIMARY KEY (event_id, memory_id);
+
+
+--
+-- TOC entry 4599 (class 2606 OID 38229)
+-- Name: memory_revisions memory_revisions_memory_revision_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_revisions
+    ADD CONSTRAINT memory_revisions_memory_revision_unique UNIQUE (memory_id, revision);
+
+
+--
+-- TOC entry 4601 (class 2606 OID 38227)
+-- Name: memory_revisions memory_revisions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_revisions
+    ADD CONSTRAINT memory_revisions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4605 (class 2606 OID 38237)
+-- Name: memory_sources memory_sources_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_sources
+    ADD CONSTRAINT memory_sources_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4519 (class 2606 OID 24935)
+-- Name: message_dead_letters message_dead_letters_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.message_dead_letters
+    ADD CONSTRAINT message_dead_letters_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4522 (class 2606 OID 24944)
+-- Name: message_delivery_attempts message_delivery_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.message_delivery_attempts
+    ADD CONSTRAINT message_delivery_attempts_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4526 (class 2606 OID 24958)
+-- Name: message_outbox message_outbox_message_attempt_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.message_outbox
+    ADD CONSTRAINT message_outbox_message_attempt_unique UNIQUE (message_id, attempt);
+
+
+--
+-- TOC entry 4528 (class 2606 OID 24956)
+-- Name: message_outbox message_outbox_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.message_outbox
+    ADD CONSTRAINT message_outbox_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4530 (class 2606 OID 24969)
+-- Name: message_processing_records message_processing_records_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.message_processing_records
+    ADD CONSTRAINT message_processing_records_pkey PRIMARY KEY (message_id);
+
+
+--
+-- TOC entry 4511 (class 2606 OID 24925)
+-- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4611 (class 2606 OID 60471)
+-- Name: model_adapters model_adapters_artifact_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_adapters
+    ADD CONSTRAINT model_adapters_artifact_unique UNIQUE (artifact_id);
+
+
+--
+-- TOC entry 4613 (class 2606 OID 60469)
+-- Name: model_adapters model_adapters_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_adapters
+    ADD CONSTRAINT model_adapters_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4615 (class 2606 OID 60481)
+-- Name: model_candidates model_candidates_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_candidates
+    ADD CONSTRAINT model_candidates_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4617 (class 2606 OID 60483)
+-- Name: model_candidates model_candidates_run_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_candidates
+    ADD CONSTRAINT model_candidates_run_unique UNIQUE (run_id);
+
+
+--
+-- TOC entry 4621 (class 2606 OID 60492)
+-- Name: model_promotion_requests model_promotion_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_promotion_requests
+    ADD CONSTRAINT model_promotion_requests_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4540 (class 2606 OID 28491)
+-- Name: model_runtimes model_runtimes_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_runtimes
+    ADD CONSTRAINT model_runtimes_pkey PRIMARY KEY (model_id);
+
+
+--
+-- TOC entry 4623 (class 2606 OID 60500)
+-- Name: model_version_events model_version_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_version_events
+    ADD CONSTRAINT model_version_events_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4493 (class 2606 OID 21002)
+-- Name: models models_lineage_version_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.models
+    ADD CONSTRAINT models_lineage_version_unique UNIQUE (lineage_id, version);
+
+
+--
+-- TOC entry 4495 (class 2606 OID 21000)
+-- Name: models models_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.models
+    ADD CONSTRAINT models_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4543 (class 2606 OID 28499)
+-- Name: objective_plans objective_plans_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_plans
+    ADD CONSTRAINT objective_plans_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4545 (class 2606 OID 28501)
+-- Name: objective_plans objective_plans_version_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_plans
+    ADD CONSTRAINT objective_plans_version_unique UNIQUE (objective_id, version);
+
+
+--
+-- TOC entry 4547 (class 2606 OID 28521)
+-- Name: objective_runs objective_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_runs
+    ADD CONSTRAINT objective_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4551 (class 2606 OID 28535)
+-- Name: objective_tasks objective_tasks_local_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_tasks
+    ADD CONSTRAINT objective_tasks_local_unique UNIQUE (objective_id, local_id);
+
+
+--
+-- TOC entry 4554 (class 2606 OID 28533)
+-- Name: objective_tasks objective_tasks_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_tasks
+    ADD CONSTRAINT objective_tasks_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4498 (class 2606 OID 21009)
+-- Name: permissions permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT permissions_pkey PRIMARY KEY (name);
+
+
+--
+-- TOC entry 4500 (class 2606 OID 21021)
+-- Name: principals principals_agent_id_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.principals
+    ADD CONSTRAINT principals_agent_id_unique UNIQUE (agent_id);
+
+
+--
+-- TOC entry 4502 (class 2606 OID 21019)
+-- Name: principals principals_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.principals
+    ADD CONSTRAINT principals_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4830 (class 2606 OID 154413)
+-- Name: product_improvement_events product_improvement_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.product_improvement_events
+    ADD CONSTRAINT product_improvement_events_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4827 (class 2606 OID 154392)
+-- Name: product_improvement_proposals product_improvement_proposals_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.product_improvement_proposals
+    ADD CONSTRAINT product_improvement_proposals_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4703 (class 2606 OID 87661)
+-- Name: retention_policies retention_policies_name_version_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.retention_policies
+    ADD CONSTRAINT retention_policies_name_version_unique UNIQUE (name, version);
+
+
+--
+-- TOC entry 4705 (class 2606 OID 87659)
+-- Name: retention_policies retention_policies_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.retention_policies
+    ADD CONSTRAINT retention_policies_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4505 (class 2606 OID 21028)
+-- Name: role_permissions role_permissions_role_name_permission_name_pk; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_role_name_permission_name_pk PRIMARY KEY (role_name, permission_name);
+
+
+--
+-- TOC entry 4507 (class 2606 OID 21036)
+-- Name: roles roles_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_pkey PRIMARY KEY (name);
+
+
+--
+-- TOC entry 4707 (class 2606 OID 87670)
+-- Name: rollback_requests rollback_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.rollback_requests
+    ADD CONSTRAINT rollback_requests_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4809 (class 2606 OID 154196)
+-- Name: routing_decisions routing_decisions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.routing_decisions
+    ADD CONSTRAINT routing_decisions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4557 (class 2606 OID 28541)
+-- Name: task_assignments task_assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.task_assignments
+    ADD CONSTRAINT task_assignments_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4560 (class 2606 OID 28551)
+-- Name: task_results task_results_attempt_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.task_results
+    ADD CONSTRAINT task_results_attempt_unique UNIQUE (task_id, attempt);
+
+
+--
+-- TOC entry 4562 (class 2606 OID 28549)
+-- Name: task_results task_results_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.task_results
+    ADD CONSTRAINT task_results_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4627 (class 2606 OID 60512)
+-- Name: trainable_models trainable_models_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.trainable_models
+    ADD CONSTRAINT trainable_models_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4629 (class 2606 OID 60514)
+-- Name: trainable_models trainable_models_registry_sha_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.trainable_models
+    ADD CONSTRAINT trainable_models_registry_sha_unique UNIQUE (registry_model_id, sha256);
+
+
+--
+-- TOC entry 4631 (class 2606 OID 60526)
+-- Name: training_artifacts training_artifacts_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_artifacts
+    ADD CONSTRAINT training_artifacts_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4633 (class 2606 OID 60528)
+-- Name: training_artifacts training_artifacts_run_sha_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_artifacts
+    ADD CONSTRAINT training_artifacts_run_sha_unique UNIQUE (run_id, sha256);
+
+
+--
+-- TOC entry 4635 (class 2606 OID 60542)
+-- Name: training_dataset_versions training_dataset_versions_dataset_version_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_dataset_versions
+    ADD CONSTRAINT training_dataset_versions_dataset_version_unique UNIQUE (dataset_id, version);
+
+
+--
+-- TOC entry 4637 (class 2606 OID 60540)
+-- Name: training_dataset_versions training_dataset_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_dataset_versions
+    ADD CONSTRAINT training_dataset_versions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4640 (class 2606 OID 60552)
+-- Name: training_datasets training_datasets_idempotency_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_datasets
+    ADD CONSTRAINT training_datasets_idempotency_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4642 (class 2606 OID 60550)
+-- Name: training_datasets training_datasets_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_datasets
+    ADD CONSTRAINT training_datasets_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4644 (class 2606 OID 60564)
+-- Name: training_examples training_examples_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_examples
+    ADD CONSTRAINT training_examples_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4647 (class 2606 OID 60566)
+-- Name: training_examples training_examples_version_group_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_examples
+    ADD CONSTRAINT training_examples_version_group_unique UNIQUE (version_id, group_key);
+
+
+--
+-- TOC entry 4649 (class 2606 OID 60568)
+-- Name: training_examples training_examples_version_hash_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_examples
+    ADD CONSTRAINT training_examples_version_hash_unique UNIQUE (version_id, content_hash);
+
+
+--
+-- TOC entry 4774 (class 2606 OID 132759)
+-- Name: training_experiments training_experiments_idempotency_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_experiments
+    ADD CONSTRAINT training_experiments_idempotency_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4776 (class 2606 OID 132757)
+-- Name: training_experiments training_experiments_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_experiments
+    ADD CONSTRAINT training_experiments_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4651 (class 2606 OID 60575)
+-- Name: training_run_metrics training_run_metrics_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_run_metrics
+    ADD CONSTRAINT training_run_metrics_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4654 (class 2606 OID 60590)
+-- Name: training_runs training_runs_idempotency_key_unique; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_runs
+    ADD CONSTRAINT training_runs_idempotency_key_unique UNIQUE (idempotency_key);
+
+
+--
+-- TOC entry 4656 (class 2606 OID 60588)
+-- Name: training_runs training_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_runs
+    ADD CONSTRAINT training_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4564 (class 2606 OID 28558)
+-- Name: worker_heartbeats worker_heartbeats_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.worker_heartbeats
+    ADD CONSTRAINT worker_heartbeats_pkey PRIMARY KEY (worker_id);
+
+
+--
+-- TOC entry 4567 (class 2606 OID 28566)
+-- Name: workflow_events workflow_events_pkey; Type: CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.workflow_events
+    ADD CONSTRAINT workflow_events_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 4455 (class 1259 OID 21087)
+-- Name: agent_lifecycle_events_agent_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX agent_lifecycle_events_agent_idx ON public.agent_lifecycle_events USING btree (agent_id, created_at);
+
+
+--
+-- TOC entry 4458 (class 1259 OID 21092)
+-- Name: agents_created_at_id_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX agents_created_at_id_idx ON public.agents USING btree (created_at, id);
+
+
+--
+-- TOC entry 4459 (class 1259 OID 21088)
+-- Name: agents_department_id_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX agents_department_id_idx ON public.agents USING btree (department_id);
+
+
+--
+-- TOC entry 4464 (class 1259 OID 21090)
+-- Name: agents_parent_agent_id_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX agents_parent_agent_id_idx ON public.agents USING btree (parent_agent_id);
+
+
+--
+-- TOC entry 4467 (class 1259 OID 21091)
+-- Name: agents_runtime_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX agents_runtime_status_idx ON public.agents USING btree (status, runtime_heartbeat_at);
+
+
+--
+-- TOC entry 4468 (class 1259 OID 21089)
+-- Name: agents_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX agents_status_idx ON public.agents USING btree (status);
+
+
+--
+-- TOC entry 4469 (class 1259 OID 21095)
+-- Name: approval_requests_created_at_id_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX approval_requests_created_at_id_idx ON public.approval_requests USING btree (created_at, id);
+
+
+--
+-- TOC entry 4470 (class 1259 OID 21096)
+-- Name: approval_requests_one_pending_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE UNIQUE INDEX approval_requests_one_pending_idx ON public.approval_requests USING btree (approval_type, target_type, target_id) WHERE (status = 'pending'::text);
+
+
+--
+-- TOC entry 4473 (class 1259 OID 21094)
+-- Name: approval_requests_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX approval_requests_status_idx ON public.approval_requests USING btree (status);
+
+
+--
+-- TOC entry 4474 (class 1259 OID 21093)
+-- Name: approval_requests_target_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX approval_requests_target_idx ON public.approval_requests USING btree (target_type, target_id);
+
+
+--
+-- TOC entry 4475 (class 1259 OID 21099)
+-- Name: audit_events_actor_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX audit_events_actor_idx ON public.audit_events USING btree (actor_id);
+
+
+--
+-- TOC entry 4476 (class 1259 OID 21100)
+-- Name: audit_events_correlation_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX audit_events_correlation_idx ON public.audit_events USING btree (correlation_id);
+
+
+--
+-- TOC entry 4477 (class 1259 OID 21097)
+-- Name: audit_events_occurred_at_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX audit_events_occurred_at_idx ON public.audit_events USING btree (occurred_at, event_id);
+
+
+--
+-- TOC entry 4480 (class 1259 OID 21098)
+-- Name: audit_events_target_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX audit_events_target_idx ON public.audit_events USING btree (target_type, target_id);
+
+
+--
+-- TOC entry 4755 (class 1259 OID 131857)
+-- Name: collaboration_entries_context_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX collaboration_entries_context_idx ON public.collaboration_entries USING btree (context_id, status);
+
+
+--
+-- TOC entry 4481 (class 1259 OID 21103)
+-- Name: departments_created_at_id_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX departments_created_at_id_idx ON public.departments USING btree (created_at, id);
+
+
+--
+-- TOC entry 4484 (class 1259 OID 21101)
+-- Name: departments_parent_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX departments_parent_idx ON public.departments USING btree (parent_department_id);
+
+
+--
+-- TOC entry 4489 (class 1259 OID 21102)
+-- Name: departments_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX departments_status_idx ON public.departments USING btree (status);
+
+
+--
+-- TOC entry 4770 (class 1259 OID 131858)
+-- Name: improvement_decisions_run_policy_unique; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE UNIQUE INDEX improvement_decisions_run_policy_unique ON public.improvement_decisions USING btree (evaluation_run_id, policy_version) WHERE (evaluation_run_id IS NOT NULL);
+
+
+--
+-- TOC entry 4534 (class 1259 OID 28657)
+-- Name: inference_requests_objective_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX inference_requests_objective_idx ON public.inference_requests USING btree (objective_id, created_at);
+
+
+--
+-- TOC entry 4738 (class 1259 OID 107699)
+-- Name: learning_cycles_department_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX learning_cycles_department_idx ON public.learning_cycles USING btree (department_id, status);
+
+
+--
+-- TOC entry 4791 (class 1259 OID 153998)
+-- Name: ledger_edge_cross_link; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE UNIQUE INDEX ledger_edge_cross_link ON public.ledger_taxonomy_edges USING btree (version_id, topic_id, parent_topic_id) WHERE (kind = 'cross_link'::text);
+
+
+--
+-- TOC entry 4792 (class 1259 OID 153997)
+-- Name: ledger_edge_one_parent; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE UNIQUE INDEX ledger_edge_one_parent ON public.ledger_taxonomy_edges USING btree (version_id, topic_id) WHERE (kind = 'parent'::text);
+
+
+--
+-- TOC entry 4576 (class 1259 OID 38340)
+-- Name: memories_department_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX memories_department_idx ON public.memories USING btree (department_id);
+
+
+--
+-- TOC entry 4577 (class 1259 OID 38341)
+-- Name: memories_hash_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX memories_hash_idx ON public.memories USING btree (content_hash);
+
+
+--
+-- TOC entry 4580 (class 1259 OID 38339)
+-- Name: memories_owner_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX memories_owner_idx ON public.memories USING btree (owner_agent_id);
+
+
+--
+-- TOC entry 4583 (class 1259 OID 38338)
+-- Name: memories_scope_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX memories_scope_status_idx ON public.memories USING btree (scope, status, created_at);
+
+
+--
+-- TOC entry 4602 (class 1259 OID 38343)
+-- Name: memory_sources_memory_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX memory_sources_memory_idx ON public.memory_sources USING btree (memory_id);
+
+
+--
+-- TOC entry 4603 (class 1259 OID 38342)
+-- Name: memory_sources_objective_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX memory_sources_objective_idx ON public.memory_sources USING btree (objective_id);
+
+
+--
+-- TOC entry 4516 (class 1259 OID 25022)
+-- Name: message_dead_letters_created_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX message_dead_letters_created_idx ON public.message_dead_letters USING btree (created_at, id);
+
+
+--
+-- TOC entry 4517 (class 1259 OID 25021)
+-- Name: message_dead_letters_one_open_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE UNIQUE INDEX message_dead_letters_one_open_idx ON public.message_dead_letters USING btree (message_id) WHERE ((status = 'open'::text) AND (message_id IS NOT NULL));
+
+
+--
+-- TOC entry 4520 (class 1259 OID 25023)
+-- Name: message_delivery_attempts_message_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX message_delivery_attempts_message_idx ON public.message_delivery_attempts USING btree (message_id, created_at);
+
+
+--
+-- TOC entry 4523 (class 1259 OID 25024)
+-- Name: message_outbox_claim_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX message_outbox_claim_idx ON public.message_outbox USING btree (status, available_at);
+
+
+--
+-- TOC entry 4524 (class 1259 OID 25025)
+-- Name: message_outbox_lease_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX message_outbox_lease_idx ON public.message_outbox USING btree (lease_until);
+
+
+--
+-- TOC entry 4531 (class 1259 OID 25026)
+-- Name: message_processing_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX message_processing_status_idx ON public.message_processing_records USING btree (status);
+
+
+--
+-- TOC entry 4508 (class 1259 OID 25016)
+-- Name: messages_correlation_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX messages_correlation_idx ON public.messages USING btree (correlation_id, created_at);
+
+
+--
+-- TOC entry 4509 (class 1259 OID 25020)
+-- Name: messages_created_at_id_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX messages_created_at_id_idx ON public.messages USING btree (created_at, id);
+
+
+--
+-- TOC entry 4512 (class 1259 OID 25018)
+-- Name: messages_recipient_agent_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX messages_recipient_agent_idx ON public.messages USING btree (recipient_agent_id, created_at);
+
+
+--
+-- TOC entry 4513 (class 1259 OID 25019)
+-- Name: messages_recipient_department_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX messages_recipient_department_idx ON public.messages USING btree (recipient_department_id, created_at);
+
+
+--
+-- TOC entry 4514 (class 1259 OID 25015)
+-- Name: messages_sender_idempotency_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE UNIQUE INDEX messages_sender_idempotency_idx ON public.messages USING btree (sender_agent_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+
+
+--
+-- TOC entry 4515 (class 1259 OID 25017)
+-- Name: messages_sender_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX messages_sender_idx ON public.messages USING btree (sender_agent_id, created_at);
+
+
+--
+-- TOC entry 4618 (class 1259 OID 60691)
+-- Name: model_candidates_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX model_candidates_status_idx ON public.model_candidates USING btree (status);
+
+
+--
+-- TOC entry 4619 (class 1259 OID 60692)
+-- Name: model_promotion_requests_candidate_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX model_promotion_requests_candidate_idx ON public.model_promotion_requests USING btree (candidate_id, created_at);
+
+
+--
+-- TOC entry 4624 (class 1259 OID 60693)
+-- Name: model_version_events_run_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX model_version_events_run_idx ON public.model_version_events USING btree (run_id, created_at);
+
+
+--
+-- TOC entry 4490 (class 1259 OID 21106)
+-- Name: models_created_at_id_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX models_created_at_id_idx ON public.models USING btree (created_at, id);
+
+
+--
+-- TOC entry 4491 (class 1259 OID 21104)
+-- Name: models_lineage_id_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX models_lineage_id_idx ON public.models USING btree (lineage_id);
+
+
+--
+-- TOC entry 4496 (class 1259 OID 21105)
+-- Name: models_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX models_status_idx ON public.models USING btree (status);
+
+
+--
+-- TOC entry 4541 (class 1259 OID 28658)
+-- Name: objective_plans_objective_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX objective_plans_objective_idx ON public.objective_plans USING btree (objective_id, version);
+
+
+--
+-- TOC entry 4548 (class 1259 OID 28659)
+-- Name: objective_runs_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX objective_runs_status_idx ON public.objective_runs USING btree (status, created_at);
+
+
+--
+-- TOC entry 4549 (class 1259 OID 28660)
+-- Name: objective_runs_submitter_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX objective_runs_submitter_idx ON public.objective_runs USING btree (submitter_principal_id, created_at);
+
+
+--
+-- TOC entry 4552 (class 1259 OID 28662)
+-- Name: objective_tasks_objective_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX objective_tasks_objective_idx ON public.objective_tasks USING btree (objective_id);
+
+
+--
+-- TOC entry 4555 (class 1259 OID 28661)
+-- Name: objective_tasks_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX objective_tasks_status_idx ON public.objective_tasks USING btree (status, created_at);
+
+
+--
+-- TOC entry 4503 (class 1259 OID 21107)
+-- Name: principals_role_name_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX principals_role_name_idx ON public.principals USING btree (role_name);
+
+
+--
+-- TOC entry 4831 (class 1259 OID 154419)
+-- Name: product_improvement_events_proposal_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX product_improvement_events_proposal_idx ON public.product_improvement_events USING btree (proposal_id, created_at);
+
+
+--
+-- TOC entry 4825 (class 1259 OID 154404)
+-- Name: product_improvement_proposals_department_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX product_improvement_proposals_department_idx ON public.product_improvement_proposals USING btree (department_id);
+
+
+--
+-- TOC entry 4828 (class 1259 OID 154403)
+-- Name: product_improvement_proposals_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX product_improvement_proposals_status_idx ON public.product_improvement_proposals USING btree (status);
+
+
+--
+-- TOC entry 4807 (class 1259 OID 154223)
+-- Name: routing_decisions_objective_purpose_unique; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE UNIQUE INDEX routing_decisions_objective_purpose_unique ON public.routing_decisions USING btree (objective_id, purpose) WHERE (task_id IS NULL);
+
+
+--
+-- TOC entry 4810 (class 1259 OID 154222)
+-- Name: routing_decisions_task_unique; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE UNIQUE INDEX routing_decisions_task_unique ON public.routing_decisions USING btree (task_id) WHERE (task_id IS NOT NULL);
+
+
+--
+-- TOC entry 4558 (class 1259 OID 28663)
+-- Name: task_assignments_task_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX task_assignments_task_idx ON public.task_assignments USING btree (task_id, attempt);
+
+
+--
+-- TOC entry 4625 (class 1259 OID 60694)
+-- Name: trainable_models_family_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX trainable_models_family_idx ON public.trainable_models USING btree (model_family);
+
+
+--
+-- TOC entry 4638 (class 1259 OID 60695)
+-- Name: training_datasets_created_at_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX training_datasets_created_at_idx ON public.training_datasets USING btree (created_at, id);
+
+
+--
+-- TOC entry 4645 (class 1259 OID 60696)
+-- Name: training_examples_split_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX training_examples_split_idx ON public.training_examples USING btree (version_id, split);
+
+
+--
+-- TOC entry 4652 (class 1259 OID 60697)
+-- Name: training_run_metrics_run_step_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX training_run_metrics_run_step_idx ON public.training_run_metrics USING btree (run_id, step);
+
+
+--
+-- TOC entry 4657 (class 1259 OID 60698)
+-- Name: training_runs_status_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX training_runs_status_idx ON public.training_runs USING btree (status, created_at);
+
+
+--
+-- TOC entry 4565 (class 1259 OID 28664)
+-- Name: workflow_events_objective_idx; Type: INDEX; Schema: public; Owner: colony
+--
+
+CREATE INDEX workflow_events_objective_idx ON public.workflow_events USING btree (objective_id, created_at);
+
+
+--
+-- TOC entry 5007 (class 2620 OID 154421)
+-- Name: audit_events audit_events_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON public.audit_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_audit_mutation();
+
+
+--
+-- TOC entry 5008 (class 2620 OID 154420)
+-- Name: audit_events audit_events_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON public.audit_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_audit_mutation();
+
+
+--
+-- TOC entry 5013 (class 2620 OID 154427)
+-- Name: benchmark_items benchmark_items_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER benchmark_items_no_delete BEFORE DELETE ON public.benchmark_items FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5014 (class 2620 OID 154426)
+-- Name: benchmark_items benchmark_items_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER benchmark_items_no_update BEFORE UPDATE ON public.benchmark_items FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5015 (class 2620 OID 154430)
+-- Name: benchmark_versions benchmark_versions_no_republish; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER benchmark_versions_no_republish BEFORE UPDATE ON public.benchmark_versions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_published_benchmark();
+
+
+--
+-- TOC entry 5009 (class 2620 OID 154425)
+-- Name: candidate_evaluations candidate_evaluations_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER candidate_evaluations_no_update BEFORE UPDATE ON public.candidate_evaluations FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5016 (class 2620 OID 154429)
+-- Name: candidate_gate_decisions candidate_gate_decisions_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER candidate_gate_decisions_no_update BEFORE UPDATE ON public.candidate_gate_decisions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5048 (class 2620 OID 154462)
+-- Name: department_serving_events department_serving_events_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER department_serving_events_no_delete BEFORE DELETE ON public.department_serving_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5049 (class 2620 OID 154461)
+-- Name: department_serving_events department_serving_events_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER department_serving_events_no_update BEFORE UPDATE ON public.department_serving_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5022 (class 2620 OID 154436)
+-- Name: deployment_decisions deployment_decisions_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER deployment_decisions_no_update BEFORE UPDATE ON public.deployment_decisions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5017 (class 2620 OID 154428)
+-- Name: evaluation_item_results evaluation_item_results_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER evaluation_item_results_no_update BEFORE UPDATE ON public.evaluation_item_results FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5023 (class 2620 OID 154435)
+-- Name: improvement_decisions improvement_decisions_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER improvement_decisions_no_update BEFORE UPDATE ON public.improvement_decisions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5018 (class 2620 OID 154434)
+-- Name: knowledge_validations knowledge_validations_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER knowledge_validations_no_update BEFORE UPDATE ON public.knowledge_validations FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5019 (class 2620 OID 154432)
+-- Name: learning_cycle_events learning_cycle_events_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER learning_cycle_events_no_delete BEFORE DELETE ON public.learning_cycle_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5020 (class 2620 OID 154431)
+-- Name: learning_cycle_events learning_cycle_events_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER learning_cycle_events_no_update BEFORE UPDATE ON public.learning_cycle_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5021 (class 2620 OID 154433)
+-- Name: learning_outcomes learning_outcomes_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER learning_outcomes_no_update BEFORE UPDATE ON public.learning_outcomes FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5032 (class 2620 OID 154446)
+-- Name: ledger_decisions ledger_decisions_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_decisions_no_delete BEFORE DELETE ON public.ledger_decisions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5033 (class 2620 OID 154445)
+-- Name: ledger_decisions ledger_decisions_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_decisions_no_update BEFORE UPDATE ON public.ledger_decisions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5038 (class 2620 OID 154452)
+-- Name: ledger_mapping_versions ledger_mapping_versions_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_mapping_versions_no_delete BEFORE DELETE ON public.ledger_mapping_versions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5039 (class 2620 OID 154451)
+-- Name: ledger_mapping_versions ledger_mapping_versions_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_mapping_versions_no_update BEFORE UPDATE ON public.ledger_mapping_versions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5030 (class 2620 OID 154444)
+-- Name: ledger_proposals ledger_proposals_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_proposals_no_delete BEFORE DELETE ON public.ledger_proposals FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5031 (class 2620 OID 154443)
+-- Name: ledger_proposals ledger_proposals_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_proposals_no_update BEFORE UPDATE ON public.ledger_proposals FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5044 (class 2620 OID 154458)
+-- Name: ledger_retention_events ledger_retention_events_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_retention_events_no_delete BEFORE DELETE ON public.ledger_retention_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5045 (class 2620 OID 154457)
+-- Name: ledger_retention_events ledger_retention_events_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_retention_events_no_update BEFORE UPDATE ON public.ledger_retention_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5042 (class 2620 OID 154456)
+-- Name: ledger_snapshots ledger_snapshots_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_snapshots_no_delete BEFORE DELETE ON public.ledger_snapshots FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5043 (class 2620 OID 154455)
+-- Name: ledger_snapshots ledger_snapshots_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_snapshots_no_update BEFORE UPDATE ON public.ledger_snapshots FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5036 (class 2620 OID 154450)
+-- Name: ledger_taxonomy_edges ledger_taxonomy_edges_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_taxonomy_edges_no_delete BEFORE DELETE ON public.ledger_taxonomy_edges FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5037 (class 2620 OID 154449)
+-- Name: ledger_taxonomy_edges ledger_taxonomy_edges_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_taxonomy_edges_no_update BEFORE UPDATE ON public.ledger_taxonomy_edges FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5034 (class 2620 OID 154448)
+-- Name: ledger_taxonomy_versions ledger_taxonomy_versions_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_taxonomy_versions_no_delete BEFORE DELETE ON public.ledger_taxonomy_versions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5035 (class 2620 OID 154447)
+-- Name: ledger_taxonomy_versions ledger_taxonomy_versions_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_taxonomy_versions_no_update BEFORE UPDATE ON public.ledger_taxonomy_versions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5028 (class 2620 OID 154442)
+-- Name: ledger_topic_events ledger_topic_events_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_topic_events_no_delete BEFORE DELETE ON public.ledger_topic_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5029 (class 2620 OID 154441)
+-- Name: ledger_topic_events ledger_topic_events_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_topic_events_no_update BEFORE UPDATE ON public.ledger_topic_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5040 (class 2620 OID 154454)
+-- Name: ledger_topic_mappings ledger_topic_mappings_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_topic_mappings_no_delete BEFORE DELETE ON public.ledger_topic_mappings FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5041 (class 2620 OID 154453)
+-- Name: ledger_topic_mappings ledger_topic_mappings_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_topic_mappings_no_update BEFORE UPDATE ON public.ledger_topic_mappings FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5026 (class 2620 OID 154440)
+-- Name: ledger_topics ledger_topics_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_topics_no_delete BEFORE DELETE ON public.ledger_topics FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5027 (class 2620 OID 154439)
+-- Name: ledger_topics ledger_topics_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER ledger_topics_no_update BEFORE UPDATE ON public.ledger_topics FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5050 (class 2620 OID 154464)
+-- Name: product_improvement_events product_improvement_events_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER product_improvement_events_no_delete BEFORE DELETE ON public.product_improvement_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5051 (class 2620 OID 154463)
+-- Name: product_improvement_events product_improvement_events_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER product_improvement_events_no_update BEFORE UPDATE ON public.product_improvement_events FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5046 (class 2620 OID 154460)
+-- Name: routing_decisions routing_decisions_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER routing_decisions_no_delete BEFORE DELETE ON public.routing_decisions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5047 (class 2620 OID 154459)
+-- Name: routing_decisions routing_decisions_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER routing_decisions_no_update BEFORE UPDATE ON public.routing_decisions FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5010 (class 2620 OID 154424)
+-- Name: training_artifacts training_artifacts_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER training_artifacts_no_update BEFORE UPDATE ON public.training_artifacts FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5011 (class 2620 OID 154423)
+-- Name: training_examples training_examples_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER training_examples_no_delete BEFORE DELETE ON public.training_examples FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5012 (class 2620 OID 154422)
+-- Name: training_examples training_examples_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER training_examples_no_update BEFORE UPDATE ON public.training_examples FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5024 (class 2620 OID 154438)
+-- Name: training_experiments training_experiments_no_delete; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER training_experiments_no_delete BEFORE DELETE ON public.training_experiments FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 5025 (class 2620 OID 154437)
+-- Name: training_experiments training_experiments_no_update; Type: TRIGGER; Schema: public; Owner: colony
+--
+
+CREATE TRIGGER training_experiments_no_update BEFORE UPDATE ON public.training_experiments FOR EACH ROW EXECUTE FUNCTION public.colony_reject_training_mutation();
+
+
+--
+-- TOC entry 4832 (class 2606 OID 21037)
+-- Name: agent_lifecycle_events agent_lifecycle_events_agent_id_agents_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.agent_lifecycle_events
+    ADD CONSTRAINT agent_lifecycle_events_agent_id_agents_id_fk FOREIGN KEY (agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4833 (class 2606 OID 21042)
+-- Name: agents agents_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.agents
+    ADD CONSTRAINT agents_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4834 (class 2606 OID 21047)
+-- Name: agents agents_model_id_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.agents
+    ADD CONSTRAINT agents_model_id_models_id_fk FOREIGN KEY (model_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4835 (class 2606 OID 21052)
+-- Name: agents agents_parent_agent_id_agents_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.agents
+    ADD CONSTRAINT agents_parent_agent_id_agents_id_fk FOREIGN KEY (parent_agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4836 (class 2606 OID 21062)
+-- Name: approval_requests approval_requests_decided_by_principals_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.approval_requests
+    ADD CONSTRAINT approval_requests_decided_by_principals_id_fk FOREIGN KEY (decided_by) REFERENCES public.principals(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4837 (class 2606 OID 21057)
+-- Name: approval_requests approval_requests_requested_by_principals_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.approval_requests
+    ADD CONSTRAINT approval_requests_requested_by_principals_id_fk FOREIGN KEY (requested_by) REFERENCES public.principals(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4909 (class 2606 OID 87671)
+-- Name: artifact_contamination artifact_contamination_artifact_id_training_artifacts_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.artifact_contamination
+    ADD CONSTRAINT artifact_contamination_artifact_id_training_artifacts_id_fk FOREIGN KEY (artifact_id) REFERENCES public.training_artifacts(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4910 (class 2606 OID 87676)
+-- Name: artifact_contamination artifact_contamination_forgetting_request_id_forgetting_request; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.artifact_contamination
+    ADD CONSTRAINT artifact_contamination_forgetting_request_id_forgetting_request FOREIGN KEY (forgetting_request_id) REFERENCES public.forgetting_requests(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4911 (class 2606 OID 87681)
+-- Name: benchmark_items benchmark_items_version_id_benchmark_versions_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.benchmark_items
+    ADD CONSTRAINT benchmark_items_version_id_benchmark_versions_id_fk FOREIGN KEY (version_id) REFERENCES public.benchmark_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4912 (class 2606 OID 87686)
+-- Name: benchmark_versions benchmark_versions_suite_id_benchmark_suites_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.benchmark_versions
+    ADD CONSTRAINT benchmark_versions_suite_id_benchmark_suites_id_fk FOREIGN KEY (suite_id) REFERENCES public.benchmark_suites(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4889 (class 2606 OID 60591)
+-- Name: candidate_evaluations candidate_evaluations_candidate_id_model_candidates_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.candidate_evaluations
+    ADD CONSTRAINT candidate_evaluations_candidate_id_model_candidates_id_fk FOREIGN KEY (candidate_id) REFERENCES public.model_candidates(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4890 (class 2606 OID 60596)
+-- Name: candidate_evaluations candidate_evaluations_run_id_training_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.candidate_evaluations
+    ADD CONSTRAINT candidate_evaluations_run_id_training_runs_id_fk FOREIGN KEY (run_id) REFERENCES public.training_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4913 (class 2606 OID 87691)
+-- Name: candidate_gate_decisions candidate_gate_decisions_candidate_id_model_candidates_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.candidate_gate_decisions
+    ADD CONSTRAINT candidate_gate_decisions_candidate_id_model_candidates_id_fk FOREIGN KEY (candidate_id) REFERENCES public.model_candidates(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4914 (class 2606 OID 87696)
+-- Name: candidate_gate_decisions candidate_gate_decisions_report_id_evaluation_reports_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.candidate_gate_decisions
+    ADD CONSTRAINT candidate_gate_decisions_report_id_evaluation_reports_id_fk FOREIGN KEY (report_id) REFERENCES public.evaluation_reports(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4925 (class 2606 OID 107564)
+-- Name: capability_gaps capability_gaps_capability_id_department_capabilities_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.capability_gaps
+    ADD CONSTRAINT capability_gaps_capability_id_department_capabilities_id_fk FOREIGN KEY (capability_id) REFERENCES public.department_capabilities(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4926 (class 2606 OID 107559)
+-- Name: capability_gaps capability_gaps_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.capability_gaps
+    ADD CONSTRAINT capability_gaps_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4953 (class 2606 OID 131767)
+-- Name: collaboration_contexts collaboration_contexts_owner_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_contexts
+    ADD CONSTRAINT collaboration_contexts_owner_department_id_departments_id_fk FOREIGN KEY (owner_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4954 (class 2606 OID 131777)
+-- Name: collaboration_entries collaboration_entries_author_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_entries
+    ADD CONSTRAINT collaboration_entries_author_department_id_departments_id_fk FOREIGN KEY (author_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4955 (class 2606 OID 131772)
+-- Name: collaboration_entries collaboration_entries_context_id_collaboration_contexts_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_entries
+    ADD CONSTRAINT collaboration_entries_context_id_collaboration_contexts_id_fk FOREIGN KEY (context_id) REFERENCES public.collaboration_contexts(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4956 (class 2606 OID 131782)
+-- Name: collaboration_entries collaboration_entries_promoted_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_entries
+    ADD CONSTRAINT collaboration_entries_promoted_memory_id_memories_id_fk FOREIGN KEY (promoted_memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4957 (class 2606 OID 131787)
+-- Name: collaboration_entries collaboration_entries_source_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_entries
+    ADD CONSTRAINT collaboration_entries_source_memory_id_memories_id_fk FOREIGN KEY (source_memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4958 (class 2606 OID 131792)
+-- Name: collaboration_participants collaboration_participants_context_id_collaboration_contexts_id; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_participants
+    ADD CONSTRAINT collaboration_participants_context_id_collaboration_contexts_id FOREIGN KEY (context_id) REFERENCES public.collaboration_contexts(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4959 (class 2606 OID 131797)
+-- Name: collaboration_participants collaboration_participants_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.collaboration_participants
+    ADD CONSTRAINT collaboration_participants_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5001 (class 2606 OID 154322)
+-- Name: department_agent_checkpoints department_agent_checkpoints_agent_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_agent_checkpoints
+    ADD CONSTRAINT department_agent_checkpoints_agent_fk FOREIGN KEY (agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5002 (class 2606 OID 154327)
+-- Name: department_agent_checkpoints department_agent_checkpoints_department_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_agent_checkpoints
+    ADD CONSTRAINT department_agent_checkpoints_department_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5003 (class 2606 OID 154332)
+-- Name: department_agent_checkpoints department_agent_checkpoints_instance_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_agent_checkpoints
+    ADD CONSTRAINT department_agent_checkpoints_instance_fk FOREIGN KEY (serving_instance_id) REFERENCES public.department_serving_instances(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4927 (class 2606 OID 107569)
+-- Name: department_capabilities department_capabilities_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_capabilities
+    ADD CONSTRAINT department_capabilities_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4928 (class 2606 OID 107584)
+-- Name: department_capability_versions department_capability_versions_benchmark_version_id_benchmark_v; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_capability_versions
+    ADD CONSTRAINT department_capability_versions_benchmark_version_id_benchmark_v FOREIGN KEY (benchmark_version_id) REFERENCES public.benchmark_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4929 (class 2606 OID 107574)
+-- Name: department_capability_versions department_capability_versions_capability_id_department_capabil; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_capability_versions
+    ADD CONSTRAINT department_capability_versions_capability_id_department_capabil FOREIGN KEY (capability_id) REFERENCES public.department_capabilities(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4930 (class 2606 OID 107579)
+-- Name: department_capability_versions department_capability_versions_evaluation_run_id_evaluation_run; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_capability_versions
+    ADD CONSTRAINT department_capability_versions_evaluation_run_id_evaluation_run FOREIGN KEY (evaluation_run_id) REFERENCES public.evaluation_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4931 (class 2606 OID 107604)
+-- Name: department_model_assignments department_model_assignments_candidate_id_model_candidates_id_f; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_model_assignments
+    ADD CONSTRAINT department_model_assignments_candidate_id_model_candidates_id_f FOREIGN KEY (candidate_id) REFERENCES public.model_candidates(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4932 (class 2606 OID 107589)
+-- Name: department_model_assignments department_model_assignments_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_model_assignments
+    ADD CONSTRAINT department_model_assignments_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4933 (class 2606 OID 107594)
+-- Name: department_model_assignments department_model_assignments_registry_model_id_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_model_assignments
+    ADD CONSTRAINT department_model_assignments_registry_model_id_models_id_fk FOREIGN KEY (registry_model_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4934 (class 2606 OID 107599)
+-- Name: department_model_assignments department_model_assignments_trainable_model_id_trainable_model; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_model_assignments
+    ADD CONSTRAINT department_model_assignments_trainable_model_id_trainable_model FOREIGN KEY (trainable_model_id) REFERENCES public.trainable_models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5000 (class 2606 OID 154306)
+-- Name: department_serving_events department_serving_events_instance_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_serving_events
+    ADD CONSTRAINT department_serving_events_instance_fk FOREIGN KEY (instance_id) REFERENCES public.department_serving_instances(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4997 (class 2606 OID 154288)
+-- Name: department_serving_instances department_serving_instances_agent_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_serving_instances
+    ADD CONSTRAINT department_serving_instances_agent_fk FOREIGN KEY (agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4998 (class 2606 OID 154283)
+-- Name: department_serving_instances department_serving_instances_department_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_serving_instances
+    ADD CONSTRAINT department_serving_instances_department_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4999 (class 2606 OID 154293)
+-- Name: department_serving_instances department_serving_instances_model_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.department_serving_instances
+    ADD CONSTRAINT department_serving_instances_model_fk FOREIGN KEY (model_registry_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4838 (class 2606 OID 21067)
+-- Name: departments departments_parent_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT departments_parent_department_id_departments_id_fk FOREIGN KEY (parent_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4960 (class 2606 OID 131802)
+-- Name: deployment_decisions deployment_decisions_cycle_id_learning_cycles_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.deployment_decisions
+    ADD CONSTRAINT deployment_decisions_cycle_id_learning_cycles_id_fk FOREIGN KEY (cycle_id) REFERENCES public.learning_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4961 (class 2606 OID 131807)
+-- Name: deployment_decisions deployment_decisions_improvement_decision_id_improvement_decisi; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.deployment_decisions
+    ADD CONSTRAINT deployment_decisions_improvement_decision_id_improvement_decisi FOREIGN KEY (improvement_decision_id) REFERENCES public.improvement_decisions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4915 (class 2606 OID 87701)
+-- Name: evaluation_item_results evaluation_item_results_run_id_evaluation_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_item_results
+    ADD CONSTRAINT evaluation_item_results_run_id_evaluation_runs_id_fk FOREIGN KEY (run_id) REFERENCES public.evaluation_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4916 (class 2606 OID 87706)
+-- Name: evaluation_reports evaluation_reports_run_id_evaluation_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_reports
+    ADD CONSTRAINT evaluation_reports_run_id_evaluation_runs_id_fk FOREIGN KEY (run_id) REFERENCES public.evaluation_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4917 (class 2606 OID 87711)
+-- Name: evaluation_runs evaluation_runs_benchmark_version_id_benchmark_versions_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_runs
+    ADD CONSTRAINT evaluation_runs_benchmark_version_id_benchmark_versions_id_fk FOREIGN KEY (benchmark_version_id) REFERENCES public.benchmark_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4918 (class 2606 OID 87716)
+-- Name: evaluation_runs evaluation_runs_candidate_id_model_candidates_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_runs
+    ADD CONSTRAINT evaluation_runs_candidate_id_model_candidates_id_fk FOREIGN KEY (candidate_id) REFERENCES public.model_candidates(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4919 (class 2606 OID 87721)
+-- Name: evaluation_runs evaluation_runs_trainable_model_id_trainable_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.evaluation_runs
+    ADD CONSTRAINT evaluation_runs_trainable_model_id_trainable_models_id_fk FOREIGN KEY (trainable_model_id) REFERENCES public.trainable_models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4920 (class 2606 OID 87731)
+-- Name: experimental_route_versions experimental_route_versions_candidate_id_model_candidates_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.experimental_route_versions
+    ADD CONSTRAINT experimental_route_versions_candidate_id_model_candidates_id_fk FOREIGN KEY (candidate_id) REFERENCES public.model_candidates(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4921 (class 2606 OID 87726)
+-- Name: experimental_route_versions experimental_route_versions_route_id_experimental_routes_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.experimental_route_versions
+    ADD CONSTRAINT experimental_route_versions_route_id_experimental_routes_id_fk FOREIGN KEY (route_id) REFERENCES public.experimental_routes(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4922 (class 2606 OID 87736)
+-- Name: experimental_route_versions experimental_route_versions_trainable_model_id_trainable_models; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.experimental_route_versions
+    ADD CONSTRAINT experimental_route_versions_trainable_model_id_trainable_models FOREIGN KEY (trainable_model_id) REFERENCES public.trainable_models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4923 (class 2606 OID 87741)
+-- Name: forgetting_requests forgetting_requests_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.forgetting_requests
+    ADD CONSTRAINT forgetting_requests_memory_id_memories_id_fk FOREIGN KEY (memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4962 (class 2606 OID 131822)
+-- Name: improvement_decisions improvement_decisions_candidate_id_model_candidates_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.improvement_decisions
+    ADD CONSTRAINT improvement_decisions_candidate_id_model_candidates_id_fk FOREIGN KEY (candidate_id) REFERENCES public.model_candidates(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4963 (class 2606 OID 131817)
+-- Name: improvement_decisions improvement_decisions_cycle_id_learning_cycles_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.improvement_decisions
+    ADD CONSTRAINT improvement_decisions_cycle_id_learning_cycles_id_fk FOREIGN KEY (cycle_id) REFERENCES public.learning_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4964 (class 2606 OID 131812)
+-- Name: improvement_decisions improvement_decisions_evaluation_run_id_evaluation_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.improvement_decisions
+    ADD CONSTRAINT improvement_decisions_evaluation_run_id_evaluation_runs_id_fk FOREIGN KEY (evaluation_run_id) REFERENCES public.evaluation_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4851 (class 2606 OID 28582)
+-- Name: inference_requests inference_requests_intended_model_id_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.inference_requests
+    ADD CONSTRAINT inference_requests_intended_model_id_models_id_fk FOREIGN KEY (intended_model_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4852 (class 2606 OID 28567)
+-- Name: inference_requests inference_requests_objective_id_objective_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.inference_requests
+    ADD CONSTRAINT inference_requests_objective_id_objective_runs_id_fk FOREIGN KEY (objective_id) REFERENCES public.objective_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4853 (class 2606 OID 28577)
+-- Name: inference_requests inference_requests_registry_model_id_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.inference_requests
+    ADD CONSTRAINT inference_requests_registry_model_id_models_id_fk FOREIGN KEY (registry_model_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4854 (class 2606 OID 28572)
+-- Name: inference_requests inference_requests_task_id_objective_tasks_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.inference_requests
+    ADD CONSTRAINT inference_requests_task_id_objective_tasks_id_fk FOREIGN KEY (task_id) REFERENCES public.objective_tasks(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4855 (class 2606 OID 28587)
+-- Name: inference_usage inference_usage_request_id_inference_requests_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.inference_usage
+    ADD CONSTRAINT inference_usage_request_id_inference_requests_id_fk FOREIGN KEY (request_id) REFERENCES public.inference_requests(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4935 (class 2606 OID 107624)
+-- Name: knowledge_transfers knowledge_transfers_cycle_id_learning_cycles_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_transfers
+    ADD CONSTRAINT knowledge_transfers_cycle_id_learning_cycles_id_fk FOREIGN KEY (cycle_id) REFERENCES public.learning_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4936 (class 2606 OID 107614)
+-- Name: knowledge_transfers knowledge_transfers_destination_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_transfers
+    ADD CONSTRAINT knowledge_transfers_destination_department_id_departments_id_fk FOREIGN KEY (destination_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4937 (class 2606 OID 107609)
+-- Name: knowledge_transfers knowledge_transfers_origin_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_transfers
+    ADD CONSTRAINT knowledge_transfers_origin_department_id_departments_id_fk FOREIGN KEY (origin_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4938 (class 2606 OID 107619)
+-- Name: knowledge_transfers knowledge_transfers_source_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_transfers
+    ADD CONSTRAINT knowledge_transfers_source_memory_id_memories_id_fk FOREIGN KEY (source_memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4939 (class 2606 OID 107634)
+-- Name: knowledge_validations knowledge_validations_accepted_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_validations
+    ADD CONSTRAINT knowledge_validations_accepted_memory_id_memories_id_fk FOREIGN KEY (accepted_memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4940 (class 2606 OID 107629)
+-- Name: knowledge_validations knowledge_validations_transfer_id_knowledge_transfers_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.knowledge_validations
+    ADD CONSTRAINT knowledge_validations_transfer_id_knowledge_transfers_id_fk FOREIGN KEY (transfer_id) REFERENCES public.knowledge_transfers(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4941 (class 2606 OID 107639)
+-- Name: learning_budgets learning_budgets_cycle_id_learning_cycles_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_budgets
+    ADD CONSTRAINT learning_budgets_cycle_id_learning_cycles_id_fk FOREIGN KEY (cycle_id) REFERENCES public.learning_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4942 (class 2606 OID 107644)
+-- Name: learning_cycle_events learning_cycle_events_cycle_id_learning_cycles_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_cycle_events
+    ADD CONSTRAINT learning_cycle_events_cycle_id_learning_cycles_id_fk FOREIGN KEY (cycle_id) REFERENCES public.learning_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4943 (class 2606 OID 107654)
+-- Name: learning_cycles learning_cycles_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_cycles
+    ADD CONSTRAINT learning_cycles_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4944 (class 2606 OID 107664)
+-- Name: learning_cycles learning_cycles_evaluation_run_id_evaluation_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_cycles
+    ADD CONSTRAINT learning_cycles_evaluation_run_id_evaluation_runs_id_fk FOREIGN KEY (evaluation_run_id) REFERENCES public.evaluation_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4945 (class 2606 OID 107669)
+-- Name: learning_cycles learning_cycles_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_cycles
+    ADD CONSTRAINT learning_cycles_memory_id_memories_id_fk FOREIGN KEY (memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4946 (class 2606 OID 107649)
+-- Name: learning_cycles learning_cycles_objective_id_learning_objectives_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_cycles
+    ADD CONSTRAINT learning_cycles_objective_id_learning_objectives_id_fk FOREIGN KEY (objective_id) REFERENCES public.learning_objectives(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4947 (class 2606 OID 107659)
+-- Name: learning_cycles learning_cycles_training_run_id_training_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_cycles
+    ADD CONSTRAINT learning_cycles_training_run_id_training_runs_id_fk FOREIGN KEY (training_run_id) REFERENCES public.training_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4948 (class 2606 OID 107689)
+-- Name: learning_objectives learning_objectives_benchmark_version_id_benchmark_versions_id_; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_objectives
+    ADD CONSTRAINT learning_objectives_benchmark_version_id_benchmark_versions_id_ FOREIGN KEY (benchmark_version_id) REFERENCES public.benchmark_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4949 (class 2606 OID 107684)
+-- Name: learning_objectives learning_objectives_capability_id_department_capabilities_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_objectives
+    ADD CONSTRAINT learning_objectives_capability_id_department_capabilities_id_fk FOREIGN KEY (capability_id) REFERENCES public.department_capabilities(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4950 (class 2606 OID 107674)
+-- Name: learning_objectives learning_objectives_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_objectives
+    ADD CONSTRAINT learning_objectives_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4951 (class 2606 OID 107679)
+-- Name: learning_objectives learning_objectives_gap_id_capability_gaps_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_objectives
+    ADD CONSTRAINT learning_objectives_gap_id_capability_gaps_id_fk FOREIGN KEY (gap_id) REFERENCES public.capability_gaps(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4952 (class 2606 OID 107694)
+-- Name: learning_outcomes learning_outcomes_cycle_id_learning_cycles_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.learning_outcomes
+    ADD CONSTRAINT learning_outcomes_cycle_id_learning_cycles_id_fk FOREIGN KEY (cycle_id) REFERENCES public.learning_cycles(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4974 (class 2606 OID 154056)
+-- Name: ledger_decisions ledger_decisions_proposal_id_ledger_proposals_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_decisions
+    ADD CONSTRAINT ledger_decisions_proposal_id_ledger_proposals_id_fk FOREIGN KEY (proposal_id) REFERENCES public.ledger_proposals(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4981 (class 2606 OID 154091)
+-- Name: ledger_mapping_versions ledger_mapping_versions_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_mapping_versions
+    ADD CONSTRAINT ledger_mapping_versions_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4982 (class 2606 OID 154101)
+-- Name: ledger_mapping_versions ledger_mapping_versions_proposal_id_ledger_proposals_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_mapping_versions
+    ADD CONSTRAINT ledger_mapping_versions_proposal_id_ledger_proposals_id_fk FOREIGN KEY (proposal_id) REFERENCES public.ledger_proposals(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4983 (class 2606 OID 154096)
+-- Name: ledger_mapping_versions ledger_mapping_versions_taxonomy_version_id_ledger_taxonomy_ver; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_mapping_versions
+    ADD CONSTRAINT ledger_mapping_versions_taxonomy_version_id_ledger_taxonomy_ver FOREIGN KEY (taxonomy_version_id) REFERENCES public.ledger_taxonomy_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4973 (class 2606 OID 154051)
+-- Name: ledger_proposals ledger_proposals_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_proposals
+    ADD CONSTRAINT ledger_proposals_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4991 (class 2606 OID 154141)
+-- Name: ledger_retention_events ledger_retention_events_snapshot_id_ledger_snapshots_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_retention_events
+    ADD CONSTRAINT ledger_retention_events_snapshot_id_ledger_snapshots_id_fk FOREIGN KEY (snapshot_id) REFERENCES public.ledger_snapshots(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4986 (class 2606 OID 154116)
+-- Name: ledger_snapshots ledger_snapshots_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_snapshots
+    ADD CONSTRAINT ledger_snapshots_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4987 (class 2606 OID 154136)
+-- Name: ledger_snapshots ledger_snapshots_evaluation_run_id_evaluation_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_snapshots
+    ADD CONSTRAINT ledger_snapshots_evaluation_run_id_evaluation_runs_id_fk FOREIGN KEY (evaluation_run_id) REFERENCES public.evaluation_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4988 (class 2606 OID 154131)
+-- Name: ledger_snapshots ledger_snapshots_mapping_version_id_ledger_mapping_versions_id_; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_snapshots
+    ADD CONSTRAINT ledger_snapshots_mapping_version_id_ledger_mapping_versions_id_ FOREIGN KEY (mapping_version_id) REFERENCES public.ledger_mapping_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4989 (class 2606 OID 154126)
+-- Name: ledger_snapshots ledger_snapshots_taxonomy_version_id_ledger_taxonomy_versions_i; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_snapshots
+    ADD CONSTRAINT ledger_snapshots_taxonomy_version_id_ledger_taxonomy_versions_i FOREIGN KEY (taxonomy_version_id) REFERENCES public.ledger_taxonomy_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4990 (class 2606 OID 154121)
+-- Name: ledger_snapshots ledger_snapshots_topic_id_ledger_topics_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_snapshots
+    ADD CONSTRAINT ledger_snapshots_topic_id_ledger_topics_id_fk FOREIGN KEY (topic_id) REFERENCES public.ledger_topics(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4977 (class 2606 OID 154081)
+-- Name: ledger_taxonomy_edges ledger_taxonomy_edges_parent_topic_id_ledger_topics_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_taxonomy_edges
+    ADD CONSTRAINT ledger_taxonomy_edges_parent_topic_id_ledger_topics_id_fk FOREIGN KEY (parent_topic_id) REFERENCES public.ledger_topics(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4978 (class 2606 OID 154086)
+-- Name: ledger_taxonomy_edges ledger_taxonomy_edges_target_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_taxonomy_edges
+    ADD CONSTRAINT ledger_taxonomy_edges_target_department_id_departments_id_fk FOREIGN KEY (target_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4979 (class 2606 OID 154076)
+-- Name: ledger_taxonomy_edges ledger_taxonomy_edges_topic_id_ledger_topics_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_taxonomy_edges
+    ADD CONSTRAINT ledger_taxonomy_edges_topic_id_ledger_topics_id_fk FOREIGN KEY (topic_id) REFERENCES public.ledger_topics(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4980 (class 2606 OID 154071)
+-- Name: ledger_taxonomy_edges ledger_taxonomy_edges_version_id_ledger_taxonomy_versions_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_taxonomy_edges
+    ADD CONSTRAINT ledger_taxonomy_edges_version_id_ledger_taxonomy_versions_id_fk FOREIGN KEY (version_id) REFERENCES public.ledger_taxonomy_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4975 (class 2606 OID 154061)
+-- Name: ledger_taxonomy_versions ledger_taxonomy_versions_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_taxonomy_versions
+    ADD CONSTRAINT ledger_taxonomy_versions_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4976 (class 2606 OID 154066)
+-- Name: ledger_taxonomy_versions ledger_taxonomy_versions_proposal_id_ledger_proposals_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_taxonomy_versions
+    ADD CONSTRAINT ledger_taxonomy_versions_proposal_id_ledger_proposals_id_fk FOREIGN KEY (proposal_id) REFERENCES public.ledger_proposals(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4972 (class 2606 OID 154046)
+-- Name: ledger_topic_events ledger_topic_events_topic_id_ledger_topics_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_topic_events
+    ADD CONSTRAINT ledger_topic_events_topic_id_ledger_topics_id_fk FOREIGN KEY (topic_id) REFERENCES public.ledger_topics(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4984 (class 2606 OID 154106)
+-- Name: ledger_topic_mappings ledger_topic_mappings_mapping_version_id_ledger_mapping_version; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_topic_mappings
+    ADD CONSTRAINT ledger_topic_mappings_mapping_version_id_ledger_mapping_version FOREIGN KEY (mapping_version_id) REFERENCES public.ledger_mapping_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4985 (class 2606 OID 154111)
+-- Name: ledger_topic_mappings ledger_topic_mappings_topic_id_ledger_topics_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_topic_mappings
+    ADD CONSTRAINT ledger_topic_mappings_topic_id_ledger_topics_id_fk FOREIGN KEY (topic_id) REFERENCES public.ledger_topics(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4971 (class 2606 OID 154041)
+-- Name: ledger_topics ledger_topics_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.ledger_topics
+    ADD CONSTRAINT ledger_topics_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4869 (class 2606 OID 38243)
+-- Name: memories memories_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memories
+    ADD CONSTRAINT memories_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4870 (class 2606 OID 38253)
+-- Name: memories memories_origin_agent_id_agents_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memories
+    ADD CONSTRAINT memories_origin_agent_id_agents_id_fk FOREIGN KEY (origin_agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4871 (class 2606 OID 38238)
+-- Name: memories memories_owner_agent_id_agents_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memories
+    ADD CONSTRAINT memories_owner_agent_id_agents_id_fk FOREIGN KEY (owner_agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4872 (class 2606 OID 38248)
+-- Name: memories memories_superseded_by_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memories
+    ADD CONSTRAINT memories_superseded_by_memories_id_fk FOREIGN KEY (superseded_by) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4873 (class 2606 OID 38258)
+-- Name: memory_consolidation_records memory_consolidation_records_keeper_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_consolidation_records
+    ADD CONSTRAINT memory_consolidation_records_keeper_id_memories_id_fk FOREIGN KEY (keeper_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4874 (class 2606 OID 38263)
+-- Name: memory_contradictions memory_contradictions_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_contradictions
+    ADD CONSTRAINT memory_contradictions_memory_id_memories_id_fk FOREIGN KEY (memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4875 (class 2606 OID 38268)
+-- Name: memory_contradictions memory_contradictions_other_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_contradictions
+    ADD CONSTRAINT memory_contradictions_other_memory_id_memories_id_fk FOREIGN KEY (other_memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4876 (class 2606 OID 38273)
+-- Name: memory_embeddings memory_embeddings_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_embeddings
+    ADD CONSTRAINT memory_embeddings_memory_id_memories_id_fk FOREIGN KEY (memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4965 (class 2606 OID 131847)
+-- Name: memory_ownership memory_ownership_collaboration_id_collaboration_contexts_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_ownership
+    ADD CONSTRAINT memory_ownership_collaboration_id_collaboration_contexts_id_fk FOREIGN KEY (collaboration_id) REFERENCES public.collaboration_contexts(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4966 (class 2606 OID 131827)
+-- Name: memory_ownership memory_ownership_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_ownership
+    ADD CONSTRAINT memory_ownership_memory_id_memories_id_fk FOREIGN KEY (memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4967 (class 2606 OID 131832)
+-- Name: memory_ownership memory_ownership_originating_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_ownership
+    ADD CONSTRAINT memory_ownership_originating_department_id_departments_id_fk FOREIGN KEY (originating_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4968 (class 2606 OID 131837)
+-- Name: memory_ownership memory_ownership_primary_owner_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_ownership
+    ADD CONSTRAINT memory_ownership_primary_owner_department_id_departments_id_fk FOREIGN KEY (primary_owner_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4969 (class 2606 OID 131842)
+-- Name: memory_ownership memory_ownership_recipient_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_ownership
+    ADD CONSTRAINT memory_ownership_recipient_department_id_departments_id_fk FOREIGN KEY (recipient_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4970 (class 2606 OID 131852)
+-- Name: memory_ownership memory_ownership_source_message_id_messages_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_ownership
+    ADD CONSTRAINT memory_ownership_source_message_id_messages_id_fk FOREIGN KEY (source_message_id) REFERENCES public.messages(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4877 (class 2606 OID 38283)
+-- Name: memory_promotion_requests memory_promotion_requests_created_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_promotion_requests
+    ADD CONSTRAINT memory_promotion_requests_created_memory_id_memories_id_fk FOREIGN KEY (created_memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4878 (class 2606 OID 38278)
+-- Name: memory_promotion_requests memory_promotion_requests_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_promotion_requests
+    ADD CONSTRAINT memory_promotion_requests_memory_id_memories_id_fk FOREIGN KEY (memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4879 (class 2606 OID 38288)
+-- Name: memory_retrieval_events memory_retrieval_events_objective_id_objective_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_retrieval_events
+    ADD CONSTRAINT memory_retrieval_events_objective_id_objective_runs_id_fk FOREIGN KEY (objective_id) REFERENCES public.objective_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4880 (class 2606 OID 38293)
+-- Name: memory_retrieval_events memory_retrieval_events_task_id_objective_tasks_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_retrieval_events
+    ADD CONSTRAINT memory_retrieval_events_task_id_objective_tasks_id_fk FOREIGN KEY (task_id) REFERENCES public.objective_tasks(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4881 (class 2606 OID 38298)
+-- Name: memory_retrieval_hits memory_retrieval_hits_event_id_memory_retrieval_events_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_retrieval_hits
+    ADD CONSTRAINT memory_retrieval_hits_event_id_memory_retrieval_events_id_fk FOREIGN KEY (event_id) REFERENCES public.memory_retrieval_events(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4882 (class 2606 OID 38303)
+-- Name: memory_retrieval_hits memory_retrieval_hits_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_retrieval_hits
+    ADD CONSTRAINT memory_retrieval_hits_memory_id_memories_id_fk FOREIGN KEY (memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4883 (class 2606 OID 38308)
+-- Name: memory_revisions memory_revisions_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_revisions
+    ADD CONSTRAINT memory_revisions_memory_id_memories_id_fk FOREIGN KEY (memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4884 (class 2606 OID 38313)
+-- Name: memory_sources memory_sources_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_sources
+    ADD CONSTRAINT memory_sources_memory_id_memories_id_fk FOREIGN KEY (memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4885 (class 2606 OID 38328)
+-- Name: memory_sources memory_sources_message_id_messages_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_sources
+    ADD CONSTRAINT memory_sources_message_id_messages_id_fk FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4886 (class 2606 OID 38318)
+-- Name: memory_sources memory_sources_objective_id_objective_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_sources
+    ADD CONSTRAINT memory_sources_objective_id_objective_runs_id_fk FOREIGN KEY (objective_id) REFERENCES public.objective_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4887 (class 2606 OID 38333)
+-- Name: memory_sources memory_sources_source_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_sources
+    ADD CONSTRAINT memory_sources_source_memory_id_memories_id_fk FOREIGN KEY (source_memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4888 (class 2606 OID 38323)
+-- Name: memory_sources memory_sources_task_id_objective_tasks_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.memory_sources
+    ADD CONSTRAINT memory_sources_task_id_objective_tasks_id_fk FOREIGN KEY (task_id) REFERENCES public.objective_tasks(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4847 (class 2606 OID 24995)
+-- Name: message_dead_letters message_dead_letters_message_id_messages_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.message_dead_letters
+    ADD CONSTRAINT message_dead_letters_message_id_messages_id_fk FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4848 (class 2606 OID 25000)
+-- Name: message_delivery_attempts message_delivery_attempts_message_id_messages_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.message_delivery_attempts
+    ADD CONSTRAINT message_delivery_attempts_message_id_messages_id_fk FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4849 (class 2606 OID 25005)
+-- Name: message_outbox message_outbox_message_id_messages_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.message_outbox
+    ADD CONSTRAINT message_outbox_message_id_messages_id_fk FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4850 (class 2606 OID 25010)
+-- Name: message_processing_records message_processing_records_message_id_messages_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.message_processing_records
+    ADD CONSTRAINT message_processing_records_message_id_messages_id_fk FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4842 (class 2606 OID 24990)
+-- Name: messages messages_inbox_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_inbox_department_id_departments_id_fk FOREIGN KEY (inbox_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4843 (class 2606 OID 24980)
+-- Name: messages messages_recipient_agent_id_agents_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_recipient_agent_id_agents_id_fk FOREIGN KEY (recipient_agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4844 (class 2606 OID 24985)
+-- Name: messages messages_recipient_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_recipient_department_id_departments_id_fk FOREIGN KEY (recipient_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4845 (class 2606 OID 24970)
+-- Name: messages messages_sender_agent_id_agents_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_sender_agent_id_agents_id_fk FOREIGN KEY (sender_agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4846 (class 2606 OID 24975)
+-- Name: messages messages_sender_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_sender_department_id_departments_id_fk FOREIGN KEY (sender_department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4891 (class 2606 OID 60601)
+-- Name: model_adapters model_adapters_artifact_id_training_artifacts_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_adapters
+    ADD CONSTRAINT model_adapters_artifact_id_training_artifacts_id_fk FOREIGN KEY (artifact_id) REFERENCES public.training_artifacts(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4892 (class 2606 OID 60606)
+-- Name: model_adapters model_adapters_base_trainable_model_id_trainable_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_adapters
+    ADD CONSTRAINT model_adapters_base_trainable_model_id_trainable_models_id_fk FOREIGN KEY (base_trainable_model_id) REFERENCES public.trainable_models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4893 (class 2606 OID 60611)
+-- Name: model_candidates model_candidates_adapter_id_model_adapters_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_candidates
+    ADD CONSTRAINT model_candidates_adapter_id_model_adapters_id_fk FOREIGN KEY (adapter_id) REFERENCES public.model_adapters(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4894 (class 2606 OID 60616)
+-- Name: model_candidates model_candidates_run_id_training_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_candidates
+    ADD CONSTRAINT model_candidates_run_id_training_runs_id_fk FOREIGN KEY (run_id) REFERENCES public.training_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4895 (class 2606 OID 60621)
+-- Name: model_promotion_requests model_promotion_requests_candidate_id_model_candidates_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_promotion_requests
+    ADD CONSTRAINT model_promotion_requests_candidate_id_model_candidates_id_fk FOREIGN KEY (candidate_id) REFERENCES public.model_candidates(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4856 (class 2606 OID 28592)
+-- Name: model_runtimes model_runtimes_model_id_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_runtimes
+    ADD CONSTRAINT model_runtimes_model_id_models_id_fk FOREIGN KEY (model_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4896 (class 2606 OID 60631)
+-- Name: model_version_events model_version_events_candidate_id_model_candidates_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_version_events
+    ADD CONSTRAINT model_version_events_candidate_id_model_candidates_id_fk FOREIGN KEY (candidate_id) REFERENCES public.model_candidates(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4897 (class 2606 OID 60636)
+-- Name: model_version_events model_version_events_run_id_training_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_version_events
+    ADD CONSTRAINT model_version_events_run_id_training_runs_id_fk FOREIGN KEY (run_id) REFERENCES public.training_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4898 (class 2606 OID 60626)
+-- Name: model_version_events model_version_events_trainable_model_id_trainable_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.model_version_events
+    ADD CONSTRAINT model_version_events_trainable_model_id_trainable_models_id_fk FOREIGN KEY (trainable_model_id) REFERENCES public.trainable_models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4857 (class 2606 OID 28597)
+-- Name: objective_plans objective_plans_objective_id_objective_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_plans
+    ADD CONSTRAINT objective_plans_objective_id_objective_runs_id_fk FOREIGN KEY (objective_id) REFERENCES public.objective_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4858 (class 2606 OID 28612)
+-- Name: objective_runs objective_runs_operational_model_id_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_runs
+    ADD CONSTRAINT objective_runs_operational_model_id_models_id_fk FOREIGN KEY (operational_model_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4859 (class 2606 OID 28607)
+-- Name: objective_runs objective_runs_primary_model_id_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_runs
+    ADD CONSTRAINT objective_runs_primary_model_id_models_id_fk FOREIGN KEY (primary_model_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4860 (class 2606 OID 28602)
+-- Name: objective_runs objective_runs_submitter_principal_id_principals_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_runs
+    ADD CONSTRAINT objective_runs_submitter_principal_id_principals_id_fk FOREIGN KEY (submitter_principal_id) REFERENCES public.principals(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4861 (class 2606 OID 28627)
+-- Name: objective_tasks objective_tasks_assigned_agent_id_agents_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_tasks
+    ADD CONSTRAINT objective_tasks_assigned_agent_id_agents_id_fk FOREIGN KEY (assigned_agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4862 (class 2606 OID 28622)
+-- Name: objective_tasks objective_tasks_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_tasks
+    ADD CONSTRAINT objective_tasks_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4863 (class 2606 OID 28617)
+-- Name: objective_tasks objective_tasks_objective_id_objective_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.objective_tasks
+    ADD CONSTRAINT objective_tasks_objective_id_objective_runs_id_fk FOREIGN KEY (objective_id) REFERENCES public.objective_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4839 (class 2606 OID 21072)
+-- Name: principals principals_agent_id_agents_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.principals
+    ADD CONSTRAINT principals_agent_id_agents_id_fk FOREIGN KEY (agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5006 (class 2606 OID 154414)
+-- Name: product_improvement_events product_improvement_events_proposal_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.product_improvement_events
+    ADD CONSTRAINT product_improvement_events_proposal_fk FOREIGN KEY (proposal_id) REFERENCES public.product_improvement_proposals(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5004 (class 2606 OID 154398)
+-- Name: product_improvement_proposals product_improvement_proposals_agent_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.product_improvement_proposals
+    ADD CONSTRAINT product_improvement_proposals_agent_fk FOREIGN KEY (proposed_by_agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5005 (class 2606 OID 154393)
+-- Name: product_improvement_proposals product_improvement_proposals_department_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.product_improvement_proposals
+    ADD CONSTRAINT product_improvement_proposals_department_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4840 (class 2606 OID 21082)
+-- Name: role_permissions role_permissions_permission_name_permissions_name_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_permission_name_permissions_name_fk FOREIGN KEY (permission_name) REFERENCES public.permissions(name) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4841 (class 2606 OID 21077)
+-- Name: role_permissions role_permissions_role_name_roles_name_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_role_name_roles_name_fk FOREIGN KEY (role_name) REFERENCES public.roles(name) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4924 (class 2606 OID 87746)
+-- Name: rollback_requests rollback_requests_route_id_experimental_routes_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.rollback_requests
+    ADD CONSTRAINT rollback_requests_route_id_experimental_routes_id_fk FOREIGN KEY (route_id) REFERENCES public.experimental_routes(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4992 (class 2606 OID 154212)
+-- Name: routing_decisions routing_decisions_assignment_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.routing_decisions
+    ADD CONSTRAINT routing_decisions_assignment_fk FOREIGN KEY (assignment_id) REFERENCES public.department_model_assignments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4993 (class 2606 OID 154207)
+-- Name: routing_decisions routing_decisions_department_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.routing_decisions
+    ADD CONSTRAINT routing_decisions_department_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4994 (class 2606 OID 154217)
+-- Name: routing_decisions routing_decisions_model_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.routing_decisions
+    ADD CONSTRAINT routing_decisions_model_fk FOREIGN KEY (registry_model_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4995 (class 2606 OID 154202)
+-- Name: routing_decisions routing_decisions_objective_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.routing_decisions
+    ADD CONSTRAINT routing_decisions_objective_fk FOREIGN KEY (objective_id) REFERENCES public.objective_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4996 (class 2606 OID 154197)
+-- Name: routing_decisions routing_decisions_task_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.routing_decisions
+    ADD CONSTRAINT routing_decisions_task_fk FOREIGN KEY (task_id) REFERENCES public.objective_tasks(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4864 (class 2606 OID 28637)
+-- Name: task_assignments task_assignments_agent_id_agents_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.task_assignments
+    ADD CONSTRAINT task_assignments_agent_id_agents_id_fk FOREIGN KEY (agent_id) REFERENCES public.agents(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4865 (class 2606 OID 28642)
+-- Name: task_assignments task_assignments_department_id_departments_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.task_assignments
+    ADD CONSTRAINT task_assignments_department_id_departments_id_fk FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4866 (class 2606 OID 28632)
+-- Name: task_assignments task_assignments_task_id_objective_tasks_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.task_assignments
+    ADD CONSTRAINT task_assignments_task_id_objective_tasks_id_fk FOREIGN KEY (task_id) REFERENCES public.objective_tasks(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4867 (class 2606 OID 28647)
+-- Name: task_results task_results_task_id_objective_tasks_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.task_results
+    ADD CONSTRAINT task_results_task_id_objective_tasks_id_fk FOREIGN KEY (task_id) REFERENCES public.objective_tasks(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4899 (class 2606 OID 60641)
+-- Name: trainable_models trainable_models_registry_model_id_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.trainable_models
+    ADD CONSTRAINT trainable_models_registry_model_id_models_id_fk FOREIGN KEY (registry_model_id) REFERENCES public.models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4900 (class 2606 OID 60646)
+-- Name: training_artifacts training_artifacts_run_id_training_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_artifacts
+    ADD CONSTRAINT training_artifacts_run_id_training_runs_id_fk FOREIGN KEY (run_id) REFERENCES public.training_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4901 (class 2606 OID 60651)
+-- Name: training_dataset_versions training_dataset_versions_dataset_id_training_datasets_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_dataset_versions
+    ADD CONSTRAINT training_dataset_versions_dataset_id_training_datasets_id_fk FOREIGN KEY (dataset_id) REFERENCES public.training_datasets(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4902 (class 2606 OID 60661)
+-- Name: training_examples training_examples_source_memory_id_memories_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_examples
+    ADD CONSTRAINT training_examples_source_memory_id_memories_id_fk FOREIGN KEY (source_memory_id) REFERENCES public.memories(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4903 (class 2606 OID 60666)
+-- Name: training_examples training_examples_source_objective_id_objective_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_examples
+    ADD CONSTRAINT training_examples_source_objective_id_objective_runs_id_fk FOREIGN KEY (source_objective_id) REFERENCES public.objective_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4904 (class 2606 OID 60656)
+-- Name: training_examples training_examples_version_id_training_dataset_versions_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_examples
+    ADD CONSTRAINT training_examples_version_id_training_dataset_versions_id_fk FOREIGN KEY (version_id) REFERENCES public.training_dataset_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4905 (class 2606 OID 60671)
+-- Name: training_run_metrics training_run_metrics_run_id_training_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_run_metrics
+    ADD CONSTRAINT training_run_metrics_run_id_training_runs_id_fk FOREIGN KEY (run_id) REFERENCES public.training_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4906 (class 2606 OID 60676)
+-- Name: training_runs training_runs_dataset_version_id_training_dataset_versions_id_f; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_runs
+    ADD CONSTRAINT training_runs_dataset_version_id_training_dataset_versions_id_f FOREIGN KEY (dataset_version_id) REFERENCES public.training_dataset_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4907 (class 2606 OID 60686)
+-- Name: training_runs training_runs_parent_run_id_training_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_runs
+    ADD CONSTRAINT training_runs_parent_run_id_training_runs_id_fk FOREIGN KEY (parent_run_id) REFERENCES public.training_runs(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4908 (class 2606 OID 60681)
+-- Name: training_runs training_runs_trainable_model_id_trainable_models_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.training_runs
+    ADD CONSTRAINT training_runs_trainable_model_id_trainable_models_id_fk FOREIGN KEY (trainable_model_id) REFERENCES public.trainable_models(id) ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 4868 (class 2606 OID 28652)
+-- Name: workflow_events workflow_events_objective_id_objective_runs_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: colony
+--
+
+ALTER TABLE ONLY public.workflow_events
+    ADD CONSTRAINT workflow_events_objective_id_objective_runs_id_fk FOREIGN KEY (objective_id) REFERENCES public.objective_runs(id) ON DELETE RESTRICT;
+
+
+-- Completed on 2026-11-05 00:20:50 EST
 
 --
 -- PostgreSQL database dump complete
