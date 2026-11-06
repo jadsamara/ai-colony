@@ -414,6 +414,99 @@ describe("autonomous conversation runtime", () => {
     expect(stuck.requests.filter((request) => request.messages.some((message) => message.content.includes("Return one JSON object")))).toHaveLength(2);
   });
 
+  it("corrects a near-verbatim turn, continues through a checkpoint, and pauses at the hard ceiling", async () => {
+    await seed(testDb());
+    await enable();
+    const { dialogue, runner } = services();
+    const repeated = outputsProvider([
+      JSON.stringify({ kind: "response", body: "Math, are the current assumptions adequate?", decision: "speak" }),
+      JSON.stringify({ kind: "response", body: "The zero case is still open.", decision: "speak" }),
+    ]);
+    const repeatedId = await openRepair(dialogue, repeated, "repeat-open");
+    await runner.run(admin(), repeatedId, repeated, route, { maxTurns: 1 });
+    const repeatedRecord = await dialogue.read(admin(), repeatedId);
+    const runnerCalls = repeated.requests.filter((request) => request.messages.some((message) => message.content.includes("Return one JSON object")));
+    expect(runnerCalls).toHaveLength(2);
+    expect([...runnerCalls[1]?.messages ?? []].reverse().find((message) => message.role === "user")?.content).toContain("repeated a recent turn");
+    expect(repeatedRecord.turns.filter((turn) => turn.body === "Math, are the current assumptions adequate?")).toHaveLength(1);
+    expect(repeatedRecord.turns.some((turn) => turn.body === "The zero case is still open.")).toBe(true);
+
+    await persistence.repos.autonomy.saveSettings({ conversationCheckpointTurns: 2, conversationSoftTokenBudget: 30, conversationHardTokenCeiling: 60_000, maxConversationMessages: 20 });
+    const continued = numberedProvider();
+    const continuedId = await openRepair(dialogue, continued.provider, "checkpoint-open");
+    await runner.run(admin(), continuedId, continued.provider, route, { maxTurns: 2 });
+    const checkpoint = await persistence.repos.autonomy.findConversation(continuedId);
+    expect(checkpoint?.status).toBe("open");
+    expect(checkpoint?.outcome).toBeNull();
+    expect(checkpoint?.progressState.lastDecision).toBe("continue");
+    expect(checkpoint?.contextSummary).toContain("message ");
+    expect((checkpoint?.inputTokens ?? 0) + (checkpoint?.outputTokens ?? 0)).toBeGreaterThanOrEqual(30);
+
+    await persistence.repos.autonomy.saveSettings({ conversationSoftTokenBudget: 10, conversationHardTokenCeiling: 50, conversationCheckpointTurns: 10 });
+    const limited = numberedProvider();
+    const limitedId = await openRepair(dialogue, limited.provider, "ceiling-open");
+    await runner.run(admin(), limitedId, limited.provider, route, { maxTurns: 5 });
+    const paused = await persistence.repos.autonomy.findConversation(limitedId);
+    const pausedTurns = await persistence.repos.autonomy.listTurns(limitedId);
+    expect(paused?.status).toBe("open");
+    expect(paused?.paused).toBe(true);
+    expect(paused?.outcome).toBeNull();
+    expect(paused?.lastError).toContain("hard token ceiling");
+    expect(pausedTurns.length).toBeGreaterThanOrEqual(2);
+    await persistence.repos.autonomy.saveSettings({ conversationHardTokenCeiling: 60_000 });
+    await runner.resume(admin(), limitedId);
+    await runner.run(admin(), limitedId, limited.provider, route, { maxTurns: 1 });
+    const resumed = await persistence.repos.autonomy.findConversation(limitedId);
+    const resumedTurns = await persistence.repos.autonomy.listTurns(limitedId);
+    expect(resumed?.status).toBe("open");
+    expect(resumed?.paused).toBe(false);
+    expect(resumedTurns.length).toBe(pausedTurns.length + 1);
+
+    const closing = outputsProvider([JSON.stringify({ kind: "close", body: "No further progress is available.", decision: "speak" })]);
+    const closedId = await openRepair(dialogue, closing, "close-open");
+    await runner.run(admin(), closedId, closing, route, { maxTurns: 1 });
+    const closed = await persistence.repos.autonomy.findConversation(closedId);
+    expect(closed?.status).toBe("unresolved");
+    expect(closed?.outcome).toBe("unresolved");
+    expect(closed?.finalConclusion).toBeNull();
+    expect((await persistence.repos.autonomy.settings()).enabled).toBe(false);
+  });
+
+  it("sends a math turn to the math endpoint", async () => {
+    await seed(testDb());
+    await enable();
+    const { dialogue, runner } = services();
+    const math = countingProvider();
+    const science = countingProvider();
+    const shared = outputsProvider([JSON.stringify({ kind: "response", body: "The zero case is still open.", decision: "speak" })]);
+    const dedicated: InferenceRoute = {
+      ...route,
+      dedicatedRouting: {
+        enabled: true,
+        instances: [serving("math", MATH_DEPARTMENT, "http://ollama-math:11434"), serving("science", SCIENCE_DEPARTMENT, "http://ollama-science:11434")],
+        providerFor: (id) => id === "math-instance" ? math.provider : id === "science-instance" ? science.provider : null,
+      },
+    };
+    const id = await openRepair(dialogue, shared, "dedicated-open");
+    await runner.run(admin(), id, shared, dedicated, { maxTurns: 1 });
+    expect(math.calls).toBeGreaterThan(0);
+    expect(science.calls).toBe(0);
+    const stored = await persistence.repos.autonomy.findConversation(id);
+    expect(stored?.lastInferenceEndpoint).toContain("http://ollama-math:11434");
+    expect(stored?.lastInferenceEndpoint).not.toContain("ollama-science");
+    const refused = {
+      ...dedicated,
+      dedicatedRouting: {
+        enabled: true,
+        instances: [serving("math", MATH_DEPARTMENT, "http://ollama-science:11434")],
+        providerFor: () => science.provider,
+      },
+    };
+    const refusedId = await openRepair(dialogue, shared, "refused-open");
+    await expect(runner.run(admin(), refusedId, shared, refused, { maxTurns: 1 })).rejects.toThrow(/Refusing inference host ollama-science/);
+    expect(science.calls).toBe(0);
+  });
+
   function services(wake?: { publish(payload: { jobId: string; conversationId: string; fence: number }): Promise<void> }) {
     const dialogue = new DialogueService(persistence, authorizer, new MessagingService(persistence, authorizer, DEFAULT_MESSAGING_POLICY), () => new Date(now));
     const runner = new ConversationRunner(persistence, authorizer, dialogue, () => new Date(now), wake, 1_000);
@@ -516,6 +609,52 @@ function blockingProvider() {
     },
   };
   return { provider, requests, started, release: () => release() };
+}
+
+function numberedProvider() {
+  let count = 0;
+  const provider = new ScriptedInferenceProvider((request) => {
+    const system = request.messages.find((message) => message.role === "system")?.content ?? "";
+    if (!system.includes("Return one JSON object")) {
+      const user = request.messages.filter((message) => message.role === "user").map((message) => message.content).join("\n");
+      const instruction = user.match(/Instruction: ([^\n]+)/)?.[1] ?? "Turn";
+      return observed(request, instruction);
+    }
+    count += 1;
+    return observed(request, JSON.stringify({ kind: "response", body: `Calculation ${count} adds ${count + 3}.`, decision: "speak" }));
+  });
+  return { provider };
+}
+
+function countingProvider() {
+  const state = { calls: 0 };
+  const provider: InferenceProvider = {
+    async generate(request) {
+      state.calls += 1;
+      return observed(request, JSON.stringify({ kind: "response", body: "The zero case is still open.", decision: "speak" }));
+    },
+    async probe() {
+      return { reachable: true, modelIds: ["qwen3-8b"], error: null };
+    },
+  };
+  return { provider, get calls() { return state.calls; } };
+}
+
+function serving(slug: string, departmentId: string, normalizedEndpoint: string) {
+  return {
+    instanceId: `${slug}-instance`,
+    departmentId,
+    agentId: `${slug}-agent`,
+    provider: "ollama" as const,
+    endpointReference: `serving://${slug}`,
+    normalizedEndpoint,
+    modelRegistryId: "00000000-0000-4000-8000-000000000101",
+    modelVersion: "qwen3:8b",
+    artifactDigest: null,
+    deploymentMode: "dedicated" as const,
+    status: "ready" as const,
+    resourcePolicyId: "policy",
+  };
 }
 
 function outputsProvider(outputs: string[]) {

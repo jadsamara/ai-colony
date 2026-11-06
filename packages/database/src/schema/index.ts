@@ -2152,6 +2152,9 @@ export const colonyAutonomy = pgTable("colony_autonomy", {
   conversationExecutionEnabled: boolean("conversation_execution_enabled").notNull().default(false),
   maxConcurrentConversationTurns: integer("max_concurrent_conversation_turns").notNull().default(1),
   contextTokenBudget: integer("context_token_budget").notNull().default(1500),
+  conversationSoftTokenBudget: integer("conversation_soft_token_budget").notNull().default(20_000),
+  conversationHardTokenCeiling: integer("conversation_hard_token_ceiling").notNull().default(60_000),
+  conversationCheckpointTurns: integer("conversation_checkpoint_turns").notNull().default(10),
   lastCycleAt: timestamp("last_cycle_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -2245,6 +2248,8 @@ export const departmentConversations = pgTable(
     scheduledSpeakerId: uuid("scheduled_speaker_id"),
     lastError: text("last_error"),
     lastInferenceLatencyMs: integer("last_inference_latency_ms"),
+    lastInferenceEndpoint: text("last_inference_endpoint"),
+    progressState: jsonb("progress_state").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull().defaultNow(),
     lastTurnAt: timestamp("last_turn_at", { withTimezone: true }).notNull().defaultNow(),
     closedAt: timestamp("closed_at", { withTimezone: true }),

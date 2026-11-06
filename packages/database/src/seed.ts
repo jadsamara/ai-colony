@@ -245,6 +245,9 @@ async function seedFoundationsInTx(tx: SeedExecutor): Promise<void> {
       conversationExecutionEnabled: false,
       maxConcurrentConversationTurns: 1,
       contextTokenBudget: 1_500,
+      conversationSoftTokenBudget: 20_000,
+      conversationHardTokenCeiling: 60_000,
+      conversationCheckpointTurns: 10,
     })
     .onConflictDoNothing();
 }

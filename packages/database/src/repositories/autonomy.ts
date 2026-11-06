@@ -1,19 +1,20 @@
 import { and, asc, count, desc, eq, ilike, lt, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import type {
-  AutonomyRepository,
-  AutonomySettings,
-  ColonyGoalRecord,
-  ConversationRecord,
-  ConversationTurnRecord,
-  ConversationJob,
-  ContextEventRecord,
-  DepartmentRef,
-  GoalCycleRecord,
-  MembershipEventRecord,
-  MembershipRecord,
-  SubgoalRecord,
-  TurnClaim,
+import {
+  readProgress,
+  type AutonomyRepository,
+  type AutonomySettings,
+  type ColonyGoalRecord,
+  type ConversationRecord,
+  type ConversationTurnRecord,
+  type ConversationJob,
+  type ContextEventRecord,
+  type DepartmentRef,
+  type GoalCycleRecord,
+  type MembershipEventRecord,
+  type MembershipRecord,
+  type SubgoalRecord,
+  type TurnClaim,
 } from "@ai-colony/core";
 import type { DbExecutor } from "../client.js";
 import {
@@ -57,6 +58,9 @@ function mapSettings(row: typeof colonyAutonomy.$inferSelect): AutonomySettings 
     conversationExecutionEnabled: row.conversationExecutionEnabled,
     maxConcurrentConversationTurns: row.maxConcurrentConversationTurns,
     contextTokenBudget: row.contextTokenBudget,
+    conversationSoftTokenBudget: row.conversationSoftTokenBudget,
+    conversationHardTokenCeiling: row.conversationHardTokenCeiling,
+    conversationCheckpointTurns: row.conversationCheckpointTurns,
     lastCycleAt: iso(row.lastCycleAt),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -90,6 +94,9 @@ export function createAutonomyRepository(db: DbExecutor): AutonomyRepository {
           ...(patch.conversationExecutionEnabled !== undefined ? { conversationExecutionEnabled: patch.conversationExecutionEnabled } : {}),
           ...(patch.maxConcurrentConversationTurns !== undefined ? { maxConcurrentConversationTurns: patch.maxConcurrentConversationTurns } : {}),
           ...(patch.contextTokenBudget !== undefined ? { contextTokenBudget: patch.contextTokenBudget } : {}),
+          ...(patch.conversationSoftTokenBudget !== undefined ? { conversationSoftTokenBudget: patch.conversationSoftTokenBudget } : {}),
+          ...(patch.conversationHardTokenCeiling !== undefined ? { conversationHardTokenCeiling: patch.conversationHardTokenCeiling } : {}),
+          ...(patch.conversationCheckpointTurns !== undefined ? { conversationCheckpointTurns: patch.conversationCheckpointTurns } : {}),
           ...(patch.lastCycleAt !== undefined ? { lastCycleAt: patch.lastCycleAt } : {}),
         })
         .where(eq(colonyAutonomy.id, "default"))
@@ -238,6 +245,9 @@ export function createAutonomyRepository(db: DbExecutor): AutonomyRepository {
           ...(patch.scheduledSpeakerId !== undefined ? { scheduledSpeakerId: patch.scheduledSpeakerId } : {}),
           ...(patch.lastError !== undefined ? { lastError: patch.lastError } : {}),
           ...(patch.lastInferenceLatencyMs !== undefined ? { lastInferenceLatencyMs: patch.lastInferenceLatencyMs } : {}),
+          ...(patch.lastInferenceEndpoint !== undefined ? { lastInferenceEndpoint: patch.lastInferenceEndpoint } : {}),
+          ...(patch.progressState !== undefined ? { progressState: patch.progressState as unknown as Record<string, unknown> } : {}),
+          ...(patch.maxTokens !== undefined ? { maxTokens: patch.maxTokens } : {}),
           ...(patch.closedAt !== undefined ? { closedAt: patch.closedAt } : {}),
         })
         .where(eq(departmentConversations.id, id));
@@ -567,6 +577,8 @@ function mapConversation(row: typeof departmentConversations.$inferSelect): Conv
     scheduledSpeakerId: row.scheduledSpeakerId,
     lastError: row.lastError,
     lastInferenceLatencyMs: row.lastInferenceLatencyMs,
+    lastInferenceEndpoint: row.lastInferenceEndpoint,
+    progressState: readProgress(row.progressState),
     openedAt: row.openedAt.toISOString(),
     lastTurnAt: row.lastTurnAt.toISOString(),
     closedAt: iso(row.closedAt),

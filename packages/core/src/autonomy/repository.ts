@@ -1,3 +1,5 @@
+import type { ConversationProgress } from "./conversation-quality.js";
+
 export interface AutonomySettings {
   enabled: boolean;
   paused: boolean;
@@ -13,6 +15,9 @@ export interface AutonomySettings {
   conversationExecutionEnabled: boolean;
   maxConcurrentConversationTurns: number;
   contextTokenBudget: number;
+  conversationSoftTokenBudget: number;
+  conversationHardTokenCeiling: number;
+  conversationCheckpointTurns: number;
   lastCycleAt: string | null;
   updatedAt: string;
 }
@@ -84,6 +89,8 @@ export interface ConversationRecord {
   scheduledSpeakerId: string | null;
   lastError: string | null;
   lastInferenceLatencyMs: number | null;
+  lastInferenceEndpoint: string | null;
+  progressState: ConversationProgress;
   openedAt: string;
   lastTurnAt: string;
   closedAt: string | null;
@@ -194,11 +201,11 @@ export interface AutonomyRepository {
   findSubgoalByKey(key: string): Promise<SubgoalRecord | null>;
   listSubgoals(objectiveId: string): Promise<SubgoalRecord[]>;
   department(id: string): Promise<DepartmentRef | null>;
-  insertConversation(input: Omit<ConversationRecord, "messageCount" | "inferenceRequests" | "inputTokens" | "outputTokens" | "closeReason" | "finalConclusion" | "remainingDisagreements" | "evidenceRefs" | "contextSummary" | "outcome" | "paused" | "runnerStatus" | "runnerFence" | "runnerLeaseUntil" | "parentConversationId" | "scheduledSpeakerId" | "lastError" | "lastInferenceLatencyMs" | "openedAt" | "lastTurnAt" | "closedAt"> & { id: string }): Promise<void>;
+  insertConversation(input: Omit<ConversationRecord, "messageCount" | "inferenceRequests" | "inputTokens" | "outputTokens" | "closeReason" | "finalConclusion" | "remainingDisagreements" | "evidenceRefs" | "contextSummary" | "outcome" | "paused" | "runnerStatus" | "runnerFence" | "runnerLeaseUntil" | "parentConversationId" | "scheduledSpeakerId" | "lastError" | "lastInferenceLatencyMs" | "lastInferenceEndpoint" | "progressState" | "openedAt" | "lastTurnAt" | "closedAt"> & { id: string }): Promise<void>;
   findConversation(id: string): Promise<ConversationRecord | null>;
   lockConversation(id: string): Promise<ConversationRecord | null>;
   listConversations(limit: number): Promise<ConversationRecord[]>;
-  saveConversation(id: string, patch: Partial<Pick<ConversationRecord, "status" | "closeReason" | "finalConclusion" | "remainingDisagreements" | "evidenceRefs" | "contextSummary" | "outcome" | "paused" | "runnerStatus" | "runnerFence" | "scheduledSpeakerId" | "lastError" | "parentConversationId" | "lastInferenceLatencyMs"> & { closedAt: Date | null; runnerLeaseUntil: Date | null }>): Promise<void>;
+  saveConversation(id: string, patch: Partial<Pick<ConversationRecord, "status" | "closeReason" | "finalConclusion" | "remainingDisagreements" | "evidenceRefs" | "contextSummary" | "outcome" | "paused" | "runnerStatus" | "runnerFence" | "scheduledSpeakerId" | "lastError" | "parentConversationId" | "lastInferenceLatencyMs" | "lastInferenceEndpoint" | "progressState" | "maxTokens"> & { closedAt: Date | null; runnerLeaseUntil: Date | null }>): Promise<void>;
   addParticipant(conversationId: string, departmentId: string): Promise<void>;
   listParticipants(conversationId: string): Promise<string[]>;
   listMembership(conversationId: string): Promise<MembershipRecord[]>;

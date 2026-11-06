@@ -42,6 +42,9 @@ const settingsPatchSchema = z.object({
   conversationExecutionEnabled: z.boolean().optional(),
   maxConcurrentConversationTurns: z.number().int().min(1).max(4).optional(),
   contextTokenBudget: z.number().int().min(200).max(8_000).optional(),
+  conversationSoftTokenBudget: z.number().int().min(1).max(200_000).optional(),
+  conversationHardTokenCeiling: z.number().int().min(1).max(200_000).optional(),
+  conversationCheckpointTurns: z.number().int().min(1).max(100).optional(),
 });
 
 export class AutonomyService {
@@ -60,6 +63,12 @@ export class AutonomyService {
   async update(ctx: RequestContext, patch: unknown): Promise<AutonomySettings> {
     this.authorizer.assert(ctx.actor, "autonomy:manage");
     const parsed = settingsPatchSchema.parse(patch);
+    const current = await this.persistence.repos.autonomy.settings();
+    const soft = parsed.conversationSoftTokenBudget ?? current.conversationSoftTokenBudget;
+    const hard = parsed.conversationHardTokenCeiling ?? current.conversationHardTokenCeiling;
+    if (hard < soft) {
+      throw new DomainError("VALIDATION_ERROR", "The hard token ceiling must be at least the soft token budget", 422);
+    }
     const updated = await this.persistence.repos.autonomy.saveSettings(parsed);
     await this.audit(ctx, "autonomy.updated", "default", parsed);
     return updated;

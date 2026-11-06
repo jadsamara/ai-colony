@@ -63,6 +63,7 @@ import "./types.js";
 export interface BuildAppOptions {
   config: AppConfig;
   persistence: Persistence;
+  database?: import("@ai-colony/database").Database;
   embeddings?: EmbeddingProvider;
   trainingProvider?: TrainingProvider;
   trainingRoots?: { artifacts: string; checkpoints: string };
@@ -77,6 +78,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     },
   }).withTypeProvider<ZodTypeProvider>();
 
+  app.decorate("database", options.database ?? null);
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 

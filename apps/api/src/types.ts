@@ -1,4 +1,5 @@
 import type { Actor } from "@ai-colony/contracts";
+import type { Database } from "@ai-colony/database";
 import type {
   AgentRuntime,
   AgentService,
@@ -62,5 +63,6 @@ declare module "fastify" {
 
   interface FastifyInstance {
     services: AppServices;
+    database: Database | null;
   }
 }

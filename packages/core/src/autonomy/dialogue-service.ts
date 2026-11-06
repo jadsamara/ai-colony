@@ -8,6 +8,7 @@ import type { InferenceProvider } from "../inference/provider.js";
 import type { MessagingService } from "../messaging/message-service.js";
 import type { InferenceRoute } from "../objectives/objective-service.js";
 import type { Persistence, Repositories } from "../ports/repositories.js";
+import { logConversationInference, selectConversationInference } from "./conversation-routing.js";
 import { dialoguePrompt, redactMessages } from "./policy.js";
 import type { ConversationRecord, ConversationTurnRecord, MembershipAction, MembershipState, TurnClaim } from "./repository.js";
 import { buildDialogueContext, maySpeak, selectSpeaker } from "./speakers.js";
@@ -16,7 +17,7 @@ const KEY = /^[A-Za-z0-9_.:-]{8,128}$/;
 const CLAIM_LEASE_MS = 15_000;
 const AVAILABLE = new Set(["idle", "running", "paused"]);
 
-type Route = Pick<InferenceRoute, "alias" | "temperature" | "maxOutputTokens" | "timeoutMs">;
+type Route = Pick<InferenceRoute, "alias" | "temperature" | "maxOutputTokens" | "timeoutMs" | "dedicatedRouting">;
 
 export class DialogueService {
   constructor(
@@ -50,7 +51,8 @@ export class DialogueService {
     const objective = await this.objectiveForOpen(input.objectiveId ?? null);
     const conversationId = randomUUID();
     const prompt = await this.promptFor(sender, input.kind, input.topic, input.instruction, [], objective?.text ?? null);
-    const result = await provider.generate({
+    const selected = this.routed(provider, route, sender);
+    const result = await selected.provider.generate({
       requestId: randomUUID(),
       registryModelId: "00000000-0000-4000-8000-000000000101",
       modelAlias: route.alias,
@@ -72,7 +74,7 @@ export class DialogueService {
         openedByDepartmentId: sender.id,
         status: "open",
         maxMessages: settings.maxConversationMessages,
-        maxTokens: settings.maxConversationTokens,
+        maxTokens: settings.conversationHardTokenCeiling,
         maxDurationMs: settings.maxDurationMs,
       });
       await this.seat(repos, ctx, {
@@ -97,6 +99,7 @@ export class DialogueService {
       });
       return repos.autonomy.allocateSequence(conversationId);
     });
+    await this.persistence.repos.autonomy.saveConversation(conversationId, { lastInferenceEndpoint: selected.metadata });
     return this.persistTurn(ctx, {
       idempotencyKey: input.idempotencyKey,
       conversationId,
@@ -180,7 +183,8 @@ export class DialogueService {
     }
     const prior = await this.persistence.repos.autonomy.listTurns(conversationId);
     const prompt = await this.promptFor(sender, input.kind, gate.topic, input.instruction, prior, objective);
-    const result = await provider.generate({
+    const selected = this.routed(provider, route, sender);
+    const result = await selected.provider.generate({
       requestId: randomUUID(),
       registryModelId: "00000000-0000-4000-8000-000000000101",
       modelAlias: route.alias,
@@ -194,6 +198,7 @@ export class DialogueService {
     if (!body) {
       throw new DomainError("VALIDATION_ERROR", "The department model returned an empty turn", 422);
     }
+    await this.persistence.repos.autonomy.saveConversation(conversationId, { lastInferenceEndpoint: selected.metadata });
     const own = [...prior].reverse().find((turn) => turn.departmentId === sender.id);
     if (own && own.body === body) {
       await this.finishClosed(this.persistence.repos, conversationId, "terminated", "loop", ctx);
@@ -486,7 +491,7 @@ export class DialogueService {
         openedByDepartmentId: ctx.actor.departmentId ?? unique[0] ?? "",
         status: "open",
         maxMessages: settings.maxConversationMessages,
-        maxTokens: settings.maxConversationTokens,
+        maxTokens: settings.conversationHardTokenCeiling,
         maxDurationMs: settings.maxDurationMs,
       });
       if (input.parentConversationId) {
@@ -928,6 +933,17 @@ export class DialogueService {
   private groupRecipient(participants: string[], senderId: string, openerId: string): string {
     const others = participants.filter((id) => id !== senderId).sort();
     return others[0] ?? openerId;
+  }
+
+  private routed(provider: InferenceProvider, route: Route, department: { id: string; slug: string }) {
+    const selected = selectConversationInference({
+      departmentId: department.id,
+      departmentSlug: department.slug,
+      shared: provider,
+      route,
+    });
+    logConversationInference(selected.metadata);
+    return selected;
   }
 
   private async requireAvailable(id: string) {

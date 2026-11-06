@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { DIALOGUE_KINDS } from "@ai-colony/contracts";
 import { OpenAICompatibleProvider } from "@ai-colony/inference";
+import { routeWithDepartmentEndpoints } from "../conversation-inference.js";
 import { errorResponses, requestContext } from "./common.js";
 
 const json = z.any();
@@ -40,6 +41,9 @@ export async function registerAutonomyRoutes(app: FastifyInstance): Promise<void
           conversationExecutionEnabled: z.boolean().optional(),
           maxConcurrentConversationTurns: z.number().int().min(1).max(4).optional(),
           contextTokenBudget: z.number().int().min(200).max(8_000).optional(),
+          conversationSoftTokenBudget: z.number().int().min(1).max(200_000).optional(),
+          conversationHardTokenCeiling: z.number().int().min(1).max(200_000).optional(),
+          conversationCheckpointTurns: z.number().int().min(1).max(100).optional(),
         }),
         response: { 200: json, ...errorResponses },
       },
@@ -323,7 +327,8 @@ export async function registerAutonomyRoutes(app: FastifyInstance): Promise<void
         maxConcurrency: 1,
         transportRetries: 0,
       });
-      return app.services.runner.run(requestContext(request), request.params.id, provider, inference.route);
+      const route = await routeWithDepartmentEndpoints(inference.route, app.database, inference.apiKey);
+      return app.services.runner.run(requestContext(request), request.params.id, provider, route);
     },
   );
 

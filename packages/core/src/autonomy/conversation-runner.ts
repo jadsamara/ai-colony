@@ -8,6 +8,8 @@ import type { InferenceProvider, InferenceResult } from "../inference/provider.j
 import { extractJsonObject } from "../objectives/plan.js";
 import type { InferenceRoute } from "../objectives/objective-service.js";
 import type { Persistence } from "../ports/repositories.js";
+import { assessProgress, departmentFollowUp, isNearVerbatim, permitsEcho, repetitionCorrection } from "./conversation-quality.js";
+import { logConversationInference, selectConversationInference } from "./conversation-routing.js";
 import type { DialogueService } from "./dialogue-service.js";
 import { redactSensitive } from "./policy.js";
 import type { ConversationJob, ConversationRecord } from "./repository.js";
@@ -200,7 +202,13 @@ export class ConversationRunner {
     if (!settings.conversationExecutionEnabled) {
       throw new DomainError("INVALID_STATE", "Autonomous conversation execution is disabled", 409);
     }
-    await this.persistence.repos.autonomy.saveConversation(conversationId, { paused: false, runnerStatus: "idle", runnerLeaseUntil: null });
+    const current = await this.requireConversation(conversationId);
+    await this.persistence.repos.autonomy.saveConversation(conversationId, {
+      paused: false,
+      runnerStatus: "idle",
+      runnerLeaseUntil: null,
+      lastError: current.lastError?.startsWith("Paused at the hard token ceiling") ? null : current.lastError,
+    });
     await this.schedule(conversationId);
   }
 
@@ -230,6 +238,8 @@ export class ConversationRunner {
       inputTokens: conversation.inputTokens,
       outputTokens: conversation.outputTokens,
       lastInferenceLatencyMs: conversation.lastInferenceLatencyMs,
+      lastInferenceEndpoint: conversation.lastInferenceEndpoint,
+      progress: conversation.progressState,
       lastError: conversation.lastError,
       contextEvents: events,
     };
@@ -353,12 +363,27 @@ export class ConversationRunner {
     route: InferenceRoute,
   ): Promise<{ generated: boolean; continue: boolean; stop: string; childId: string | null }> {
     const conversation = await this.requireConversation(job.conversationId);
+    const settings = await this.persistence.repos.autonomy.settings();
+    const spent = conversation.inputTokens + conversation.outputTokens;
+    if (spent >= settings.conversationHardTokenCeiling) {
+      await this.persistence.repos.autonomy.saveConversation(job.conversationId, {
+        paused: true,
+        runnerStatus: "paused",
+        lastError: "Paused at the hard token ceiling. The transcript and context are kept.",
+      });
+      await this.finishJob(job.id, token, true);
+      return { generated: false, continue: false, stop: "paused", childId: null };
+    }
+    if (conversation.maxTokens < settings.conversationHardTokenCeiling) {
+      await this.persistence.repos.autonomy.saveConversation(job.conversationId, { maxTokens: settings.conversationHardTokenCeiling });
+    }
     const speaker = await this.agentContext(speakerDepartmentId, admin.correlationId);
     const participantIds = await this.persistence.repos.autonomy.listParticipants(job.conversationId);
     const turns = await this.persistence.repos.autonomy.listTurns(job.conversationId);
     const speakerRow = await this.persistence.repos.autonomy.department(speakerDepartmentId);
-    const prompt = await this.prompt(conversation, speakerRow?.name ?? "department", job.action, turns);
-    let result = await this.generate(provider, route, prompt);
+    const department = { id: speakerDepartmentId, slug: speakerRow?.slug ?? "department" };
+    const prompt = await this.prompt(conversation, speakerRow?.name ?? "department", department.slug, job.action, turns);
+    let result = await this.generate(provider, route, prompt, department, job.conversationId);
     let inspected = inspectDecision(result.text);
     if (inspected.ok && inspected.value.searchQuery) {
       const found = await this.dialogue.search(speaker, job.conversationId, inspected.value.searchQuery, 5);
@@ -369,7 +394,7 @@ export class ConversationRunner {
           content: `Previous output:\n${result.text}\nAuthorized transcript matches:\n${found.turns.map((turn) => `message ${turn.id}: ${turn.body}`).join("\n")}\nReturn one JSON object. Do not request another search.`,
         },
       ];
-      result = await this.generate(provider, route, followUp);
+      result = await this.generate(provider, route, followUp, department, job.conversationId);
       inspected = inspectDecision(result.text);
       if (inspected.ok) {
         inspected = { ok: true, value: { ...inspected.value, searchQuery: null } };
@@ -380,7 +405,7 @@ export class ConversationRunner {
       result = await this.generate(provider, route, [
         ...prompt,
         { role: "user", content: correctionInstruction(result.text, diagnostic) },
-      ]);
+      ], department, job.conversationId);
       inspected = inspectDecision(result.text);
     }
     await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
@@ -390,12 +415,27 @@ export class ConversationRunner {
       await this.finishJob(job.id, token, false, inspected.diagnostic);
       return { generated: true, continue: false, stop: "failed", childId: null };
     }
-    const parsed = inspected.value;
-    const repeated = turns.filter((turn) => turn.body.trim().toLowerCase() === parsed.body.trim().toLowerCase()).length;
-    if (repeated >= 2) {
-      await this.dialogueClose(this.persistence.repos, job.conversationId, "unresolved", "no_progress");
-      await this.finishJob(job.id, token, true);
-      return { generated: false, continue: false, stop: "unresolved", childId: null };
+    let parsed = inspected.value;
+    const recentBodies = turns.map((turn) => turn.body);
+    if (isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) {
+      result = await this.generate(provider, route, [
+        ...prompt,
+        { role: "user", content: `${repetitionCorrection(parsed.body)}\n${DECISION_JSON_SCHEMA}` },
+      ], department, job.conversationId);
+      inspected = inspectDecision(result.text);
+      await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
+      if (!inspected.ok) {
+        await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastError: inspected.diagnostic });
+        await this.dialogueClose(this.persistence.repos, job.conversationId, "terminated", "model_invalid");
+        await this.finishJob(job.id, token, false, inspected.diagnostic);
+        return { generated: true, continue: false, stop: "failed", childId: null };
+      }
+      parsed = inspected.value;
+      if (isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) {
+        await this.dialogueClose(this.persistence.repos, job.conversationId, "unresolved", "no_progress");
+        await this.finishJob(job.id, token, true);
+        return { generated: false, continue: false, stop: "unresolved", childId: null };
+      }
     }
     if (job.action === "invitation" && parsed.decision === "decline") {
       await this.dialogue.decline(speaker, job.conversationId, parsed.body);
@@ -459,11 +499,74 @@ export class ConversationRunner {
       }
       return { generated: true, continue: false, stop: latest.status, childId };
     }
+    const continuity = await this.applyContinuity(job.conversationId, speaker);
+    if (continuity !== "continue") {
+      return { generated: true, continue: false, stop: continuity, childId: null };
+    }
     await this.schedule(job.conversationId);
     return { generated: true, continue: true, stop: "scheduled", childId: null };
   }
 
-  private async prompt(conversation: ConversationRecord, departmentName: string, action: ConversationJob["action"], turns: Awaited<ReturnType<Persistence["repos"]["autonomy"]["listTurns"]>>) {
+  private async applyContinuity(conversationId: string, speaker: RequestContext): Promise<"continue" | "paused" | "closed"> {
+    const settings = await this.persistence.repos.autonomy.settings();
+    const conversation = await this.requireConversation(conversationId);
+    const spent = conversation.inputTokens + conversation.outputTokens;
+    if (spent >= settings.conversationHardTokenCeiling) {
+      await this.persistence.repos.autonomy.saveConversation(conversationId, {
+        paused: true,
+        runnerStatus: "paused",
+        lastError: "Paused at the hard token ceiling. The transcript and context are kept.",
+      });
+      return "paused";
+    }
+    const checkpointDue = conversation.messageCount > 0 && conversation.messageCount % settings.conversationCheckpointTurns === 0;
+    const overSoft = spent >= settings.conversationSoftTokenBudget;
+    if (!checkpointDue && !overSoft) {
+      return "continue";
+    }
+    const turns = await this.persistence.repos.autonomy.listTurns(conversationId);
+    const progressTurns = turns.map((turn) => ({ id: turn.id, department: turn.departmentSlug, kind: turn.kind, body: turn.body }));
+    const assessment = assessProgress(progressTurns, settings.conversationCheckpointTurns);
+    await this.persistence.repos.autonomy.saveConversation(conversationId, {
+      contextSummary: assessment.summary,
+      progressState: {
+        openQuestions: assessment.openQuestions,
+        agreements: assessment.agreements,
+        disagreements: assessment.disagreements,
+        contributions: assessment.contributions,
+        lastCheckpointTurn: conversation.messageCount,
+        lastDecision: overSoft && !assessment.justified ? "conclude" : assessment.decision,
+      },
+    });
+    if (checkpointDue) {
+      await this.persistence.repos.autonomy.insertContextEvent({
+        id: randomUUID(),
+        conversationId,
+        departmentId: speaker.actor.departmentId,
+        kind: "summary",
+        query: assessment.summary.slice(0, 500),
+        messageIds: turns.map((turn) => turn.id).slice(-12),
+        tokens: Math.max(1, Math.ceil(assessment.summary.length / 4)),
+      });
+    }
+    if (overSoft && !assessment.justified) {
+      await this.dialogueClose(this.persistence.repos, conversationId, "unresolved", "soft_budget");
+      return "closed";
+    }
+    if (checkpointDue && assessment.decision === "conclude") {
+      await this.dialogueClose(this.persistence.repos, conversationId, "unresolved", "checkpoint_stalled");
+      return "closed";
+    }
+    if (checkpointDue && assessment.decision === "invite" && assessment.inviteSlug) {
+      const target = await this.persistence.repos.objectives.findDepartmentBySlug(assessment.inviteSlug);
+      if (target && target.status === "active") {
+        await this.dialogue.seatInvitee(speaker, conversationId, target.id, "Checkpoint requested this expertise").catch(() => undefined);
+      }
+    }
+    return "continue";
+  }
+
+  private async prompt(conversation: ConversationRecord, departmentName: string, departmentSlug: string, action: ConversationJob["action"], turns: Awaited<ReturnType<Persistence["repos"]["autonomy"]["listTurns"]>>) {
     const lines = turns.map((turn) => ({ id: turn.id, department: turn.departmentSlug, kind: turn.kind, body: turn.body }));
     const settings = await this.persistence.repos.autonomy.settings();
     const context = buildDialogueContext(lines, settings.contextTokenBudget);
@@ -489,15 +592,33 @@ export class ConversationRunner {
           `Topic:\n${conversation.topic}`,
           childNote || null,
           action === "invitation" ? "You were invited. Set decision to accept or decline." : "Set decision to speak.",
-          context.summary ? `Earlier context:\n${context.summary}` : null,
+          departmentFollowUp(departmentSlug),
+          conversation.progressState.lastDecision === "redirect"
+            ? "The recent turns are not adding a new contribution. Add evidence, a calculation, a question, or a proposal, or propose closure."
+            : null,
+          context.summary ? `Earlier context:\n${context.summary}` : conversation.contextSummary ? `Checkpoint summary:\n${conversation.contextSummary}` : null,
           context.verbatim.length ? `Recent transcript:\n${context.verbatim.map((turn) => `message ${turn.id} ${turn.department} (${turn.kind}): ${turn.body}`).join("\n")}` : null,
         ].filter(Boolean).join("\n\n"),
       },
     ];
   }
 
-  private async generate(provider: InferenceProvider, route: InferenceRoute, messages: Array<{ role: "system" | "user"; content: string }>): Promise<InferenceResult> {
-    return provider.generate({
+  private async generate(
+    provider: InferenceProvider,
+    route: InferenceRoute,
+    messages: Array<{ role: "system" | "user"; content: string }>,
+    department: { id: string; slug: string },
+    conversationId: string,
+  ): Promise<InferenceResult> {
+    const selected = selectConversationInference({
+      departmentId: department.id,
+      departmentSlug: department.slug,
+      shared: provider,
+      route,
+    });
+    logConversationInference(selected.metadata);
+    await this.persistence.repos.autonomy.saveConversation(conversationId, { lastInferenceEndpoint: selected.metadata });
+    return selected.provider.generate({
       requestId: randomUUID(),
       registryModelId: QWEN3_8B_MODEL_ID,
       modelAlias: route.alias,

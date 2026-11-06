@@ -6,7 +6,7 @@ import { loadConfig } from "./config.js";
 const config = loadConfig(process.env);
 const { db, close } = createDatabase(config.databaseUrl);
 const persistence = createPersistence(db, close);
-const app = await buildApp({ config, persistence });
+const app = await buildApp({ config, persistence, database: db });
 
 let shuttingDown = false;
 
