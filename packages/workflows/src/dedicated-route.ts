@@ -6,7 +6,7 @@ import {
   type DedicatedServingInstance,
   type InferenceRoute,
 } from "@ai-colony/core";
-import { listDedicatedInstances, type Database } from "@ai-colony/database";
+import { listActiveDedicatedInstances, type Database } from "@ai-colony/database";
 import { OpenAICompatibleProvider } from "@ai-colony/inference";
 
 export function assertDepartmentEndpoint(slug: string | null, baseUrl: string): void {
@@ -42,7 +42,7 @@ export async function applyWorkerDedicatedRouting(
     route.dedicatedRouting = undefined;
     return;
   }
-  const stored = await listDedicatedInstances(db);
+  const stored = await listActiveDedicatedInstances(db);
   const bound = bindDedicatedEndpoints(stored, {
     resolve: (reference) => resolveServingUrl(env, reference),
   });

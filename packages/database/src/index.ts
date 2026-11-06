@@ -12,7 +12,9 @@ export {
   type CanonicalIdentity,
 } from "./canonical.js";
 export {
+  activationReadiness,
   ensureDedicatedInventory,
+  listActiveDedicatedInstances,
   listDedicatedInstances,
   recordServingStatus,
   type ServingInventoryResult,

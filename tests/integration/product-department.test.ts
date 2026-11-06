@@ -15,7 +15,10 @@ import {
 } from "@ai-colony/core";
 import {
   createImprovementRepository,
+  activationReadiness,
   installProductDepartment,
+  listActiveDedicatedInstances,
+  listDedicatedInstances,
   schema,
   seed,
 } from "@ai-colony/database";
@@ -77,6 +80,13 @@ describe("product department persistence", () => {
       endpointReference: GAMING_ENDPOINT_REFERENCE,
       status: "stopped",
     });
+    const registered = await listDedicatedInstances(testDb());
+    const required = await listActiveDedicatedInstances(testDb());
+    expect(registered.find((instance) => instance.departmentId === GAMING_DEPARTMENT_ID)?.endpointReference).toBe(GAMING_ENDPOINT_REFERENCE);
+    expect(required).toHaveLength(12);
+    expect(required.map((instance) => instance.departmentId)).not.toContain(GAMING_DEPARTMENT_ID);
+    expect(activationReadiness(required.map((instance) => instance.instanceId), required.map((instance) => instance.instanceId)).ok).toBe(true);
+    expect(activationReadiness(required.map((instance) => instance.instanceId), required.slice(1).map((instance) => instance.instanceId)).ok).toBe(false);
 
     const gamingAudits = await testDb()
       .select()

@@ -150,7 +150,26 @@ export async function ensureDedicatedInventory(db: Database): Promise<ServingInv
 
 export async function listDedicatedInstances(db: Database): Promise<DedicatedServingInstance[]> {
   const rows = await db.select().from(departmentServingInstances);
-  return rows.map((row) => ({
+  return rows.map(mapDedicatedInstance);
+}
+
+export async function listActiveDedicatedInstances(db: Database): Promise<DedicatedServingInstance[]> {
+  const rows = await db
+    .select({ instance: departmentServingInstances })
+    .from(departmentServingInstances)
+    .innerJoin(departments, eq(departments.id, departmentServingInstances.departmentId))
+    .where(eq(departments.status, "active"));
+  return rows.map((row) => mapDedicatedInstance(row.instance));
+}
+
+export function activationReadiness(requiredIds: readonly string[], readyIds: readonly string[]): { ok: boolean; ready: number; required: number } {
+  const required = new Set(requiredIds);
+  const ready = readyIds.filter((id) => required.has(id));
+  return { ok: required.size > 0 && ready.length === required.size, ready: ready.length, required: required.size };
+}
+
+function mapDedicatedInstance(row: typeof departmentServingInstances.$inferSelect): DedicatedServingInstance {
+  return {
     instanceId: row.id,
     departmentId: row.departmentId,
     agentId: row.agentId,
@@ -163,7 +182,7 @@ export async function listDedicatedInstances(db: Database): Promise<DedicatedSer
     deploymentMode: "dedicated",
     status: row.status as DedicatedServingInstance["status"],
     resourcePolicyId: row.resourcePolicyId,
-  }));
+  };
 }
 
 export async function recordServingStatus(

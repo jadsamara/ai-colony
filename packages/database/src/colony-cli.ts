@@ -22,7 +22,7 @@ import { createDatabase } from "./client.js";
 import { applyCanonicalMigration, readMigrationFile, servingConstraintNames } from "./canonical.js";
 import { SEED_AGENTS, SEED_DEPARTMENTS } from "./seed.js";
 import { installProductDepartment } from "./product-install.js";
-import { ensureDedicatedInventory, listDedicatedInstances, recordServingStatus } from "./serving-inventory.js";
+import { activationReadiness, ensureDedicatedInventory, listActiveDedicatedInstances, listDedicatedInstances, recordServingStatus } from "./serving-inventory.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 loadOptionalEnv(path.join(root, ".env"));
@@ -225,7 +225,7 @@ async function activate(): Promise<void> {
   }
   const { db, close } = createDatabase(databaseUrl);
   try {
-    const stored = await listDedicatedInstances(db);
+    const stored = await listActiveDedicatedInstances(db);
     const bound = bindDedicatedEndpoints(stored, {
       resolve: (reference) => {
         const slug = reference.slice("serving://".length);
@@ -246,7 +246,8 @@ async function activate(): Promise<void> {
       }
     }
     const file = path.join(root, "deploy/state/dedicated-routing.json");
-    if (ready.length !== bound.length || bound.length === 0) {
+    const decision = activationReadiness(bound.map((instance) => instance.instanceId), ready);
+    if (!decision.ok) {
       writeActivationAtomic(file, {
         enabled: false,
         policyVersion: DEDICATED_SERVING_POLICY_VERSION,
@@ -254,7 +255,7 @@ async function activate(): Promise<void> {
         instanceIds: ready,
         mode: process.env.COLONY_MODE === "mock" ? "mock" : "real",
       });
-      throw new Error(`Dedicated routing stays off. ${ready.length} of ${bound.length} instances answered a readiness probe.`);
+      throw new Error(`Dedicated routing stays off. ${decision.ready} of ${decision.required} instances answered a readiness probe.`);
     }
     writeActivationAtomic(file, {
       enabled: true,

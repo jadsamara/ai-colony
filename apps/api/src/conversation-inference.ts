@@ -4,7 +4,7 @@ import {
   readActivation,
   type InferenceRoute,
 } from "@ai-colony/core";
-import { listDedicatedInstances, type Database } from "@ai-colony/database";
+import { listActiveDedicatedInstances, type Database } from "@ai-colony/database";
 import { OpenAICompatibleProvider } from "@ai-colony/inference";
 
 export async function routeWithDepartmentEndpoints(
@@ -15,7 +15,7 @@ export async function routeWithDepartmentEndpoints(
   if (!database || !dedicatedRoutingEnabled(process.env, readActivation(process.env.COLONY_ACTIVATION_FILE ?? "deploy/state/dedicated-routing.json"))) {
     return route;
   }
-  const instances = bindDedicatedEndpoints(await listDedicatedInstances(database), { resolve: resolveServingUrl });
+  const instances = bindDedicatedEndpoints(await listActiveDedicatedInstances(database), { resolve: resolveServingUrl });
   const providers = new Map<string, OpenAICompatibleProvider>();
   return {
     ...route,
