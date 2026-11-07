@@ -124,6 +124,16 @@ export function selectSpeaker(input: {
   return { departmentId: best.departmentId, slug: best.slug, reason: best.reason };
 }
 
+export function orchestrationRecommendation(input: {
+  participants: readonly SpeakerCandidate[];
+  turns: readonly SpeakerTurn[];
+  topic: string;
+  remainingMessages: number;
+}): (SpeakerChoice & { source: "orchestration" }) | null {
+  const choice = selectSpeaker(input);
+  return choice ? { ...choice, source: "orchestration" } : null;
+}
+
 export function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(text.length / 4));
 }

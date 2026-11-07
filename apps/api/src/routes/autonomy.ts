@@ -146,6 +146,7 @@ export async function registerAutonomyRoutes(app: FastifyInstance): Promise<void
         tags: ["dialogue"],
         body: z.object({
           recipientDepartmentId: z.string().uuid(),
+          participantDepartmentIds: z.array(z.string().uuid()).max(10).optional(),
           topic: z.string().min(1).max(500),
           objectiveId: z.string().uuid().nullable().optional(),
           kind: kindSchema,

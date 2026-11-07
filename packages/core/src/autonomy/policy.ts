@@ -33,6 +33,7 @@ export function dialoguePrompt(input: {
   topic: string;
   kind: string;
   instruction: string;
+  openingInstruction?: string | null;
   transcript: Array<{ department: string; kind: string; body: string }>;
   objective?: string | null;
   summary?: string | null;
@@ -54,6 +55,7 @@ export function dialoguePrompt(input: {
       content: [
         `Colony goal: ${input.objective?.trim() || "(none)"}`,
         `Topic: ${input.topic}`,
+        `Original instruction: ${input.openingInstruction?.trim() || input.instruction}`,
         `Instruction: ${input.instruction}`,
         `Questions directed at you:\n${list(input.directed)}`,
         `Disagreements:\n${list(input.disagreements)}`,

@@ -4,6 +4,7 @@ import {
   type ObjectivePlan,
   type PlanTask,
 } from "@ai-colony/contracts";
+import { parseModelJson, suspiciousMathControls } from "../autonomy/conversation-integrity.js";
 
 export interface PlanContext {
   activeDepartmentSlugs: ReadonlySet<string>;
@@ -13,14 +14,31 @@ export interface PlanContext {
 }
 
 export function extractJsonObject(text: string): unknown {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const raw = fenced?.[1] ?? text;
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) {
-    throw new Error("Model output did not contain a JSON object");
+  try {
+    const parsed = parseModelJson(text);
+    if (stringHasSuspiciousMath(parsed.value)) {
+      throw new Error("output contained a corrupted mathematical escape");
+    }
+    return parsed.value;
+  } catch (error) {
+    if (error instanceof Error && (error.message.includes("did not contain a JSON object") || error.message.includes("mathematical"))) {
+      throw error;
+    }
+    throw new Error("output was not valid JSON");
   }
-  return JSON.parse(raw.slice(start, end + 1)) as unknown;
+}
+
+function stringHasSuspiciousMath(value: unknown): boolean {
+  if (typeof value === "string") {
+    return suspiciousMathControls(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some(stringHasSuspiciousMath);
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value).some(stringHasSuspiciousMath);
+  }
+  return false;
 }
 
 export function validatePlan(

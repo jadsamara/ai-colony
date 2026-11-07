@@ -11,7 +11,8 @@ import type { Persistence, Repositories } from "../ports/repositories.js";
 import { logConversationInference, selectConversationInference } from "./conversation-routing.js";
 import { dialoguePrompt, redactMessages } from "./policy.js";
 import type { ConversationRecord, ConversationTurnRecord, MembershipAction, MembershipState, TurnClaim } from "./repository.js";
-import { buildDialogueContext, maySpeak, selectSpeaker } from "./speakers.js";
+import type { ParticipantRole } from "./repository.js";
+import { buildDialogueContext, maySpeak, orchestrationRecommendation } from "./speakers.js";
 
 const KEY = /^[A-Za-z0-9_.:-]{8,128}$/;
 const CLAIM_LEASE_MS = 15_000;
@@ -31,7 +32,7 @@ export class DialogueService {
     ctx: RequestContext,
     provider: InferenceProvider,
     route: Route,
-    input: { recipientDepartmentId: string; topic: string; objectiveId?: string | null; kind: DialogueKind; instruction: string; idempotencyKey: string },
+    input: { recipientDepartmentId: string; participantDepartmentIds?: string[]; topic: string; objectiveId?: string | null; kind: DialogueKind; instruction: string; idempotencyKey: string },
   ): Promise<ConversationTurnRecord> {
     this.requireAgent(ctx);
     this.requireKey(input.idempotencyKey);
@@ -42,15 +43,19 @@ export class DialogueService {
     if (input.recipientDepartmentId === ctx.actor.departmentId) {
       throw new DomainError("VALIDATION_ERROR", "A department cannot open a conversation with itself", 422);
     }
-    const recipient = await this.requireAvailable(input.recipientDepartmentId);
-    const sender = await this.requireAvailable(ctx.actor.departmentId ?? "");
+    const recipient = await this.requireConversationDepartment(input.recipientDepartmentId);
+    const sender = await this.requireConversationDepartment(ctx.actor.departmentId ?? "");
+    const extras = await this.additionalParticipants(sender.id, recipient.id, input.participantDepartmentIds ?? []);
     const settings = await this.persistence.repos.autonomy.settings();
+    if (2 + extras.length > settings.maxConversationParticipants) {
+      throw new DomainError("BUDGET_EXCEEDED", "The participant limit is already in use", 409);
+    }
     if ((await this.persistence.repos.autonomy.countOpenConversations()) >= settings.maxConversations) {
       throw new DomainError("BUDGET_EXCEEDED", "The conversation limit is already in use", 409);
     }
     const objective = await this.objectiveForOpen(input.objectiveId ?? null);
     const conversationId = randomUUID();
-    const prompt = await this.promptFor(sender, input.kind, input.topic, input.instruction, [], objective?.text ?? null);
+    const prompt = await this.promptFor(sender, input.kind, input.topic, input.instruction, [], objective?.text ?? null, input.instruction.trim());
     const selected = this.routed(provider, route, sender);
     const result = await selected.provider.generate({
       requestId: randomUUID(),
@@ -76,12 +81,14 @@ export class DialogueService {
         maxMessages: settings.maxConversationMessages,
         maxTokens: settings.conversationHardTokenCeiling,
         maxDurationMs: settings.maxDurationMs,
+        openingInstruction: input.instruction.trim(),
       });
       await this.seat(repos, ctx, {
         conversationId,
         departmentId: sender.id,
         action: "joined",
         membership: "active",
+        role: "opener",
         reason: "Opened the conversation",
         invitedByDepartmentId: null,
         joinedAt: this.now(),
@@ -92,11 +99,25 @@ export class DialogueService {
         departmentId: recipient.id,
         action: "joined",
         membership: "active",
+        role: this.roleFor(recipient.slug, "participant"),
         reason: "Named as a participant when the conversation opened",
         invitedByDepartmentId: sender.id,
         joinedAt: this.now(),
         removedAt: null,
       });
+      for (const extra of extras) {
+        await this.seat(repos, ctx, {
+          conversationId,
+          departmentId: extra.id,
+          action: "joined",
+          membership: "active",
+          role: this.roleFor(extra.slug, "participant"),
+          reason: "Named as a participant when the conversation opened",
+          invitedByDepartmentId: sender.id,
+          joinedAt: this.now(),
+          removedAt: null,
+        });
+      }
       return repos.autonomy.allocateSequence(conversationId);
     });
     await this.persistence.repos.autonomy.saveConversation(conversationId, { lastInferenceEndpoint: selected.metadata });
@@ -182,7 +203,8 @@ export class DialogueService {
       throw new DomainError("AUTHORIZATION_DENIED", "The sender department is unavailable", 403);
     }
     const prior = await this.persistence.repos.autonomy.listTurns(conversationId);
-    const prompt = await this.promptFor(sender, input.kind, gate.topic, input.instruction, prior, objective);
+    const stored = await this.persistence.repos.autonomy.findConversation(conversationId);
+    const prompt = await this.promptFor(sender, input.kind, gate.topic, input.instruction, prior, objective, stored?.openingInstruction ?? null);
     const selected = this.routed(provider, route, sender);
     const result = await selected.provider.generate({
       requestId: randomUUID(),
@@ -268,6 +290,7 @@ export class DialogueService {
         departmentId: target.id,
         action: "invited",
         membership: "invited",
+        role: this.roleFor(target.slug, "specialist"),
         reason: input.instruction.slice(0, 500),
         invitedByDepartmentId: ctx.actor.departmentId,
         joinedAt: null,
@@ -305,6 +328,7 @@ export class DialogueService {
         departmentId: target.id,
         action: "invited",
         membership: "invited",
+        role: this.roleFor(target.slug, "specialist"),
         reason: reason.slice(0, 500),
         invitedByDepartmentId: ctx.actor.departmentId,
         joinedAt: null,
@@ -395,7 +419,8 @@ export class DialogueService {
     }
     const turns = await this.persistence.repos.autonomy.listTurns(conversationId);
     return {
-      speaker: selectSpeaker({
+      source: "orchestration" as const,
+      speaker: orchestrationRecommendation({
         participants,
         turns,
         topic: conversation.topic,
@@ -493,6 +518,7 @@ export class DialogueService {
         maxMessages: settings.maxConversationMessages,
         maxTokens: settings.conversationHardTokenCeiling,
         maxDurationMs: settings.maxDurationMs,
+        openingInstruction: input.topic.trim(),
       });
       if (input.parentConversationId) {
         await repos.autonomy.saveConversation(conversationId, { parentConversationId: input.parentConversationId });
@@ -628,6 +654,10 @@ export class DialogueService {
       throw notFound("Conversation", claim.conversationId);
     }
     const participants = await this.persistence.repos.autonomy.listParticipants(claim.conversationId);
+    const membership = await this.persistence.repos.autonomy.listMembership(claim.conversationId);
+    const evaluative = membership.find((item) => item.departmentId === claim.departmentId)?.role === "evaluator"
+      && (claim.kind === "close" || claim.kind === "resolution");
+    const kind = evaluative ? "response" : claim.kind;
     const recipient = claim.addressedDepartmentId ?? this.groupRecipient(participants, claim.departmentId, conversation.openedByDepartmentId);
     const sent = await this.messages.send(ctx, {
       messageType: "DEPARTMENT_DIALOGUE",
@@ -639,7 +669,7 @@ export class DialogueService {
       idempotencyKey: claim.idempotencyKey,
       payload: {
         conversationId: claim.conversationId,
-        kind: claim.kind,
+        kind,
         topic: conversation.topic,
         body,
         objectiveId: conversation.objectiveId,
@@ -664,7 +694,7 @@ export class DialogueService {
       conversationId: claim.conversationId,
       messageId: sent.message.messageId,
       departmentId: claim.departmentId,
-      kind: claim.kind,
+      kind,
       body,
       addressedDepartmentId: claim.addressedDepartmentId,
       sequence: claim.sequence,
@@ -678,7 +708,7 @@ export class DialogueService {
       outputTokens: claim.outputTokens ?? 0,
       at: this.now(),
     });
-    if (claim.kind === "resolution" || claim.kind === "close") {
+    if (!evaluative && (kind === "resolution" || kind === "close")) {
       await this.finishClosed(
         this.persistence.repos,
         claim.conversationId,
@@ -734,6 +764,7 @@ export class DialogueService {
     instruction: string,
     prior: ConversationTurnRecord[],
     objective: string | null,
+    openingInstruction: string | null,
   ) {
     const settings = await this.persistence.repos.autonomy.settings();
     const lines = prior.map((turn) => ({ id: turn.id, department: turn.departmentSlug, kind: turn.kind, body: turn.body }));
@@ -744,6 +775,7 @@ export class DialogueService {
       topic,
       kind,
       instruction,
+      openingInstruction,
       transcript: context.verbatim,
       summary: context.summary,
       objective,
@@ -840,16 +872,25 @@ export class DialogueService {
       departmentId: string;
       action: MembershipAction;
       membership: MembershipState;
+      role?: ParticipantRole;
       reason: string;
       invitedByDepartmentId: string | null;
       joinedAt: Date | null;
       removedAt: Date | null;
     },
   ) {
+    const existing = await repos.autonomy.listMembership(input.conversationId);
+    const prior = existing.find((item) => item.departmentId === input.departmentId);
+    const department = await repos.autonomy.department(input.departmentId);
+    const joinSequence = prior && prior.joinSequence > 0
+      ? prior.joinSequence
+      : existing.reduce((max, item) => Math.max(max, item.joinSequence), 0) + 1;
     await repos.autonomy.upsertMembership({
       conversationId: input.conversationId,
       departmentId: input.departmentId,
       membership: input.membership,
+      role: input.role ?? prior?.role ?? this.roleFor(department?.slug ?? "", "participant"),
+      joinSequence,
       invitedByDepartmentId: input.invitedByDepartmentId,
       joinedAt: input.joinedAt,
       removedAt: input.removedAt,
@@ -944,6 +985,32 @@ export class DialogueService {
     });
     logConversationInference(selected.metadata);
     return selected;
+  }
+
+  private async additionalParticipants(openerId: string, recipientId: string, ids: string[]) {
+    if (new Set(ids).size !== ids.length || ids.includes(openerId) || ids.includes(recipientId)) {
+      throw new DomainError("VALIDATION_ERROR", "Participant list contains a duplicate department", 422);
+    }
+    const departments = [];
+    for (const id of ids) {
+      departments.push(await this.requireConversationDepartment(id));
+    }
+    return departments;
+  }
+
+  private async requireConversationDepartment(id: string) {
+    const department = await this.persistence.repos.autonomy.department(id);
+    if (!department) {
+      throw new DomainError("INVALID_REFERENCE", "Department was not found", 422);
+    }
+    if (department.status !== "active") {
+      throw new DomainError("INVALID_STATE", "Department is not active", 409);
+    }
+    return this.requireAvailable(id);
+  }
+
+  private roleFor(slug: string, fallback: ParticipantRole): ParticipantRole {
+    return slug === "evaluation" ? "evaluator" : fallback;
   }
 
   private async requireAvailable(id: string) {

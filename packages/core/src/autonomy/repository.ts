@@ -87,10 +87,13 @@ export interface ConversationRecord {
   runnerLeaseUntil: string | null;
   parentConversationId: string | null;
   scheduledSpeakerId: string | null;
+  recommendedSpeakerId: string | null;
+  speakerRecommendationReason: string | null;
   lastError: string | null;
   lastInferenceLatencyMs: number | null;
   lastInferenceEndpoint: string | null;
   progressState: ConversationProgress;
+  openingInstruction: string | null;
   openedAt: string;
   lastTurnAt: string;
   closedAt: string | null;
@@ -122,12 +125,15 @@ export interface DepartmentRef {
 
 export type MembershipState = "active" | "invited" | "declined" | "removed";
 export type MembershipAction = "joined" | "invited" | "accepted" | "declined" | "removed";
+export type ParticipantRole = "opener" | "participant" | "specialist" | "evaluator";
 
 export interface MembershipRecord {
   conversationId: string;
   departmentId: string;
   departmentSlug: string;
   membership: MembershipState;
+  role: ParticipantRole;
+  joinSequence: number;
   invitedByDepartmentId: string | null;
   joinedAt: string | null;
   removedAt: string | null;
@@ -201,15 +207,15 @@ export interface AutonomyRepository {
   findSubgoalByKey(key: string): Promise<SubgoalRecord | null>;
   listSubgoals(objectiveId: string): Promise<SubgoalRecord[]>;
   department(id: string): Promise<DepartmentRef | null>;
-  insertConversation(input: Omit<ConversationRecord, "messageCount" | "inferenceRequests" | "inputTokens" | "outputTokens" | "closeReason" | "finalConclusion" | "remainingDisagreements" | "evidenceRefs" | "contextSummary" | "outcome" | "paused" | "runnerStatus" | "runnerFence" | "runnerLeaseUntil" | "parentConversationId" | "scheduledSpeakerId" | "lastError" | "lastInferenceLatencyMs" | "lastInferenceEndpoint" | "progressState" | "openedAt" | "lastTurnAt" | "closedAt"> & { id: string }): Promise<void>;
+  insertConversation(input: Omit<ConversationRecord, "messageCount" | "inferenceRequests" | "inputTokens" | "outputTokens" | "closeReason" | "finalConclusion" | "remainingDisagreements" | "evidenceRefs" | "contextSummary" | "outcome" | "paused" | "runnerStatus" | "runnerFence" | "runnerLeaseUntil" | "parentConversationId" | "scheduledSpeakerId" | "recommendedSpeakerId" | "speakerRecommendationReason" | "lastError" | "lastInferenceLatencyMs" | "lastInferenceEndpoint" | "progressState" | "openedAt" | "lastTurnAt" | "closedAt"> & { id: string }): Promise<void>;
   findConversation(id: string): Promise<ConversationRecord | null>;
   lockConversation(id: string): Promise<ConversationRecord | null>;
   listConversations(limit: number): Promise<ConversationRecord[]>;
-  saveConversation(id: string, patch: Partial<Pick<ConversationRecord, "status" | "closeReason" | "finalConclusion" | "remainingDisagreements" | "evidenceRefs" | "contextSummary" | "outcome" | "paused" | "runnerStatus" | "runnerFence" | "scheduledSpeakerId" | "lastError" | "parentConversationId" | "lastInferenceLatencyMs" | "lastInferenceEndpoint" | "progressState" | "maxTokens"> & { closedAt: Date | null; runnerLeaseUntil: Date | null }>): Promise<void>;
+  saveConversation(id: string, patch: Partial<Pick<ConversationRecord, "status" | "closeReason" | "finalConclusion" | "remainingDisagreements" | "evidenceRefs" | "contextSummary" | "outcome" | "paused" | "runnerStatus" | "runnerFence" | "scheduledSpeakerId" | "recommendedSpeakerId" | "speakerRecommendationReason" | "lastError" | "parentConversationId" | "lastInferenceLatencyMs" | "lastInferenceEndpoint" | "progressState" | "maxTokens"> & { closedAt: Date | null; runnerLeaseUntil: Date | null }>): Promise<void>;
   addParticipant(conversationId: string, departmentId: string): Promise<void>;
   listParticipants(conversationId: string): Promise<string[]>;
   listMembership(conversationId: string): Promise<MembershipRecord[]>;
-  upsertMembership(input: { conversationId: string; departmentId: string; membership: MembershipState; invitedByDepartmentId: string | null; joinedAt: Date | null; removedAt: Date | null }): Promise<void>;
+  upsertMembership(input: { conversationId: string; departmentId: string; membership: MembershipState; role: ParticipantRole; joinSequence: number; invitedByDepartmentId: string | null; joinedAt: Date | null; removedAt: Date | null }): Promise<void>;
   insertMembershipEvent(input: Omit<MembershipEventRecord, "createdAt" | "departmentSlug">): Promise<void>;
   listMembershipEvents(conversationId: string): Promise<MembershipEventRecord[]>;
   departmentAgent(departmentId: string): Promise<{ id: string; status: string } | null>;

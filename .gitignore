@@ -9,6 +9,7 @@ deploy/state/
 deploy/colony.env
 deploy/mock-image/
 .pnpm-store/
+tmp/
 services/training/.venv/
 services/training/artifacts/
 services/training/checkpoints/

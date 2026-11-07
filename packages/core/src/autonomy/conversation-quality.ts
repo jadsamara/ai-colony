@@ -1,5 +1,12 @@
 export type CheckpointDecision = "continue" | "invite" | "redirect" | "conclude";
 
+export interface DepartmentContributionTally {
+  contributions: number;
+  disagreements: number;
+  questions: number;
+  evidence: number;
+}
+
 export interface ConversationProgress {
   openQuestions: string[];
   agreements: string[];
@@ -7,7 +14,19 @@ export interface ConversationProgress {
   contributions: number;
   lastCheckpointTurn: number;
   lastDecision: CheckpointDecision | null;
+  byDepartment: Record<string, DepartmentContributionTally>;
+  substantialProgress: boolean;
+  progressReason: string;
+  terminationReason: string | null;
+  turnDecisions: string[];
+  recoveryTotal: number;
+  recoveryMode: RecoveryMode;
+  recoverySpeakerId: string | null;
 }
+
+export type RecoveryMode = "none" | "handoff" | "synthesis";
+
+export const MAX_CONVERSATION_RECOVERIES = 3;
 
 export interface ProgressTurn {
   id: string;
@@ -17,18 +36,19 @@ export interface ProgressTurn {
 }
 
 const FOLLOW_UP: Record<string, string> = {
-  math: "Show the quantity and the calculation that supports it.",
-  science: "State the hypothesis and what observation would change it.",
-  research: "Compare sources already in the transcript. Do not invent a citation.",
+  math: "State the definitions and assumptions before an equation. Show a derivation or a worked example, and mark the equation as proposed unless it is an established result.",
+  science: "State a hypothesis, a falsifiable prediction, and a limitation.",
+  research: "Compare sources already in the transcript. Do not invent a citation. Say when verification is pending.",
   reasoning: "Name the premise and any contradiction.",
-  evaluation: "Name the check and the result it would accept or reject.",
+  evaluation: "State an independent test and the acceptance criterion. An assessment does not close the conversation.",
   product: "Propose one measured improvement. Do not approve it.",
   ceo: "Coordinate the next decision. Do not grant a permission.",
-  orchestration: "Name the next piece of work and who should do it.",
-  monitoring: "Report the limit or failure that is already visible.",
+  orchestration: "Name the dependency and the next concrete action.",
+  monitoring: "State the compute budget, resource limit, or operational risk.",
   evolution: "Propose a structural change. Do not activate a department.",
-  "weight-optimization": "Describe the training evidence. Do not promote weights.",
-  "memory-and-forgetting": "Note what should be retained or forgotten. Do not erase another department's memory.",
+  "weight-optimization": "Describe a training or model-update strategy and the measurement that would test it. Do not promote weights.",
+  "memory-and-forgetting": "Address retention, interference, or the knowledge lifecycle. Do not erase another department's memory.",
+  engineering: "State implementation feasibility and the next execution step.",
 };
 
 const EXPERTS: Array<{ slug: string; words: string[] }> = [
@@ -49,6 +69,14 @@ export function emptyProgress(): ConversationProgress {
     contributions: 0,
     lastCheckpointTurn: 0,
     lastDecision: null,
+    byDepartment: {},
+    substantialProgress: false,
+    progressReason: "No deliverable has been verified.",
+    terminationReason: null,
+    turnDecisions: [],
+    recoveryTotal: 0,
+    recoveryMode: "none",
+    recoverySpeakerId: null,
   };
 }
 
@@ -66,7 +94,56 @@ export function readProgress(value: unknown): ConversationProgress {
     contributions: typeof row.contributions === "number" ? row.contributions : 0,
     lastCheckpointTurn: typeof row.lastCheckpointTurn === "number" ? row.lastCheckpointTurn : 0,
     lastDecision: decision === "continue" || decision === "invite" || decision === "redirect" || decision === "conclude" ? decision : null,
+    byDepartment: readDepartmentLedger(row.byDepartment),
+    substantialProgress: row.substantialProgress === true,
+    progressReason: typeof row.progressReason === "string" ? row.progressReason : empty.progressReason,
+    terminationReason: typeof row.terminationReason === "string" ? row.terminationReason : null,
+    turnDecisions: stringList(row.turnDecisions),
+    recoveryTotal: typeof row.recoveryTotal === "number" ? row.recoveryTotal : 0,
+    recoveryMode: row.recoveryMode === "handoff" || row.recoveryMode === "synthesis" ? row.recoveryMode : "none",
+    recoverySpeakerId: typeof row.recoverySpeakerId === "string" ? row.recoverySpeakerId : null,
   };
+}
+
+export function departmentContributions(turns: readonly { department: string; kind: string }[]): Record<string, DepartmentContributionTally> {
+  const ledger: Record<string, DepartmentContributionTally> = {};
+  for (const turn of turns) {
+    const row = ledger[turn.department] ?? { contributions: 0, disagreements: 0, questions: 0, evidence: 0 };
+    if (turn.kind === "question") {
+      row.questions += 1;
+    }
+    if (turn.kind === "disagreement" || turn.kind === "counterargument" || turn.kind === "challenge") {
+      row.disagreements += 1;
+    }
+    if (turn.kind === "evidence") {
+      row.evidence += 1;
+    }
+    if (turn.kind !== "close") {
+      row.contributions += 1;
+    }
+    ledger[turn.department] = row;
+  }
+  return ledger;
+}
+
+function readDepartmentLedger(value: unknown): Record<string, DepartmentContributionTally> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+  const ledger: Record<string, DepartmentContributionTally> = {};
+  for (const [slug, raw] of Object.entries(value)) {
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
+    const row = raw as Partial<DepartmentContributionTally>;
+    ledger[slug] = {
+      contributions: typeof row.contributions === "number" ? row.contributions : 0,
+      disagreements: typeof row.disagreements === "number" ? row.disagreements : 0,
+      questions: typeof row.questions === "number" ? row.questions : 0,
+      evidence: typeof row.evidence === "number" ? row.evidence : 0,
+    };
+  }
+  return ledger;
 }
 
 export function departmentFollowUp(slug: string): string {
@@ -77,12 +154,38 @@ export function departmentFollowUp(slug: string): string {
 export function repetitionCorrection(previousBody: string): string {
   return [
     "The previous JSON repeated a recent turn.",
-    "Return one corrected JSON object.",
-    "Add new evidence, reasoning, a question, a calculation, or a proposal.",
-    "A short agreement or a short quotation is allowed when it is not the whole turn.",
+    "Return one corrected JSON object that contributes something new.",
+    "Add one of these: a concrete calculation; a criticism or limitation of the previous proposal; a proposed experiment; an answer to an unresolved question; or a synthesis of findings and next actions.",
+    "Do not invent evidence or citations.",
     "Do not repeat this text:",
     previousBody.slice(0, 500),
   ].join("\n");
+}
+
+export function planRecovery(input: {
+  total: number;
+  otherDepartmentIds: readonly string[];
+}): { action: "handoff" | "synthesis" | "close"; departmentId: string | null; total: number } {
+  const total = input.total + 1;
+  const departmentId = input.otherDepartmentIds[0] ?? null;
+  if (total > MAX_CONVERSATION_RECOVERIES || !departmentId) {
+    return { action: "close", departmentId: null, total };
+  }
+  return { action: input.total === 0 ? "handoff" : "synthesis", departmentId, total };
+}
+
+export function recoveryInstruction(mode: RecoveryMode): string | null {
+  if (mode === "none") {
+    return null;
+  }
+  const action = mode === "synthesis"
+    ? "Synthesize the findings and name the next action. Unresolved questions may remain."
+    : "The previous department repeated itself. That draft was not stored.";
+  return [
+    action,
+    "Contribute one new item: a concrete calculation, a criticism or limitation of the previous proposal, a proposed experiment, an answer to an unresolved question, or a synthesis of findings and next actions.",
+    "Do not invent evidence or citations.",
+  ].join(" ");
 }
 
 export function normalizeTurn(text: string): string {

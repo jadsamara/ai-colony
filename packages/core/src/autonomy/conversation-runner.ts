@@ -8,16 +8,17 @@ import type { InferenceProvider, InferenceResult } from "../inference/provider.j
 import { extractJsonObject } from "../objectives/plan.js";
 import type { InferenceRoute } from "../objectives/objective-service.js";
 import type { Persistence } from "../ports/repositories.js";
-import { assessProgress, departmentFollowUp, isNearVerbatim, permitsEcho, repetitionCorrection } from "./conversation-quality.js";
+import { assessProgress, departmentContributions, departmentFollowUp, isNearVerbatim, permitsEcho, planRecovery, recoveryInstruction, repetitionCorrection } from "./conversation-quality.js";
+import { buildCheckpoint, classifyClaim, measureProgress, renderCheckpoint, repetitionVerdict, requestsObjectiveChange, reviewMathClaim } from "./conversation-integrity.js";
 import { logConversationInference, selectConversationInference } from "./conversation-routing.js";
 import type { DialogueService } from "./dialogue-service.js";
 import { redactSensitive } from "./policy.js";
 import type { ConversationJob, ConversationRecord } from "./repository.js";
-import { buildDialogueContext, selectSpeaker } from "./speakers.js";
+import { buildDialogueContext, orchestrationRecommendation } from "./speakers.js";
 
 const LEASE_MS = 30_000;
 const MAX_ATTEMPTS = 3;
-const UNCERTAIN = /uncertain|cannot verify|not established|unresolved/i;
+const UNCERTAIN = /uncertain|cannot verify|not established|unresolved|open question/i;
 const decisionSchema = z.object({
   kind: z.enum(["question", "response", "proposal", "challenge", "evidence", "counterargument", "agreement", "disagreement", "resolution", "close"]),
   body: z.string().trim().min(1).max(4_000),
@@ -36,6 +37,7 @@ export const DECISION_JSON_SCHEMA = [
   "Required JSON schema: {\"kind\":\"question\"|\"response\"|\"proposal\"|\"challenge\"|\"evidence\"|\"counterargument\"|\"agreement\"|\"disagreement\"|\"resolution\"|\"close\",\"body\":\"string\"}.",
   "kind is required and must be one of: question, response, proposal, challenge, evidence, counterargument, agreement, disagreement, resolution, close.",
   "body is required and must be a non-empty string of at most 4000 characters.",
+  "Write a backslash inside a JSON string as two backslashes. A single backslash before frac, nabla, theta, text, or times is not valid JSON.",
   "Optional fields: addressedSlug (string or null), inviteSlug (string or null), decision (speak, accept, or decline), searchQuery (string or null), workingGroup (array of at most 4 department slugs).",
   "Do not omit kind or body. Do not invent fields. Do not invent citations.",
 ].join(" ");
@@ -53,7 +55,9 @@ export function inspectDecision(text: string): DecisionInspection {
   } catch (error) {
     const reason = error instanceof Error && error.message.includes("did not contain a JSON object")
       ? "output was not a JSON object"
-      : "output was not valid JSON";
+      : error instanceof Error && error.message.includes("mathematical")
+        ? "mathematical notation was corrupted by a JSON escape"
+        : "output was not valid JSON";
     return { ok: false, diagnostic: boundDiagnostic(reason) };
   }
   const parsed = decisionSchema.safeParse(extracted);
@@ -327,7 +331,8 @@ export class ConversationRunner {
       if (leased >= settings.maxConcurrentConversationTurns) {
         return { kind: "backpressure" as const };
       }
-      const speakerDepartmentId = await this.chooseSpeaker(repos, locked, job);
+      const recommendation = await this.chooseSpeaker(repos, locked, job);
+      const speakerDepartmentId = recommendation?.departmentId ?? null;
       if (!speakerDepartmentId) {
         await repos.autonomy.retireJob(job.id, "no speaker");
         await this.dialogueClose(repos, conversationId, "unresolved", "no_speaker");
@@ -346,6 +351,13 @@ export class ConversationRunner {
         runnerStatus: "running",
         runnerLeaseUntil: until,
         scheduledSpeakerId: speakerDepartmentId,
+        recommendedSpeakerId: speakerDepartmentId,
+        speakerRecommendationReason: [
+          recommendation?.reason ?? "",
+          locked.progressState.turnDecisions.some((decision) => decision.startsWith("flagged"))
+            ? "An unverified equation is open for another department."
+            : "",
+        ].filter(Boolean).join(" "),
       });
       const stored = await repos.autonomy.findJob(job.id);
       return stored
@@ -417,7 +429,8 @@ export class ConversationRunner {
     }
     let parsed = inspected.value;
     const recentBodies = turns.map((turn) => turn.body);
-    if (isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) {
+    const verdict = repetitionVerdict(parsed.body, turns);
+    if ((isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) || verdict.duplicate) {
       result = await this.generate(provider, route, [
         ...prompt,
         { role: "user", content: `${repetitionCorrection(parsed.body)}\n${DECISION_JSON_SCHEMA}` },
@@ -431,12 +444,56 @@ export class ConversationRunner {
         return { generated: true, continue: false, stop: "failed", childId: null };
       }
       parsed = inspected.value;
-      if (isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) {
-        await this.dialogueClose(this.persistence.repos, job.conversationId, "unresolved", "no_progress");
+      const corrected = repetitionVerdict(parsed.body, turns);
+      if ((isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) || corrected.duplicate) {
+        const others = participantIds.filter((id) => id !== department.id);
+        const plan = planRecovery({ total: conversation.progressState.recoveryTotal, otherDepartmentIds: others });
+        if (plan.action === "close" || !plan.departmentId) {
+          await this.closeWithoutProgress(conversation, turns);
+          await this.finishJob(job.id, token, true);
+          return { generated: false, continue: false, stop: "unresolved", childId: null };
+        }
+        await this.persistence.repos.autonomy.saveConversation(job.conversationId, {
+          progressState: {
+            ...conversation.progressState,
+            recoveryTotal: plan.total,
+            recoveryMode: plan.action,
+            recoverySpeakerId: plan.departmentId,
+            turnDecisions: [...conversation.progressState.turnDecisions, `recovery: ${plan.action} after a repetitive draft`].slice(-12),
+          },
+        });
         await this.finishJob(job.id, token, true);
-        return { generated: false, continue: false, stop: "unresolved", childId: null };
+        await this.schedule(job.conversationId);
+        return { generated: false, continue: true, stop: "recovery", childId: null };
       }
     }
+    const acceptance = repetitionVerdict(parsed.body, turns);
+    const math = reviewMathClaim(parsed.body);
+    const claim = classifyClaim(parsed.kind, parsed.body);
+    const decisions = [...conversation.progressState.turnDecisions];
+    if (requestsObjectiveChange(parsed.body)) {
+      decisions.push("rejected: a turn asked to change the original instruction");
+    }
+    if (claim === "unsupported") {
+      parsed = { ...parsed, kind: "response" };
+      decisions.push("rejected evidence label: the assertion has no source, observation, or experiment reference");
+    } else if (claim === "pending") {
+      decisions.push("accepted pending verification");
+    }
+    if (math.status === "flagged") {
+      decisions.push(`flagged mathematical claim: ${math.reasons.join(", ")}`);
+    } else if (verdict.duplicate) {
+      decisions.push("retried: the first draft repeated an earlier turn");
+    }
+    decisions.push(`${acceptance.duplicate ? "rejected" : "accepted"}: ${acceptance.reason}`);
+    await this.persistence.repos.autonomy.saveConversation(job.conversationId, {
+      progressState: {
+        ...conversation.progressState,
+        recoveryMode: "none",
+        recoverySpeakerId: null,
+        turnDecisions: decisions.slice(-12),
+      },
+    });
     if (job.action === "invitation" && parsed.decision === "decline") {
       await this.dialogue.decline(speaker, job.conversationId, parsed.body);
       const completed = await this.finishJob(job.id, token, true);
@@ -467,11 +524,13 @@ export class ConversationRunner {
     } catch (error) {
       const latest = await this.requireConversation(job.conversationId);
       if (latest.status !== "open") {
+        await this.recordLedger(job.conversationId);
         await this.finishJob(job.id, token, true);
         return { generated: true, continue: false, stop: latest.status, childId: null };
       }
       throw error;
     }
+    await this.recordLedger(job.conversationId);
     let childId: string | null = null;
     if (parsed.inviteSlug) {
       const target = await this.persistence.repos.objectives.findDepartmentBySlug(parsed.inviteSlug);
@@ -525,10 +584,22 @@ export class ConversationRunner {
       return "continue";
     }
     const turns = await this.persistence.repos.autonomy.listTurns(conversationId);
-    const progressTurns = turns.map((turn) => ({ id: turn.id, department: turn.departmentSlug, kind: turn.kind, body: turn.body }));
-    const assessment = assessProgress(progressTurns, settings.conversationCheckpointTurns);
+    const assessment = assessProgress(turns.map((turn) => ({ id: turn.id, department: turn.departmentSlug, kind: turn.kind, body: turn.body })), settings.conversationCheckpointTurns);
+    const progressTurns = turns.map((turn) => ({ id: turn.id, department: turn.departmentSlug, kind: turn.kind, body: turn.body, addressedDepartment: turn.addressedDepartmentSlug }));
+    const checkpoint = buildCheckpoint({
+      topic: conversation.topic,
+      instruction: conversation.openingInstruction ?? conversation.topic,
+      turns: progressTurns,
+    });
+    const measured = measureProgress(checkpoint, conversation.messageCount);
+    const rendered = renderCheckpoint(checkpoint);
+    const terminationReason = overSoft && !assessment.justified
+      ? "soft_budget"
+      : checkpointDue && assessment.decision === "conclude"
+        ? "checkpoint_stalled"
+        : conversation.progressState.terminationReason;
     await this.persistence.repos.autonomy.saveConversation(conversationId, {
-      contextSummary: assessment.summary,
+      contextSummary: rendered,
       progressState: {
         openQuestions: assessment.openQuestions,
         agreements: assessment.agreements,
@@ -536,6 +607,14 @@ export class ConversationRunner {
         contributions: assessment.contributions,
         lastCheckpointTurn: conversation.messageCount,
         lastDecision: overSoft && !assessment.justified ? "conclude" : assessment.decision,
+        byDepartment: departmentContributions(progressTurns),
+        substantialProgress: measured.substantial,
+        progressReason: measured.reason,
+        terminationReason,
+        turnDecisions: conversation.progressState.turnDecisions,
+        recoveryTotal: conversation.progressState.recoveryTotal,
+        recoveryMode: conversation.progressState.recoveryMode,
+        recoverySpeakerId: conversation.progressState.recoverySpeakerId,
       },
     });
     if (checkpointDue) {
@@ -590,13 +669,18 @@ export class ConversationRunner {
         content: [
           goal ? `Colony goal:\n${goal.objective}` : null,
           `Topic:\n${conversation.topic}`,
+          `Original instruction:\n${conversation.openingInstruction ?? conversation.topic}`,
+          "Advance the original instruction. Do not replace the objective.",
+          recoveryInstruction(conversation.progressState.recoveryMode),
           childNote || null,
           action === "invitation" ? "You were invited. Set decision to accept or decline." : "Set decision to speak.",
           departmentFollowUp(departmentSlug),
           conversation.progressState.lastDecision === "redirect"
             ? "The recent turns are not adding a new contribution. Add evidence, a calculation, a question, or a proposal, or propose closure."
             : null,
-          context.summary ? `Earlier context:\n${context.summary}` : conversation.contextSummary ? `Checkpoint summary:\n${conversation.contextSummary}` : null,
+          conversation.progressState.turnDecisions.filter((decision) => decision.startsWith("flagged")).slice(-2).join("\n") || null,
+          context.summary ? `Omitted transcript excerpts:\n${context.summary}` : null,
+          conversation.contextSummary ? `Checkpoint:\n${conversation.contextSummary}` : null,
           context.verbatim.length ? `Recent transcript:\n${context.verbatim.map((turn) => `message ${turn.id} ${turn.department} (${turn.kind}): ${turn.body}`).join("\n")}` : null,
         ].filter(Boolean).join("\n\n"),
       },
@@ -641,10 +725,11 @@ export class ConversationRunner {
     return "response";
   }
 
-  private async chooseSpeaker(repos: Persistence["repos"], conversation: ConversationRecord, job: ConversationJob): Promise<string | null> {
+  private async chooseSpeaker(repos: Persistence["repos"], conversation: ConversationRecord, job: ConversationJob): Promise<{ departmentId: string; reason: string } | null> {
     if (job.action === "invitation") {
       const membership = await repos.autonomy.listMembership(conversation.id);
-      return membership.find((item) => item.membership === "invited")?.departmentId ?? null;
+      const invited = membership.find((item) => item.membership === "invited")?.departmentId ?? null;
+      return invited ? { departmentId: invited, reason: "invitation" } : null;
     }
     const participants = [];
     for (const id of await repos.autonomy.listParticipants(conversation.id)) {
@@ -653,14 +738,39 @@ export class ConversationRunner {
         participants.push({ id: department.id, slug: department.slug, name: department.name });
       }
     }
+    if (conversation.progressState.recoveryMode !== "none" && conversation.progressState.recoverySpeakerId) {
+      const recovered = participants.find((participant) => participant.id === conversation.progressState.recoverySpeakerId);
+      if (recovered) {
+        return {
+          departmentId: recovered.id,
+          reason: conversation.progressState.recoveryMode === "synthesis"
+            ? "synthesis after a repetitive draft"
+            : "handoff after a repetitive draft",
+        };
+      }
+    }
     const turns = await repos.autonomy.listTurns(conversation.id);
-    const choice = selectSpeaker({
+    const choice = orchestrationRecommendation({
       participants,
       turns,
       topic: conversation.topic,
       remainingMessages: Math.max(0, conversation.maxMessages - conversation.messageCount),
     });
-    return choice?.departmentId ?? null;
+    return choice ? { departmentId: choice.departmentId, reason: choice.reason } : null;
+  }
+
+  private async recordLedger(conversationId: string): Promise<void> {
+    const conversation = await this.persistence.repos.autonomy.findConversation(conversationId);
+    if (!conversation) {
+      return;
+    }
+    const turns = await this.persistence.repos.autonomy.listTurns(conversationId);
+    await this.persistence.repos.autonomy.saveConversation(conversationId, {
+      progressState: {
+        ...conversation.progressState,
+        byDepartment: departmentContributions(turns.map((turn) => ({ department: turn.departmentSlug, kind: turn.kind }))),
+      },
+    });
   }
 
   private async openChild(ctx: RequestContext, parent: ConversationRecord, slugs: string[]): Promise<string | null> {
@@ -699,6 +809,26 @@ export class ConversationRunner {
       return this.persistence.repos.autonomy.releaseJob(id, token, error);
     }
     return this.persistence.repos.autonomy.completeJob(id, token, this.now());
+  }
+
+  private async closeWithoutProgress(conversation: ConversationRecord, turns: Awaited<ReturnType<Persistence["repos"]["autonomy"]["listTurns"]>>): Promise<void> {
+    const checkpoint = buildCheckpoint({
+      topic: conversation.topic,
+      instruction: conversation.openingInstruction ?? conversation.topic,
+      turns: turns.map((turn) => ({ id: turn.id, department: turn.departmentSlug, kind: turn.kind, body: turn.body, addressedDepartment: turn.addressedDepartmentSlug })),
+    });
+    const unresolved = checkpoint.openQuestions.slice(0, 4).join(" | ") || "none recorded";
+    await this.persistence.repos.autonomy.saveConversation(conversation.id, {
+      lastError: `no_progress: bounded recovery ended. Unresolved questions: ${unresolved}`,
+      progressState: {
+        ...conversation.progressState,
+        terminationReason: "no_progress",
+        recoveryMode: "none",
+        recoverySpeakerId: null,
+        turnDecisions: [...conversation.progressState.turnDecisions, "rejected: bounded recovery produced no new contribution"].slice(-12),
+      },
+    });
+    await this.dialogueClose(this.persistence.repos, conversation.id, "unresolved", "no_progress");
   }
 
   private async dialogueClose(repos: Persistence["repos"], conversationId: string, status: "resolved" | "unresolved" | "terminated", reason: string): Promise<void> {

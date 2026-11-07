@@ -212,6 +212,7 @@ export function createAutonomyRepository(db: DbExecutor): AutonomyRepository {
         maxMessages: input.maxMessages,
         maxTokens: input.maxTokens,
         maxDurationMs: input.maxDurationMs,
+        openingInstruction: input.openingInstruction,
       });
     },
     async findConversation(id) {
@@ -243,6 +244,8 @@ export function createAutonomyRepository(db: DbExecutor): AutonomyRepository {
           ...(patch.runnerLeaseUntil !== undefined ? { runnerLeaseUntil: patch.runnerLeaseUntil } : {}),
           ...(patch.parentConversationId !== undefined ? { parentConversationId: patch.parentConversationId } : {}),
           ...(patch.scheduledSpeakerId !== undefined ? { scheduledSpeakerId: patch.scheduledSpeakerId } : {}),
+          ...(patch.recommendedSpeakerId !== undefined ? { recommendedSpeakerId: patch.recommendedSpeakerId } : {}),
+          ...(patch.speakerRecommendationReason !== undefined ? { speakerRecommendationReason: patch.speakerRecommendationReason } : {}),
           ...(patch.lastError !== undefined ? { lastError: patch.lastError } : {}),
           ...(patch.lastInferenceLatencyMs !== undefined ? { lastInferenceLatencyMs: patch.lastInferenceLatencyMs } : {}),
           ...(patch.lastInferenceEndpoint !== undefined ? { lastInferenceEndpoint: patch.lastInferenceEndpoint } : {}),
@@ -278,11 +281,22 @@ export function createAutonomyRepository(db: DbExecutor): AutonomyRepository {
     async upsertMembership(input) {
       await db
         .insert(conversationParticipants)
-        .values(input)
+        .values({
+          conversationId: input.conversationId,
+          departmentId: input.departmentId,
+          membership: input.membership,
+          participantRole: input.role,
+          joinSequence: input.joinSequence,
+          invitedByDepartmentId: input.invitedByDepartmentId,
+          joinedAt: input.joinedAt,
+          removedAt: input.removedAt,
+        })
         .onConflictDoUpdate({
           target: [conversationParticipants.conversationId, conversationParticipants.departmentId],
           set: {
             membership: input.membership,
+            participantRole: input.role,
+            joinSequence: input.joinSequence,
             invitedByDepartmentId: input.invitedByDepartmentId,
             joinedAt: input.joinedAt,
             removedAt: input.removedAt,
@@ -575,10 +589,13 @@ function mapConversation(row: typeof departmentConversations.$inferSelect): Conv
     runnerLeaseUntil: iso(row.runnerLeaseUntil),
     parentConversationId: row.parentConversationId,
     scheduledSpeakerId: row.scheduledSpeakerId,
+    recommendedSpeakerId: row.recommendedSpeakerId,
+    speakerRecommendationReason: row.speakerRecommendationReason,
     lastError: row.lastError,
     lastInferenceLatencyMs: row.lastInferenceLatencyMs,
     lastInferenceEndpoint: row.lastInferenceEndpoint,
     progressState: readProgress(row.progressState),
+    openingInstruction: row.openingInstruction,
     openedAt: row.openedAt.toISOString(),
     lastTurnAt: row.lastTurnAt.toISOString(),
     closedAt: iso(row.closedAt),
@@ -610,6 +627,8 @@ function mapMembership(row: typeof conversationParticipants.$inferSelect, slug: 
     departmentId: row.departmentId,
     departmentSlug: slug,
     membership: row.membership as MembershipRecord["membership"],
+    role: row.participantRole as MembershipRecord["role"],
+    joinSequence: row.joinSequence,
     invitedByDepartmentId: row.invitedByDepartmentId,
     joinedAt: iso(row.joinedAt),
     removedAt: iso(row.removedAt),

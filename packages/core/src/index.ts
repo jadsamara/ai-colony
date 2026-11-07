@@ -57,12 +57,13 @@ export { CollaborationService } from "./learning/collaboration-service.js";
 export { AutonomyService } from "./autonomy/autonomy-service.js";
 export { DialogueService } from "./autonomy/dialogue-service.js";
 export { ConversationRunner } from "./autonomy/conversation-runner.js";
-export { assessProgress, departmentFollowUp, isNearVerbatim, permitsEcho, readProgress, repetitionCorrection } from "./autonomy/conversation-quality.js";
+export { assessProgress, departmentContributions, departmentFollowUp, isNearVerbatim, permitsEcho, readProgress, repetitionCorrection } from "./autonomy/conversation-quality.js";
+export { buildCheckpoint, classifyClaim, measureProgress, parseModelJson, renderCheckpoint, repetitionVerdict, reviewMathClaim } from "./autonomy/conversation-integrity.js";
 export type { ConversationProgress } from "./autonomy/conversation-quality.js";
 export { selectConversationInference } from "./autonomy/conversation-routing.js";
 export type { ConversationWake } from "./autonomy/conversation-runner.js";
 export { acceptGoalEvidence, normalizeGoal, redactSensitive } from "./autonomy/policy.js";
-export { buildDialogueContext, maySpeak, selectSpeaker } from "./autonomy/speakers.js";
+export { buildDialogueContext, maySpeak, orchestrationRecommendation, selectSpeaker } from "./autonomy/speakers.js";
 export type { SpeakerChoice, SpeakerReason } from "./autonomy/speakers.js";
 export type {
   AutonomyRepository,
