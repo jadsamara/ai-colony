@@ -92,6 +92,53 @@ export function parseModelJson(text: string): ParsedModelJson {
 
 export type ClaimStatus = "verified" | "external" | "experiment" | "hypothesis" | "pending" | "unsupported" | "statement";
 
+export type ContributionValidation =
+  | { ok: true }
+  | { ok: false; reason: string };
+
+const META_VALIDATION_PATTERNS = [
+  /previous json failed validation/i,
+  /corrected json object/i,
+  /here is the corrected json/i,
+  /did not include the required fields/i,
+  /required fields?\s+['"]?kind['"]?/i,
+  /return one json object/i,
+  /validation errors?:/i,
+  /model_invalid:/i,
+  /output was not (?:a json object|valid json)/i,
+  /do not omit kind or body/i,
+];
+
+const RESEARCH_CONTEXT = /\b(?:hypothesis|experiment|equation|derivation|forgetting|accuracy|loss|parameter|task|dataset|metric|protocol|assumption|learning rate|ewc|replay)\b/i;
+
+export function validateContribution(input: { kind: string; body: string }): ContributionValidation {
+  const body = input.body.trim();
+  if (!body) {
+    return { ok: false, reason: "body is empty" };
+  }
+  if (body.length < 12) {
+    return { ok: false, reason: "body has no substantive contribution" };
+  }
+  const metaHits = META_VALIDATION_PATTERNS.filter((pattern) => pattern.test(body)).length;
+  if (metaHits >= 1 && !RESEARCH_CONTEXT.test(body)) {
+    return { ok: false, reason: "body is a parser or validation explanation" };
+  }
+  if (metaHits >= 2) {
+    return { ok: false, reason: "body is dominated by internal validation instructions" };
+  }
+  if (/^(?:here is the corrected|the previous json failed)/i.test(body)) {
+    return { ok: false, reason: "body opens as a formatting correction" };
+  }
+  if (/^\s*\{[\s\S]*"kind"\s*:/.test(body) && body.includes("\"body\"")) {
+    return { ok: false, reason: "body contains nested decision JSON instead of research text" };
+  }
+  const words = body.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+  if (words.length < 3) {
+    return { ok: false, reason: "body has no substantive contribution after normalization" };
+  }
+  return { ok: true };
+}
+
 export function classifyClaim(kind: string, body: string): ClaimStatus {
   if (/\bhypothesis\b|\bwe assume\b|\bassume that\b/i.test(body)) {
     return "hypothesis";
@@ -115,51 +162,134 @@ export function classifyClaim(kind: string, body: string): ClaimStatus {
 }
 
 export interface MathReview {
-  status: "none" | "proposed" | "flagged";
+  status: "none" | "proposed" | "flagged" | "unverified";
   reasons: string[];
+  verification: "unverified";
 }
 
-export function reviewMathClaim(body: string): MathReview {
-  const equation = /[=∇]|\\frac|\\nabla|\\theta|\bpartial\b/i.test(body);
-  if (!equation) {
-    return { status: "none", reasons: [] };
+export function reviewMathClaim(body: string, priorBodies: readonly string[] = []): MathReview {
+  const equation = /[=∇]|\\frac|\\nabla|\\theta|\\eta|\bpartial\b/i.test(body) || /\b(?:learning rate|fisher|ewc)\b/i.test(body);
+  const claimedProof = /\bproof\b/i.test(body) && !/\b(?:assume|let|therefore|qed|steps?:)\b/i.test(body);
+  if (!equation && !claimedProof) {
+    return { status: "none", reasons: [], verification: "unverified" };
   }
   const reasons: string[] = [];
-  if (!/\b(?:assume|assumption|define|definition|let|where)\b/i.test(body)) {
+  if (equation && !/\b(?:assume|assumption|define|definition|let|where)\b/i.test(body)) {
     reasons.push("missing_assumptions");
   }
-  if (!/\b(?:because|therefore|derive|derivation|example|worked)\b/i.test(body)) {
+  if (equation && !/\b(?:because|therefore|derive|derivation|example|worked)\b/i.test(body)) {
     reasons.push("missing_derivation");
+  }
+  if (claimedProof) {
+    reasons.push("claimed_proof_without_steps");
+  }
+  if (conflictingLearningRate(body, priorBodies)) {
+    reasons.push("conflicting_variable_definition");
+  }
+  if (/symmetric|two-task forgetting/i.test(body) && !/\b(?:assume|because|therefore|example)\b/i.test(body)) {
+    reasons.push("unsupported_formulation");
   }
   const sides = body.split("=").map((side) => unitsIn(side));
   if (sides.length === 2 && sides[0]?.size && sides[1]?.size && [...sides[0]].every((unit) => !sides[1]?.has(unit))) {
     reasons.push("dimensional_mismatch");
   }
-  return { status: reasons.length > 0 ? "flagged" : "proposed", reasons };
+  if (/\b(?:calculation|compute|equals)\b/i.test(body) && !/\d/.test(body) && !/[=≈]/.test(body)) {
+    reasons.push("claimed_calculation_without_steps");
+  }
+  return {
+    status: reasons.length > 0 ? "flagged" : "proposed",
+    reasons,
+    verification: "unverified",
+  };
 }
 
 const STOP = new Set(["the", "a", "an", "of", "to", "and", "or", "what", "which", "how", "is", "are", "was", "this", "that", "for", "with", "we", "our", "does", "do", "can", "without", "from", "into", "on", "in", "it", "be"]);
+const SUPERFICIAL = new Set([
+  "method", "methods", "framework", "approach", "approaches", "model", "models", "system", "systems",
+  "process", "important", "effective", "effectiveness", "ability", "critical", "nature", "structure",
+  "learning", "continual", "catastrophic", "forgetting", "previous", "earlier", "also", "however",
+  "therefore", "thus", "using", "based", "such", "these", "those", "their", "them", "than", "then",
+  "still", "remain", "remains", "against", "assume", "assumes", "prevent", "prevents", "under", "static", "data",
+]);
+
+export type NoveltyClass =
+  | "derivation"
+  | "correction"
+  | "hypothesis"
+  | "experiment"
+  | "evidence"
+  | "synthesis"
+  | "rebuttal"
+  | "clarification"
+  | "superficial"
+  | "distinct";
+
+export function classifyNovelty(body: string, prior: readonly { kind: string; body: string }[]): {
+  duplicate: boolean;
+  novel: boolean;
+  class: NoveltyClass;
+  reason: string;
+} {
+  const current = contentWords(body);
+  const substantiveFresh = (previous: Set<string>) => [...current].filter((word) => !previous.has(word) && !SUPERFICIAL.has(word));
+  const hasProvenance = /\bobserved:\b|\bexperiment:\b|\bdoi:\b|\bsource:\b/i.test(body);
+  const hasNumericWork = /\d/.test(body) && /[=+\-*/]/.test(body);
+  const isCorrection = /\b(?:incorrect|correction:|superseded|should be|η|eta)\b/i.test(body) && /\b(?:learning rate|definition|variable)\b/i.test(body);
+  const isHypothesis = /\b(?:hypothesis|falsifiable)\b/i.test(body);
+  const isExperiment = /\b(?:experiment|control|metric|protocol|dataset)\b/i.test(body);
+  const isSynthesis = /\b(?:synthesis|next action|agreed|conclusion)\b/i.test(body);
+  const isRebuttal = /\b(?:challenge|however|does not follow|unsupported|contradict)\b/i.test(body);
+
+  for (const turn of prior) {
+    const previous = contentWords(turn.body);
+    const overlap = jaccard(current, previous);
+    const fresh = substantiveFresh(previous);
+    const hasNewNumber = numbersIn(body).some((value) => !numbersIn(turn.body).includes(value));
+    const bothQuestions = /\?/.test(body) && /\?/.test(turn.body);
+    const sameQuestion = bothQuestions && intersectionCount(current, previous) >= 4 && fresh.length < 3 && !hasProvenance && !hasNumericWork && !hasNewNumber;
+    if ((overlap >= 0.62 && fresh.length < 3 && !hasProvenance && !hasNumericWork && !hasNewNumber && !isCorrection) || sameQuestion) {
+      return { duplicate: true, novel: false, class: "superficial", reason: "The turn rephrases an earlier claim without a new derivation, correction, hypothesis, experiment, or evidence." };
+    }
+    if (overlap >= 0.45 && fresh.length < 4 && !hasProvenance && !hasNumericWork && !hasNewNumber && !isCorrection && !isHypothesis && !isExperiment && !isRebuttal) {
+      return { duplicate: true, novel: false, class: "superficial", reason: "The turn adds only superficial terminology to an earlier proposal." };
+    }
+    if (isCorrection) {
+      return { duplicate: false, novel: true, class: "correction", reason: "The turn corrects a previous mathematical definition or claim." };
+    }
+    if (hasNumericWork && /\b(?:because|therefore|derive|example|let|where)\b/i.test(body)) {
+      return { duplicate: false, novel: true, class: "derivation", reason: "The turn adds a worked calculation or derivation." };
+    }
+    if (hasProvenance) {
+      return { duplicate: false, novel: true, class: "evidence", reason: "The turn adds evidence with provenance." };
+    }
+    if (isExperiment && fresh.length >= 1) {
+      return { duplicate: false, novel: true, class: "experiment", reason: "The turn proposes an experiment, control, or metric." };
+    }
+    if (isHypothesis && fresh.length >= 1) {
+      return { duplicate: false, novel: true, class: "hypothesis", reason: "The turn states a new or revised falsifiable hypothesis." };
+    }
+    if (isSynthesis && fresh.length >= 1) {
+      return { duplicate: false, novel: true, class: "synthesis", reason: "The turn synthesizes findings and next actions." };
+    }
+    if (isRebuttal && fresh.length >= 1) {
+      return { duplicate: false, novel: true, class: "rebuttal", reason: "The turn challenges or corrects prior reasoning." };
+    }
+    if (overlap >= 0.5 && fresh.length >= 3) {
+      return { duplicate: false, novel: true, class: "clarification", reason: "The turn revisits an earlier point with substantive new terms." };
+    }
+  }
+  if (isCorrection) {
+    return { duplicate: false, novel: true, class: "correction", reason: "The turn corrects a previous mathematical definition or claim." };
+  }
+  return { duplicate: false, novel: current.size > 0, class: "distinct", reason: "The turn adds a distinct contribution." };
+}
 
 export function repetitionVerdict(
   body: string,
   prior: readonly { kind: string; body: string }[],
 ): { duplicate: boolean; novel: boolean; reason: string } {
-  const current = contentWords(body);
-  const novelMarker = /\bobserved:\b|\bexperiment:\b|\bdoi:\b|\bsource:\b|\d/.test(body);
-  for (const turn of prior) {
-    const previous = contentWords(turn.body);
-    const overlap = jaccard(current, previous);
-    const fresh = [...current].filter((word) => !previous.has(word));
-    const bothQuestions = /\?/.test(body) && /\?/.test(turn.body);
-    const sameQuestion = bothQuestions && intersectionCount(current, previous) >= 4 && fresh.length < 3 && !novelMarker;
-    if ((overlap >= 0.72 && fresh.length < 2 && !novelMarker) || sameQuestion) {
-      return { duplicate: true, novel: false, reason: "The turn repeats an earlier question or claim without new evidence." };
-    }
-    if (overlap >= 0.5 && (fresh.length >= 2 || novelMarker)) {
-      return { duplicate: false, novel: true, reason: "The turn revisits an earlier point with new evidence or terms." };
-    }
-  }
-  return { duplicate: false, novel: current.size > 0, reason: "The turn adds a distinct contribution." };
+  const classified = classifyNovelty(body, prior);
+  return { duplicate: classified.duplicate, novel: classified.novel, reason: classified.reason };
 }
 
 export interface CheckpointTurn {
@@ -335,8 +465,19 @@ function unitsIn(text: string): Set<string> {
   return new Set([...text.matchAll(/\b(?:kg|m\/s|hz|gb|mb|bytes|mol|newton)\b/gi)].map((match) => match[0].toLowerCase()));
 }
 
+function numbersIn(text: string): string[] {
+  return [...text.matchAll(/\d+/g)].map((match) => match[0]);
+}
+
 function contentWords(text: string): Set<string> {
-  return new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((word) => word.length > 2 && !STOP.has(word)));
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .map((word) => (word.endsWith("s") && word.length > 4 ? word.slice(0, -1) : word))
+      .filter((word) => word.length > 2 && !STOP.has(word)),
+  );
 }
 
 function jaccard(left: Set<string>, right: Set<string>): number {
@@ -375,4 +516,37 @@ function successCriteria(instruction: string): string[] {
   const sentences = instruction.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter(Boolean);
   const selected = sentences.filter((sentence) => /\b(?:plan|criterion|measure|test|evaluate|propose)\b/i.test(sentence));
   return selected.length > 0 ? selected : sentences.slice(0, 1);
+}
+
+function learningRateSymbols(text: string): Set<string> {
+  const found = new Set<string>();
+  if (/(?:\\theta|\u03b8|θ).{0,32}learning rate|learning rate.{0,32}(?:\\theta|\u03b8|θ)/i.test(text)) {
+    found.add("theta");
+  }
+  if (/(?:\\eta|\u03b7|η).{0,32}learning rate|learning rate.{0,32}(?:\\eta|\u03b7|η)/i.test(text)) {
+    found.add("eta");
+  }
+  return found;
+}
+
+function conflictingLearningRate(body: string, priorBodies: readonly string[]): boolean {
+  const current = learningRateSymbols(body);
+  if (current.size > 1) {
+    return true;
+  }
+  const prior = new Set<string>();
+  for (const text of priorBodies) {
+    for (const symbol of learningRateSymbols(text)) {
+      prior.add(symbol);
+    }
+  }
+  if (current.size === 0 || prior.size === 0) {
+    return false;
+  }
+  for (const symbol of current) {
+    if (!prior.has(symbol)) {
+      return true;
+    }
+  }
+  return false;
 }

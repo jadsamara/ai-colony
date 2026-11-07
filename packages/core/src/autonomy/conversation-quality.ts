@@ -22,9 +22,31 @@ export interface ConversationProgress {
   recoveryTotal: number;
   recoveryMode: RecoveryMode;
   recoverySpeakerId: string | null;
+  failedGenerations: FailedGeneration[];
+  inferenceLog: InferenceTurnLog[];
 }
 
 export type RecoveryMode = "none" | "handoff" | "synthesis";
+
+export interface FailedGeneration {
+  at: string;
+  departmentSlug: string;
+  reason: string;
+  diagnostic: string;
+}
+
+export interface InferenceTurnLog {
+  at: string;
+  departmentId: string;
+  departmentSlug: string;
+  model: string;
+  endpoint: string;
+  latencyMs: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  status: "accepted" | "rejected" | "recovered" | "failed";
+  reason: string;
+}
 
 export const MAX_CONVERSATION_RECOVERIES = 3;
 
@@ -77,6 +99,8 @@ export function emptyProgress(): ConversationProgress {
     recoveryTotal: 0,
     recoveryMode: "none",
     recoverySpeakerId: null,
+    failedGenerations: [],
+    inferenceLog: [],
   };
 }
 
@@ -102,7 +126,45 @@ export function readProgress(value: unknown): ConversationProgress {
     recoveryTotal: typeof row.recoveryTotal === "number" ? row.recoveryTotal : 0,
     recoveryMode: row.recoveryMode === "handoff" || row.recoveryMode === "synthesis" ? row.recoveryMode : "none",
     recoverySpeakerId: typeof row.recoverySpeakerId === "string" ? row.recoverySpeakerId : null,
+    failedGenerations: readFailedGenerations(row.failedGenerations),
+    inferenceLog: readInferenceLog(row.inferenceLog),
   };
+}
+
+function readFailedGenerations(value: unknown): FailedGeneration[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is FailedGeneration => Boolean(item) && typeof item === "object")
+    .map((item) => ({
+      at: typeof item.at === "string" ? item.at : "",
+      departmentSlug: typeof item.departmentSlug === "string" ? item.departmentSlug : "unknown",
+      reason: typeof item.reason === "string" ? item.reason : "failed",
+      diagnostic: typeof item.diagnostic === "string" ? item.diagnostic.slice(0, 240) : "",
+    }))
+    .slice(-20);
+}
+
+function readInferenceLog(value: unknown): InferenceTurnLog[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is InferenceTurnLog => Boolean(item) && typeof item === "object")
+    .map((item) => ({
+      at: typeof item.at === "string" ? item.at : "",
+      departmentId: typeof item.departmentId === "string" ? item.departmentId : "",
+      departmentSlug: typeof item.departmentSlug === "string" ? item.departmentSlug : "unknown",
+      model: typeof item.model === "string" ? item.model.slice(0, 80) : "",
+      endpoint: typeof item.endpoint === "string" ? item.endpoint.slice(0, 120) : "shared",
+      latencyMs: typeof item.latencyMs === "number" ? item.latencyMs : 0,
+      inputTokens: typeof item.inputTokens === "number" ? item.inputTokens : null,
+      outputTokens: typeof item.outputTokens === "number" ? item.outputTokens : null,
+      status: item.status === "accepted" || item.status === "rejected" || item.status === "recovered" || item.status === "failed" ? item.status : "failed",
+      reason: typeof item.reason === "string" ? item.reason.slice(0, 200) : "",
+    }))
+    .slice(-40);
 }
 
 export function departmentContributions(turns: readonly { department: string; kind: string }[]): Record<string, DepartmentContributionTally> {
@@ -153,13 +215,35 @@ export function departmentFollowUp(slug: string): string {
 
 export function repetitionCorrection(previousBody: string): string {
   return [
-    "The previous JSON repeated a recent turn.",
-    "Return one corrected JSON object that contributes something new.",
+    "Your previous draft was not stored because it repeated an earlier turn.",
+    "Write a new research contribution. Do not mention JSON, validation, schemas, or formatting.",
     "Add one of these: a concrete calculation; a criticism or limitation of the previous proposal; a proposed experiment; an answer to an unresolved question; or a synthesis of findings and next actions.",
     "Do not invent evidence or citations.",
-    "Do not repeat this text:",
-    previousBody.slice(0, 500),
+    "Avoid repeating this rejected idea:",
+    previousBody.slice(0, 280),
   ].join("\n");
+}
+
+export function cleanRecoveryPrompt(input: {
+  departmentSlug: string;
+  openingInstruction: string;
+  topic: string;
+  mode: RecoveryMode;
+  recentTurns: readonly { department: string; kind: string; body: string }[];
+}): string {
+  const recent = input.recentTurns
+    .slice(-4)
+    .map((turn) => `${turn.department} (${turn.kind}): ${turn.body.slice(0, 220)}`)
+    .join("\n");
+  return [
+    `Topic: ${input.topic}`,
+    `Original instruction: ${input.openingInstruction}`,
+    departmentFollowUp(input.departmentSlug),
+    recoveryInstruction(input.mode) ?? "Contribute one new research item.",
+    "Do not mention JSON, validation errors, schemas, retries, or formatting instructions.",
+    "Do not invent evidence or citations.",
+    recent ? `Recent accepted transcript:\n${recent}` : "Recent accepted transcript: (none)",
+  ].join("\n\n");
 }
 
 export function planRecovery(input: {

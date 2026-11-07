@@ -393,9 +393,10 @@ describe("autonomous conversation runtime", () => {
       const runnerCalls = provider.requests.filter((request) => request.messages.some((message) => message.content.includes("Return one JSON object")));
       expect(runnerCalls).toHaveLength(2);
       const correction = [...(runnerCalls[1]?.messages ?? [])].reverse().find((message) => message.role === "user")?.content ?? "";
-      expect(correction).toContain("Validation errors");
+      expect(correction).toContain("Reason:");
       expect(correction).toContain(item.error);
-      expect(correction).toContain("Previous output:");
+      expect(correction).toContain("Do not mention JSON");
+      expect(correction).not.toContain("Previous output:");
       expect((await persistence.repos.autonomy.findConversation(conversationId))?.lastError).toBeNull();
     }
 
@@ -427,7 +428,7 @@ describe("autonomous conversation runtime", () => {
     const repeatedRecord = await dialogue.read(admin(), repeatedId);
     const runnerCalls = repeated.requests.filter((request) => request.messages.some((message) => message.content.includes("Return one JSON object")));
     expect(runnerCalls).toHaveLength(2);
-    expect([...runnerCalls[1]?.messages ?? []].reverse().find((message) => message.role === "user")?.content).toContain("repeated a recent turn");
+    expect([...runnerCalls[1]?.messages ?? []].reverse().find((message) => message.role === "user")?.content).toContain("repeated an earlier turn");
     expect(repeatedRecord.turns.filter((turn) => turn.body === "Math, are the current assumptions adequate?")).toHaveLength(1);
     expect(repeatedRecord.turns.some((turn) => turn.body === "The zero case is still open.")).toBe(true);
 

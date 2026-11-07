@@ -37,7 +37,7 @@ describe("conversation decision parsing", () => {
     expect(inspected.diagnostic.length).toBeLessThanOrEqual(240);
   });
 
-  it("builds one correction prompt from the schema, the validation errors, and the previous output", () => {
+  it("builds a clean correction prompt without leaking the previous model output into research context", () => {
     const previous = `{"kind":"essay","body":""} postgres://colony:secret@db/colony ${secret}`;
     const diagnostic = inspectDecision(previous);
     expect(diagnostic.ok).toBe(false);
@@ -45,15 +45,25 @@ describe("conversation decision parsing", () => {
       return;
     }
     const correction = correctionInstruction(previous, diagnostic.diagnostic);
-    expect(correction).toContain("Validation errors:");
+    expect(correction).toContain("Reason:");
     expect(correction).toContain(diagnostic.diagnostic);
-    expect(correction).toContain("Previous output:");
-    expect(correction).toContain('{"kind":"essay","body":""}');
     expect(correction).toContain(DECISION_JSON_SCHEMA);
-    expect(correction).toContain("kind is required");
-    expect(correction).toContain("body is required");
-    expect(correction).toContain("[redacted]");
+    expect(correction).toContain("body must be research content only");
+    expect(correction).not.toContain("Previous output:");
     expect(correction).not.toContain("postgres://colony:secret@db/colony");
     expect(correction).not.toContain(secret);
+  });
+
+  it("rejects parser-validation explanations that masquerade as research bodies", () => {
+    const inspected = inspectDecision(JSON.stringify({
+      kind: "response",
+      body: "The previous JSON failed validation because it did not include the required fields 'kind' and 'body'. Here is the corrected JSON object with the required fields.",
+      decision: "speak",
+    }));
+    expect(inspected.ok).toBe(false);
+    if (inspected.ok) {
+      return;
+    }
+    expect(inspected.diagnostic).toContain("parser or validation");
   });
 });

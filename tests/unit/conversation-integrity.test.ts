@@ -3,11 +3,13 @@ import { extractJsonObject } from "@ai-colony/core";
 import {
   buildCheckpoint,
   classifyClaim,
+  classifyNovelty,
   measureProgress,
   parseModelJson,
   renderCheckpoint,
   repetitionVerdict,
   reviewMathClaim,
+  validateContribution,
 } from "../../packages/core/src/autonomy/conversation-integrity.js";
 import { planRecovery, repetitionCorrection } from "../../packages/core/src/autonomy/conversation-quality.js";
 
@@ -67,17 +69,49 @@ describe("conversation integrity", () => {
 
   it("retries repetition with a concrete contribution and bounds recovery", () => {
     const correction = repetitionCorrection("What experimental evidence is available?");
-    expect(correction).toContain("repeated a recent turn");
+    expect(correction).toContain("repeated an earlier turn");
     expect(correction).toContain("concrete calculation");
     expect(correction).toContain("criticism or limitation");
     expect(correction).toContain("proposed experiment");
     expect(correction).toContain("unresolved question");
     expect(correction).toContain("synthesis of findings");
+    expect(correction).toContain("Do not mention JSON");
     const math = "00000000-0000-4000-8000-000000000019";
     expect(planRecovery({ total: 0, otherDepartmentIds: [math] })).toMatchObject({ action: "handoff", departmentId: math, total: 1 });
     expect(planRecovery({ total: 1, otherDepartmentIds: [math] })).toMatchObject({ action: "synthesis", departmentId: math, total: 2 });
     expect(planRecovery({ total: 3, otherDepartmentIds: [math] }).action).toBe("close");
     expect(planRecovery({ total: 0, otherDepartmentIds: [] }).action).toBe("close");
+  });
+
+  it("rejects meta validation bodies while allowing legitimate parser research", () => {
+    expect(validateContribution({
+      kind: "response",
+      body: "The previous JSON failed validation because it did not include the required fields 'kind' and 'body'. Here is the corrected JSON object with the required fields.",
+    }).ok).toBe(false);
+    expect(validateContribution({
+      kind: "proposal",
+      body: "A parser that rejects malformed JSON should not treat validation explanations as catastrophic-forgetting evidence. Hypothesis: schema checks reduce invalid research turns.",
+    }).ok).toBe(true);
+  });
+
+  it("flags conflicting learning-rate symbols and keeps math unverified", () => {
+    const prior = ["Let η be the learning rate and L the loss."];
+    const review = reviewMathClaim("θ is the learning rate in L = θ * ∇L. Assume the terms are scalars.", prior);
+    expect(review.verification).toBe("unverified");
+    expect(review.reasons).toEqual(expect.arrayContaining(["conflicting_variable_definition"]));
+    expect(reviewMathClaim("Proof: catastrophic forgetting never occurs.").reasons).toContain("claimed_proof_without_steps");
+  });
+
+  it("accepts a genuine mathematical correction and rejects a superficial rephrase", () => {
+    const prior = [{ kind: "response", body: "The continual learning framework assumes replay, EWC, and parameter isolation prevent catastrophic forgetting under static data." }];
+    expect(classifyNovelty(
+      "Correction: η is the learning rate, not θ. The earlier definition was incorrect.",
+      prior,
+    )).toMatchObject({ duplicate: false, class: "correction" });
+    expect(classifyNovelty(
+      "The continual learning approach and framework still assume replay methods and EWC remain effective against catastrophic forgetting under static data.",
+      prior,
+    ).duplicate).toBe(true);
   });
 
   it("does not treat ten turns as substantial progress", () => {

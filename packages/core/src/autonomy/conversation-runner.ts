@@ -8,8 +8,8 @@ import type { InferenceProvider, InferenceResult } from "../inference/provider.j
 import { extractJsonObject } from "../objectives/plan.js";
 import type { InferenceRoute } from "../objectives/objective-service.js";
 import type { Persistence } from "../ports/repositories.js";
-import { assessProgress, departmentContributions, departmentFollowUp, isNearVerbatim, permitsEcho, planRecovery, recoveryInstruction, repetitionCorrection } from "./conversation-quality.js";
-import { buildCheckpoint, classifyClaim, measureProgress, renderCheckpoint, repetitionVerdict, requestsObjectiveChange, reviewMathClaim } from "./conversation-integrity.js";
+import { assessProgress, cleanRecoveryPrompt, departmentContributions, departmentFollowUp, isNearVerbatim, permitsEcho, planRecovery, recoveryInstruction, repetitionCorrection, type InferenceTurnLog } from "./conversation-quality.js";
+import { buildCheckpoint, classifyClaim, measureProgress, renderCheckpoint, repetitionVerdict, requestsObjectiveChange, reviewMathClaim, validateContribution } from "./conversation-integrity.js";
 import { logConversationInference, selectConversationInference } from "./conversation-routing.js";
 import type { DialogueService } from "./dialogue-service.js";
 import { redactSensitive } from "./policy.js";
@@ -30,7 +30,6 @@ const decisionSchema = z.object({
 });
 
 const DIAGNOSTIC_LIMIT = 240;
-const PREVIOUS_OUTPUT_LIMIT = 500;
 
 export const DECISION_JSON_SCHEMA = [
   "Return one JSON object and no other text.",
@@ -65,19 +64,45 @@ export function inspectDecision(text: string): DecisionInspection {
     const issues = parsed.error.issues.slice(0, 4).map(formatIssue);
     return { ok: false, diagnostic: boundDiagnostic(issues.join("; ") || "output did not match the schema") };
   }
+  const contribution = validateContribution({ kind: parsed.data.kind, body: parsed.data.body });
+  if (!contribution.ok) {
+    return { ok: false, diagnostic: boundDiagnostic(contribution.reason) };
+  }
   return { ok: true, value: parsed.data };
 }
 
-export function correctionInstruction(previousOutput: string, diagnostic: string): string {
-  const clipped = redactSensitive(previousOutput).slice(0, PREVIOUS_OUTPUT_LIMIT);
+export function correctionInstruction(_previousOutput: string, diagnostic: string): string {
   return [
-    "The previous JSON failed validation. Correct it.",
-    `Validation errors: ${diagnostic}`,
-    "Previous output:",
-    clipped,
+    "The previous generation was rejected and was not stored.",
+    `Reason: ${diagnostic}`,
+    "Return one new JSON object with kind and body.",
+    "body must be research content only. Do not mention JSON, validation, schemas, retries, or formatting.",
     DECISION_JSON_SCHEMA,
-    "Return one JSON object that matches the schema.",
   ].join("\n");
+}
+
+export interface ConversationRunResult {
+  conversationId: string;
+  produced: number;
+  stop: string;
+  execution: {
+    stop: string;
+    produced: number;
+  };
+  research: {
+    status: string;
+    outcome: string | null;
+    closeReason: string | null;
+    finalConclusion: string | null;
+    unresolvedQuestions: string[];
+    substantialProgress: boolean;
+    budget: {
+      messagesRemaining: number;
+      tokensSpent: number;
+      maxMessages: number;
+      maxTokens: number;
+    };
+  };
 }
 
 function formatIssue(issue: { code: string; path: PropertyKey[]; message: string }): string {
@@ -128,7 +153,7 @@ export class ConversationRunner {
     provider: InferenceProvider,
     route: InferenceRoute,
     options?: { maxTurns?: number },
-  ): Promise<{ conversationId: string; produced: number; stop: string }> {
+  ): Promise<ConversationRunResult> {
     this.authorizer.assert(ctx.actor, "autonomy:manage");
     const settings = await this.persistence.repos.autonomy.settings();
     if (!settings.conversationExecutionEnabled) {
@@ -137,10 +162,10 @@ export class ConversationRunner {
     await this.dialogue.maintain();
     const conversation = await this.requireConversation(conversationId);
     if (conversation.status !== "open") {
-      return { conversationId, produced: 0, stop: conversation.status };
+      return this.runResult(conversationId, 0, conversation.status);
     }
     if (conversation.paused) {
-      return { conversationId, produced: 0, stop: "paused" };
+      return this.runResult(conversationId, 0, "paused");
     }
     await this.schedule(conversationId);
     const cap = Math.min(options?.maxTurns ?? conversation.maxMessages, conversation.maxMessages);
@@ -173,7 +198,7 @@ export class ConversationRunner {
         break;
       }
     }
-    return { conversationId, produced, stop };
+    return this.runResult(conversationId, produced, stop);
   }
 
   async handleDelivery(
@@ -246,6 +271,16 @@ export class ConversationRunner {
       progress: conversation.progressState,
       lastError: conversation.lastError,
       contextEvents: events,
+      research: {
+        status: conversation.status,
+        outcome: conversation.outcome,
+        closeReason: conversation.closeReason,
+        finalConclusion: conversation.finalConclusion,
+        unresolvedQuestions: conversation.progressState.openQuestions,
+        substantialProgress: conversation.progressState.substantialProgress,
+      },
+      inferenceLog: conversation.progressState.inferenceLog,
+      failedGenerations: conversation.progressState.failedGenerations,
     };
   }
 
@@ -316,6 +351,13 @@ export class ConversationRunner {
       }
       await repos.autonomy.expireLeases(this.now());
       const job = await repos.autonomy.findActiveJob(conversationId);
+      if (locked.messageCount >= locked.maxMessages) {
+        if (job) {
+          await repos.autonomy.retireJob(job.id, "message_limit");
+        }
+        await this.dialogueClose(repos, conversationId, "terminated", "message_limit");
+        return { kind: "closed" as const };
+      }
       if (!job) {
         return { kind: "idle" as const };
       }
@@ -335,7 +377,11 @@ export class ConversationRunner {
       const speakerDepartmentId = recommendation?.departmentId ?? null;
       if (!speakerDepartmentId) {
         await repos.autonomy.retireJob(job.id, "no speaker");
-        await this.dialogueClose(repos, conversationId, "unresolved", "no_speaker");
+        if (locked.messageCount >= locked.maxMessages) {
+          await this.dialogueClose(repos, conversationId, "terminated", "message_limit");
+        } else {
+          await this.dialogueClose(repos, conversationId, "unresolved", "no_speaker");
+        }
         return { kind: "closed" as const };
       }
       if ((await repos.autonomy.countLeasedForDepartment(speakerDepartmentId)) > 0) {
@@ -397,13 +443,14 @@ export class ConversationRunner {
     const prompt = await this.prompt(conversation, speakerRow?.name ?? "department", department.slug, job.action, turns);
     let result = await this.generate(provider, route, prompt, department, job.conversationId);
     let inspected = inspectDecision(result.text);
+    let recoveredFromInvalid = false;
     if (inspected.ok && inspected.value.searchQuery) {
       const found = await this.dialogue.search(speaker, job.conversationId, inspected.value.searchQuery, 5);
       const followUp = [
         ...prompt,
         {
           role: "user" as const,
-          content: `Previous output:\n${result.text}\nAuthorized transcript matches:\n${found.turns.map((turn) => `message ${turn.id}: ${turn.body}`).join("\n")}\nReturn one JSON object. Do not request another search.`,
+          content: `Authorized transcript matches:\n${found.turns.map((turn) => `message ${turn.id}: ${turn.body}`).join("\n")}\nReturn one JSON object. Do not request another search. Do not mention JSON validation.`,
         },
       ];
       result = await this.generate(provider, route, followUp, department, job.conversationId);
@@ -414,38 +461,61 @@ export class ConversationRunner {
     }
     if (!inspected.ok) {
       const diagnostic = inspected.diagnostic;
+      await this.recordFailedGeneration(conversation, department, result, diagnostic, "invalid_output");
       result = await this.generate(provider, route, [
-        ...prompt,
-        { role: "user", content: correctionInstruction(result.text, diagnostic) },
+        { role: "system", content: `You are the ${speakerRow?.name ?? "department"} department. ${DECISION_JSON_SCHEMA}` },
+        {
+          role: "user",
+          content: cleanRecoveryPrompt({
+            departmentSlug: department.slug,
+            openingInstruction: conversation.openingInstruction ?? conversation.topic,
+            topic: conversation.topic,
+            mode: conversation.progressState.recoveryMode === "none" ? "handoff" : conversation.progressState.recoveryMode,
+            recentTurns: turns.map((turn) => ({ department: turn.departmentSlug, kind: turn.kind, body: turn.body })),
+          }) + `\n\n${correctionInstruction(result.text, diagnostic)}`,
+        },
       ], department, job.conversationId);
       inspected = inspectDecision(result.text);
+      recoveredFromInvalid = true;
     }
     await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
     if (!inspected.ok) {
+      await this.recordFailedGeneration(conversation, department, result, inspected.diagnostic, "invalid_output");
       await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastError: inspected.diagnostic });
       await this.dialogueClose(this.persistence.repos, job.conversationId, "terminated", "model_invalid");
       await this.finishJob(job.id, token, false, inspected.diagnostic);
-      return { generated: true, continue: false, stop: "failed", childId: null };
+      return { generated: false, continue: false, stop: "failed", childId: null };
     }
     let parsed = inspected.value;
     const recentBodies = turns.map((turn) => turn.body);
     const verdict = repetitionVerdict(parsed.body, turns);
     if ((isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) || verdict.duplicate) {
       result = await this.generate(provider, route, [
-        ...prompt,
-        { role: "user", content: `${repetitionCorrection(parsed.body)}\n${DECISION_JSON_SCHEMA}` },
+        { role: "system", content: `You are the ${speakerRow?.name ?? "department"} department. ${DECISION_JSON_SCHEMA}` },
+        {
+          role: "user",
+          content: `${cleanRecoveryPrompt({
+            departmentSlug: department.slug,
+            openingInstruction: conversation.openingInstruction ?? conversation.topic,
+            topic: conversation.topic,
+            mode: "handoff",
+            recentTurns: turns.map((turn) => ({ department: turn.departmentSlug, kind: turn.kind, body: turn.body })),
+          })}\n\n${repetitionCorrection(parsed.body)}`,
+        },
       ], department, job.conversationId);
       inspected = inspectDecision(result.text);
       await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
       if (!inspected.ok) {
+        await this.recordFailedGeneration(conversation, department, result, inspected.diagnostic, "invalid_after_repetition");
         await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastError: inspected.diagnostic });
         await this.dialogueClose(this.persistence.repos, job.conversationId, "terminated", "model_invalid");
         await this.finishJob(job.id, token, false, inspected.diagnostic);
-        return { generated: true, continue: false, stop: "failed", childId: null };
+        return { generated: false, continue: false, stop: "failed", childId: null };
       }
       parsed = inspected.value;
       const corrected = repetitionVerdict(parsed.body, turns);
       if ((isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) || corrected.duplicate) {
+        await this.recordFailedGeneration(conversation, department, result, corrected.reason, "repetitive");
         const others = participantIds.filter((id) => id !== department.id);
         const plan = planRecovery({ total: conversation.progressState.recoveryTotal, otherDepartmentIds: others });
         if (plan.action === "close" || !plan.departmentId) {
@@ -453,24 +523,50 @@ export class ConversationRunner {
           await this.finishJob(job.id, token, true);
           return { generated: false, continue: false, stop: "unresolved", childId: null };
         }
+        const latest = await this.requireConversation(job.conversationId);
         await this.persistence.repos.autonomy.saveConversation(job.conversationId, {
           progressState: {
-            ...conversation.progressState,
+            ...latest.progressState,
             recoveryTotal: plan.total,
             recoveryMode: plan.action,
             recoverySpeakerId: plan.departmentId,
-            turnDecisions: [...conversation.progressState.turnDecisions, `recovery: ${plan.action} after a repetitive draft`].slice(-12),
+            turnDecisions: [...latest.progressState.turnDecisions, `recovery: ${plan.action} after a repetitive draft`].slice(-12),
           },
         });
         await this.finishJob(job.id, token, true);
         await this.schedule(job.conversationId);
         return { generated: false, continue: true, stop: "recovery", childId: null };
       }
+      recoveredFromInvalid = true;
     }
     const acceptance = repetitionVerdict(parsed.body, turns);
-    const math = reviewMathClaim(parsed.body);
+    if (acceptance.duplicate) {
+      await this.recordFailedGeneration(conversation, department, result, acceptance.reason, "repetitive");
+      const others = participantIds.filter((id) => id !== department.id);
+      const plan = planRecovery({ total: conversation.progressState.recoveryTotal, otherDepartmentIds: others });
+      if (plan.action === "close" || !plan.departmentId) {
+        await this.closeWithoutProgress(conversation, turns);
+        await this.finishJob(job.id, token, true);
+        return { generated: false, continue: false, stop: "unresolved", childId: null };
+      }
+      const latest = await this.requireConversation(job.conversationId);
+      await this.persistence.repos.autonomy.saveConversation(job.conversationId, {
+        progressState: {
+          ...latest.progressState,
+          recoveryTotal: plan.total,
+          recoveryMode: plan.action,
+          recoverySpeakerId: plan.departmentId,
+          turnDecisions: [...latest.progressState.turnDecisions, `recovery: ${plan.action} after a repetitive draft`].slice(-12),
+        },
+      });
+      await this.finishJob(job.id, token, true);
+      await this.schedule(job.conversationId);
+      return { generated: false, continue: true, stop: "recovery", childId: null };
+    }
+    const math = reviewMathClaim(parsed.body, recentBodies);
     const claim = classifyClaim(parsed.kind, parsed.body);
-    const decisions = [...conversation.progressState.turnDecisions];
+    const latestProgress = (await this.requireConversation(job.conversationId)).progressState;
+    const decisions = [...latestProgress.turnDecisions];
     if (requestsObjectiveChange(parsed.body)) {
       decisions.push("rejected: a turn asked to change the original instruction");
     }
@@ -481,17 +577,28 @@ export class ConversationRunner {
       decisions.push("accepted pending verification");
     }
     if (math.status === "flagged") {
-      decisions.push(`flagged mathematical claim: ${math.reasons.join(", ")}`);
-    } else if (verdict.duplicate) {
-      decisions.push("retried: the first draft repeated an earlier turn");
+      decisions.push(`flagged mathematical claim: ${math.reasons.join(", ")} (unverified)`);
+    } else if (math.status === "proposed") {
+      decisions.push("mathematical claim recorded as proposed and unverified");
     }
-    decisions.push(`${acceptance.duplicate ? "rejected" : "accepted"}: ${acceptance.reason}`);
+    if (verdict.duplicate || recoveredFromInvalid) {
+      decisions.push("retried: the first draft was rejected and replaced");
+    }
+    decisions.push(`accepted: ${acceptance.reason}`);
+    const inferenceEntry = this.inferenceEntry({
+      conversation,
+      department,
+      result,
+      status: recoveredFromInvalid ? "recovered" : "accepted",
+      reason: acceptance.reason,
+    });
     await this.persistence.repos.autonomy.saveConversation(job.conversationId, {
       progressState: {
-        ...conversation.progressState,
+        ...latestProgress,
         recoveryMode: "none",
         recoverySpeakerId: null,
         turnDecisions: decisions.slice(-12),
+        inferenceLog: [...latestProgress.inferenceLog, inferenceEntry].slice(-40),
       },
     });
     if (job.action === "invitation" && parsed.decision === "decline") {
@@ -615,6 +722,8 @@ export class ConversationRunner {
         recoveryTotal: conversation.progressState.recoveryTotal,
         recoveryMode: conversation.progressState.recoveryMode,
         recoverySpeakerId: conversation.progressState.recoverySpeakerId,
+        failedGenerations: conversation.progressState.failedGenerations,
+        inferenceLog: conversation.progressState.inferenceLog,
       },
     });
     if (checkpointDue) {
@@ -693,7 +802,7 @@ export class ConversationRunner {
     messages: Array<{ role: "system" | "user"; content: string }>,
     department: { id: string; slug: string },
     conversationId: string,
-  ): Promise<InferenceResult> {
+  ): Promise<InferenceResult & { routingModel: string; routingEndpoint: string }> {
     const selected = selectConversationInference({
       departmentId: department.id,
       departmentSlug: department.slug,
@@ -702,7 +811,7 @@ export class ConversationRunner {
     });
     logConversationInference(selected.metadata);
     await this.persistence.repos.autonomy.saveConversation(conversationId, { lastInferenceEndpoint: selected.metadata });
-    return selected.provider.generate({
+    const result = await selected.provider.generate({
       requestId: randomUUID(),
       registryModelId: QWEN3_8B_MODEL_ID,
       modelAlias: route.alias,
@@ -712,6 +821,11 @@ export class ConversationRunner {
       timeoutMs: route.timeoutMs,
       jsonObject: true,
     });
+    return {
+      ...result,
+      routingModel: selected.model,
+      routingEndpoint: selected.endpoint ?? "shared",
+    };
   }
 
   private async validatedKind(conversationId: string, kind: DialogueKind, body: string): Promise<DialogueKind> {
@@ -809,6 +923,84 @@ export class ConversationRunner {
       return this.persistence.repos.autonomy.releaseJob(id, token, error);
     }
     return this.persistence.repos.autonomy.completeJob(id, token, this.now());
+  }
+
+  private async runResult(conversationId: string, produced: number, stop: string): Promise<ConversationRunResult> {
+    const conversation = await this.requireConversation(conversationId);
+    return {
+      conversationId,
+      produced,
+      stop,
+      execution: { stop, produced },
+      research: {
+        status: conversation.status,
+        outcome: conversation.outcome,
+        closeReason: conversation.closeReason,
+        finalConclusion: conversation.finalConclusion,
+        unresolvedQuestions: conversation.progressState.openQuestions,
+        substantialProgress: conversation.progressState.substantialProgress,
+        budget: {
+          messagesRemaining: Math.max(0, conversation.maxMessages - conversation.messageCount),
+          tokensSpent: conversation.inputTokens + conversation.outputTokens,
+          maxMessages: conversation.maxMessages,
+          maxTokens: conversation.maxTokens,
+        },
+      },
+    };
+  }
+
+  private inferenceEntry(input: {
+    conversation: ConversationRecord;
+    department: { id: string; slug: string };
+    result: InferenceResult & { routingModel?: string; routingEndpoint?: string };
+    status: InferenceTurnLog["status"];
+    reason: string;
+  }): InferenceTurnLog {
+    return {
+      at: this.now().toISOString(),
+      departmentId: input.department.id,
+      departmentSlug: input.department.slug,
+      model: (input.result.routingModel ?? input.conversation.lastInferenceEndpoint ?? "unknown").slice(0, 80),
+      endpoint: (input.result.routingEndpoint ?? "shared").slice(0, 120),
+      latencyMs: input.result.latencyMs,
+      inputTokens: input.result.usage.inputTokens ?? null,
+      outputTokens: input.result.usage.outputTokens ?? null,
+      status: input.status,
+      reason: input.reason.slice(0, 200),
+    };
+  }
+
+  private async recordFailedGeneration(
+    conversation: ConversationRecord,
+    department: { id: string; slug: string },
+    result: InferenceResult & { routingModel?: string; routingEndpoint?: string },
+    diagnostic: string,
+    reason: string,
+  ): Promise<void> {
+    const latest = await this.requireConversation(conversation.id);
+    const entry = this.inferenceEntry({
+      conversation: latest,
+      department,
+      result,
+      status: "failed",
+      reason,
+    });
+    await this.persistence.repos.autonomy.saveConversation(conversation.id, {
+      progressState: {
+        ...latest.progressState,
+        failedGenerations: [
+          ...latest.progressState.failedGenerations,
+          {
+            at: this.now().toISOString(),
+            departmentSlug: department.slug,
+            reason,
+            diagnostic: redactSensitive(diagnostic).slice(0, 240),
+          },
+        ].slice(-20),
+        inferenceLog: [...latest.progressState.inferenceLog, entry].slice(-40),
+        turnDecisions: [...latest.progressState.turnDecisions, `rejected: ${reason}`].slice(-12),
+      },
+    });
   }
 
   private async closeWithoutProgress(conversation: ConversationRecord, turns: Awaited<ReturnType<Persistence["repos"]["autonomy"]["listTurns"]>>): Promise<void> {
