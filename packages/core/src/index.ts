@@ -48,6 +48,19 @@ export {
 export { AuditQueryService } from "./audit/audit-query-service.js";
 export { ModelService } from "./models/model-service.js";
 export { TrainingService } from "./training/training-service.js";
+export { TrainingEvidenceService } from "./training/evidence-service.js";
+export { classifyFailure, FAILURE_CLASSES } from "./training/evidence-taxonomy.js";
+export { retainPayload, promptSnapshot, DEFAULT_EVIDENCE_RETENTION, sha256Text as evidenceSha256 } from "./training/evidence-retention.js";
+export type {
+  AttemptListFilter,
+  InferenceAttemptRecord,
+  EvidenceCaptureFailureRecord,
+  EvidenceCorrectionEventRecord,
+  EvidenceCorrectionRecord,
+  EvidenceEligibilityEventRecord,
+  TrainingEvidenceRepository,
+} from "./training/evidence-repository.js";
+export type { FailureClass, AcceptanceStatus, EligibilityStatus, FailureClassification } from "./training/evidence-taxonomy.js";
 export { ExperimentService } from "./training/experiment-service.js";
 export { TRAINING_METHODS, assertMethodExecutable, assertSafeConfig, isHighRisk, planExperiments, selectDevelopmentCandidate } from "./training/experiment-planner.js";
 export { meanExposures, outputDisagreement, stopDecision } from "./training/stability.js";
@@ -155,7 +168,8 @@ export { assessDeployment, improvementPolicyHash, verifyImprovement, IMPROVEMENT
 export type { DeploymentEligibility, ImprovementClass, ImprovementEvidence, ImprovementVerdict } from "./evaluation/improvement.js";
 export { ScriptedTrainingProvider, type ScriptedTrainingOptions } from "./training/scripted-provider.js";
 export { MlxTrainingProvider } from "./training/mlx-provider.js";
-export { ACCEPTANCE_CRITERIA, applyReserved, assignSplit, buildCuratedArithmetic, exampleFromMemory, examplesFromSupplied, parseArithmetic } from "./training/dataset.js";
+export { ACCEPTANCE_CRITERIA, EXAMPLE_SOURCES, applyReserved, assignSplit, buildCuratedArithmetic, exampleFromMemory, examplesFromSupplied, parseArithmetic } from "./training/dataset.js";
+export type { ExampleSource } from "./training/dataset.js";
 export { meetsAcceptance, scoreOutputs } from "./training/evaluate.js";
 export { frozenConfig, TRAINING_BUDGETS } from "./training/profiles.js";
 export { assertNotSelfDecision, assertTrainingTransition } from "./training/transitions.js";

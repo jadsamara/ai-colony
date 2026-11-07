@@ -302,6 +302,128 @@ export const trainingSummarySchema = z.object({
   candidatesRejected: z.number().int().nonnegative(),
 });
 
+export const evidenceFailureClassSchema = z.enum([
+  "json_invalid",
+  "schema_invalid",
+  "serialization_error",
+  "meta_validation_chatter",
+  "repetition",
+  "context_missing",
+  "orchestration_failure",
+  "math_unverified",
+  "unsupported_evidence",
+  "reasoning_error",
+  "inference_timeout",
+  "inference_error",
+  "unknown",
+]);
+
+export const evidenceAcceptanceStatusSchema = z.enum(["accepted", "rejected", "recovered", "failed", "partial"]);
+export const evidenceEligibilityStatusSchema = z.enum(["not_reviewed", "ineligible", "candidate", "verified_for_dataset"]);
+export const evidenceCorrectionStatusSchema = z.enum(["unverified", "verified", "rejected"]);
+
+export const inferenceAttemptSchema = z.object({
+  id: uuidSchema,
+  conversationId: uuidSchema,
+  turnId: uuidSchema.nullable(),
+  departmentId: uuidSchema,
+  modelRegistryId: uuidSchema.nullable(),
+  modelVersion: z.string().nullable(),
+  adapterId: uuidSchema.nullable(),
+  adapterVersion: z.string().nullable(),
+  inferenceEndpoint: z.string(),
+  attemptNumber: z.number().int().positive(),
+  parentAttemptId: uuidSchema.nullable(),
+  createdAt: isoSchema,
+  promptHash: z.string().length(64),
+  promptSnapshot: z.string().nullable(),
+  promptTruncated: z.boolean(),
+  inputTokens: z.number().int().nullable(),
+  outputTokens: z.number().int().nullable(),
+  latencyMs: z.number().int().nonnegative(),
+  rawOutput: z.string().nullable(),
+  rawOutputHash: z.string().length(64),
+  rawTruncated: z.boolean(),
+  rawExpired: z.boolean(),
+  parsedOutput: z.record(z.unknown()).nullable(),
+  validationResult: z.string().nullable(),
+  acceptanceStatus: evidenceAcceptanceStatusSchema,
+  failureClass: evidenceFailureClassSchema.nullable(),
+  failureSymptom: z.string().nullable(),
+  failureRootCause: z.string().nullable(),
+  failureProvisional: z.boolean(),
+  classificationSource: z.enum(["runtime", "human", "evaluation", "system"]),
+  classificationConfidence: z.enum(["observed", "provisional", "reviewed", "verified"]),
+  classificationEvidence: z.string().nullable(),
+  recoveryOfAttemptId: uuidSchema.nullable(),
+  trainingEligible: z.boolean(),
+  eligibilityStatus: evidenceEligibilityStatusSchema,
+  captureStatus: z.enum(["captured", "capture_failed", "unavailable"]),
+  captureError: z.string().nullable(),
+  rawAvailable: z.boolean().optional(),
+  promptAvailable: z.boolean().optional(),
+  datasetIncluded: z.literal(false).optional(),
+});
+
+export const evidenceCorrectionSchema = z.object({
+  id: uuidSchema,
+  attemptId: uuidSchema,
+  proposedResponse: z.string(),
+  artifactRef: z.string().nullable(),
+  authorType: z.enum(["human", "evaluation", "system"]),
+  authorId: z.string(),
+  verificationStatus: evidenceCorrectionStatusSchema,
+  verifierId: z.string().nullable(),
+  verificationMethod: z.string().nullable(),
+  supportingEvidence: z.string().nullable(),
+  departmentId: uuidSchema.nullable(),
+  modelRegistryId: uuidSchema.nullable(),
+  taskLabel: z.string().nullable(),
+  createdAt: isoSchema,
+  reviewedAt: isoSchema.nullable(),
+  revision: z.number().int().positive(),
+});
+
+export const evidenceCorrectionProposeSchema = z
+  .object({
+    proposedResponse: z.string().trim().min(1).max(8_000),
+    artifactRef: z.string().trim().min(1).max(500).nullable().optional(),
+    supportingEvidence: z.string().trim().min(1).max(2_000).nullable().optional(),
+    taskLabel: z.string().trim().min(1).max(120).nullable().optional(),
+  })
+  .strict();
+
+export const evidenceCorrectionReviewSchema = z
+  .object({
+    decision: z.enum(["verified", "rejected"]),
+    method: z.string().trim().min(1).max(200),
+    evidence: z.string().trim().min(1).max(2_000).nullable().optional(),
+  })
+  .strict();
+
+export const evidenceEligibilityUpdateSchema = z
+  .object({
+    status: evidenceEligibilityStatusSchema,
+    reason: z.string().trim().min(1).max(1_000),
+  })
+  .strict();
+
+export const evidenceAttemptListQuerySchema = z.object({
+  conversationId: uuidSchema.optional(),
+  departmentId: uuidSchema.optional(),
+  modelRegistryId: uuidSchema.optional(),
+  failureClass: evidenceFailureClassSchema.optional(),
+  acceptanceStatus: evidenceAcceptanceStatusSchema.optional(),
+  since: isoSchema.optional(),
+  until: isoSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+  includeRaw: z
+    .union([z.literal("true"), z.literal("false"), z.boolean()])
+    .optional()
+    .transform((value) => value === true || value === "true"),
+});
+
 export type TrainingDatasetCreate = z.infer<typeof trainingDatasetCreateSchema>;
 export type TrainingRunCreate = z.infer<typeof trainingRunCreateSchema>;
 export type TrainableCheckpointRegister = z.infer<typeof trainableCheckpointRegisterSchema>;

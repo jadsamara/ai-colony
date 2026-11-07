@@ -9,7 +9,8 @@ export const ACCEPTANCE_CRITERIA: AcceptanceCriteria = {
 };
 
 export type ExampleSplit = "train" | "validation" | "test";
-export type ExampleSource = "curated_arithmetic" | "supplied" | "memory" | "objective_trace";
+export const EXAMPLE_SOURCES = ["curated_arithmetic", "supplied", "memory", "objective_trace"] as const;
+export type ExampleSource = (typeof EXAMPLE_SOURCES)[number];
 
 export interface DraftExample {
   groupKey: string;

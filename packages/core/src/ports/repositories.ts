@@ -33,6 +33,7 @@ import type { CapabilityRepository } from "../capability/repository.js";
 import type { EvaluationRepository } from "../evaluation/repository.js";
 import type { LearningRepository } from "../learning/repository.js";
 import type { TrainingRepository } from "../training/repository.js";
+import type { TrainingEvidenceRepository } from "../training/evidence-repository.js";
 
 export interface PageQuery {
   limit: number;
@@ -946,6 +947,7 @@ export interface Repositories {
   objectives: ObjectiveRepository;
   memories: MemoryRepository;
   training: TrainingRepository;
+  evidence: TrainingEvidenceRepository;
   evaluation: EvaluationRepository;
   learning: LearningRepository;
   experiments: ExperimentRepository;

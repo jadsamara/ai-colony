@@ -33,6 +33,7 @@ import {
   ScriptedTrainingProvider,
   ExperimentService,
   TrainingService,
+  TrainingEvidenceService,
   type EmbeddingProvider,
   type Persistence,
   type TrainingProvider,
@@ -56,6 +57,7 @@ import { registerCapabilityRoutes } from "./routes/capabilities.js";
 import { registerLearningRoutes } from "./routes/learning.js";
 import { registerExperimentRoutes } from "./routes/experiments.js";
 import { registerTrainingRoutes } from "./routes/training.js";
+import { registerTrainingEvidenceRoutes } from "./routes/training-evidence.js";
 import { registerAutonomyRoutes } from "./routes/autonomy.js";
 import { registerObjectiveRoutes } from "./routes/objectives.js";
 import "./types.js";
@@ -123,6 +125,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     },
   );
   const training = new TrainingService(options.persistence, authorizer, trainingProvider, messages, trainingRoots);
+  const evidence = new TrainingEvidenceService(options.persistence, authorizer);
   const experiments = new ExperimentService(options.persistence, authorizer);
   const evaluation = new EvaluationService(options.persistence, authorizer, trainingProvider, messages, trainingRoots);
   const ledger = new CapabilityLedgerService(options.persistence, authorizer);
@@ -159,6 +162,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       route: routeFromConfig(inferenceConfig),
     },
     training,
+    evidence,
     experiments,
     evaluation,
     ledger,
@@ -211,6 +215,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await registerDepartmentRoutes(app);
   await registerAgentRoutes(app);
   await registerTrainingRoutes(app);
+  await registerTrainingEvidenceRoutes(app);
   await registerExperimentRoutes(app);
   await registerEvaluationRoutes(app);
   await registerCapabilityRoutes(app);

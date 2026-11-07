@@ -16,6 +16,7 @@ import type {
   ModelService,
   ExperimentService,
   TrainingService,
+  TrainingEvidenceService,
   InferenceRoute,
   AutonomyService,
   DialogueService,
@@ -38,6 +39,7 @@ export interface AppServices {
   runner: ConversationRunner;
   memories: MemoryService;
   training: TrainingService;
+  evidence: TrainingEvidenceService;
   experiments: ExperimentService;
   evaluation: EvaluationService;
   ledger: CapabilityLedgerService;

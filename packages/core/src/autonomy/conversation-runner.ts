@@ -15,6 +15,8 @@ import type { DialogueService } from "./dialogue-service.js";
 import { redactSensitive } from "./policy.js";
 import type { ConversationJob, ConversationRecord } from "./repository.js";
 import { buildDialogueContext, orchestrationRecommendation } from "./speakers.js";
+import { TrainingEvidenceService } from "../training/evidence-service.js";
+import type { AcceptanceStatus } from "../training/evidence-taxonomy.js";
 
 const LEASE_MS = 30_000;
 const MAX_ATTEMPTS = 3;
@@ -138,6 +140,8 @@ type ClaimResult =
  * one transcript row and one usage charge for that job.
  */
 export class ConversationRunner {
+  private readonly evidence: TrainingEvidenceService;
+
   constructor(
     private readonly persistence: Persistence,
     private readonly authorizer: Authorizer,
@@ -145,7 +149,9 @@ export class ConversationRunner {
     private readonly now: () => Date = () => new Date(),
     private readonly wake?: ConversationWake,
     private readonly leaseMs = LEASE_MS,
-  ) {}
+  ) {
+    this.evidence = new TrainingEvidenceService(persistence, authorizer, undefined, now);
+  }
 
   async run(
     ctx: RequestContext,
@@ -441,8 +447,26 @@ export class ConversationRunner {
     const speakerRow = await this.persistence.repos.autonomy.department(speakerDepartmentId);
     const department = { id: speakerDepartmentId, slug: speakerRow?.slug ?? "department" };
     const prompt = await this.prompt(conversation, speakerRow?.name ?? "department", department.slug, job.action, turns);
-    let result = await this.generate(provider, route, prompt, department, job.conversationId);
+    let attemptNumber = 0;
+    let parentAttemptId: string | null = null;
+    let lastAttemptId: string | null = null;
+    let activeMessages: Array<{ role: "system" | "user"; content: string }> = prompt;
+    let result = await this.generate(provider, route, activeMessages, department, job.conversationId);
     let inspected = inspectDecision(result.text);
+    attemptNumber += 1;
+    lastAttemptId = await this.captureEvidenceAttempt({
+      conversationId: job.conversationId,
+      department,
+      messages: activeMessages,
+      result,
+      attemptNumber,
+      parentAttemptId,
+      acceptanceStatus: inspected.ok ? "partial" : "rejected",
+      diagnostic: inspected.ok ? null : inspected.diagnostic,
+      reason: inspected.ok ? null : "invalid_output",
+      parsedOutput: inspected.ok ? (inspected.value as unknown as Record<string, unknown>) : null,
+    });
+    parentAttemptId = lastAttemptId;
     let recoveredFromInvalid = false;
     if (inspected.ok && inspected.value.searchQuery) {
       const found = await this.dialogue.search(speaker, job.conversationId, inspected.value.searchQuery, 5);
@@ -453,8 +477,23 @@ export class ConversationRunner {
           content: `Authorized transcript matches:\n${found.turns.map((turn) => `message ${turn.id}: ${turn.body}`).join("\n")}\nReturn one JSON object. Do not request another search. Do not mention JSON validation.`,
         },
       ];
+      activeMessages = followUp;
       result = await this.generate(provider, route, followUp, department, job.conversationId);
       inspected = inspectDecision(result.text);
+      attemptNumber += 1;
+      lastAttemptId = await this.captureEvidenceAttempt({
+        conversationId: job.conversationId,
+        department,
+        messages: followUp,
+        result,
+        attemptNumber,
+        parentAttemptId,
+        acceptanceStatus: inspected.ok ? "partial" : "rejected",
+        diagnostic: inspected.ok ? null : inspected.diagnostic,
+        reason: inspected.ok ? null : "invalid_output",
+        parsedOutput: inspected.ok ? (inspected.value as unknown as Record<string, unknown>) : null,
+      });
+      parentAttemptId = lastAttemptId ?? parentAttemptId;
       if (inspected.ok) {
         inspected = { ok: true, value: { ...inspected.value, searchQuery: null } };
       }
@@ -462,7 +501,7 @@ export class ConversationRunner {
     if (!inspected.ok) {
       const diagnostic = inspected.diagnostic;
       await this.recordFailedGeneration(conversation, department, result, diagnostic, "invalid_output");
-      result = await this.generate(provider, route, [
+      const recoveryPrompt: Array<{ role: "system" | "user"; content: string }> = [
         { role: "system", content: `You are the ${speakerRow?.name ?? "department"} department. ${DECISION_JSON_SCHEMA}` },
         {
           role: "user",
@@ -474,8 +513,26 @@ export class ConversationRunner {
             recentTurns: turns.map((turn) => ({ department: turn.departmentSlug, kind: turn.kind, body: turn.body })),
           }) + `\n\n${correctionInstruction(result.text, diagnostic)}`,
         },
-      ], department, job.conversationId);
+      ];
+      activeMessages = recoveryPrompt;
+      const failedAttemptId = lastAttemptId;
+      result = await this.generate(provider, route, recoveryPrompt, department, job.conversationId);
       inspected = inspectDecision(result.text);
+      attemptNumber += 1;
+      lastAttemptId = await this.captureEvidenceAttempt({
+        conversationId: job.conversationId,
+        department,
+        messages: recoveryPrompt,
+        result,
+        attemptNumber,
+        parentAttemptId: failedAttemptId,
+        recoveryOfAttemptId: failedAttemptId,
+        acceptanceStatus: inspected.ok ? "recovered" : "rejected",
+        diagnostic: inspected.ok ? null : inspected.diagnostic,
+        reason: inspected.ok ? null : "invalid_output",
+        parsedOutput: inspected.ok ? (inspected.value as unknown as Record<string, unknown>) : null,
+      });
+      parentAttemptId = lastAttemptId ?? parentAttemptId;
       recoveredFromInvalid = true;
     }
     await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
@@ -490,7 +547,7 @@ export class ConversationRunner {
     const recentBodies = turns.map((turn) => turn.body);
     const verdict = repetitionVerdict(parsed.body, turns);
     if ((isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) || verdict.duplicate) {
-      result = await this.generate(provider, route, [
+      const repetitionPrompt: Array<{ role: "system" | "user"; content: string }> = [
         { role: "system", content: `You are the ${speakerRow?.name ?? "department"} department. ${DECISION_JSON_SCHEMA}` },
         {
           role: "user",
@@ -502,8 +559,39 @@ export class ConversationRunner {
             recentTurns: turns.map((turn) => ({ department: turn.departmentSlug, kind: turn.kind, body: turn.body })),
           })}\n\n${repetitionCorrection(parsed.body)}`,
         },
-      ], department, job.conversationId);
+      ];
+      const rejectedForRepetition = lastAttemptId;
+      if (rejectedForRepetition) {
+        await this.persistence.repos.evidence.updateAttempt(rejectedForRepetition, {
+          acceptanceStatus: "rejected",
+          failureClass: "repetition",
+          failureSymptom: verdict.reason,
+          failureRootCause: null,
+          failureProvisional: true,
+          classificationConfidence: "observed",
+          classificationEvidence:
+            "Repeated dialogue content is an observed quality symptom. It is not automatically a verified reasoning deficiency.",
+        }).catch(async () => {
+          await this.markEvidenceCaptureFailed(job.conversationId, "failed to mark repetitive attempt");
+        });
+      }
+      activeMessages = repetitionPrompt;
+      result = await this.generate(provider, route, repetitionPrompt, department, job.conversationId);
       inspected = inspectDecision(result.text);
+      attemptNumber += 1;
+      lastAttemptId = await this.captureEvidenceAttempt({
+        conversationId: job.conversationId,
+        department,
+        messages: repetitionPrompt,
+        result,
+        attemptNumber,
+        parentAttemptId: rejectedForRepetition,
+        recoveryOfAttemptId: rejectedForRepetition,
+        acceptanceStatus: inspected.ok ? "recovered" : "rejected",
+        diagnostic: inspected.ok ? null : inspected.diagnostic,
+        reason: inspected.ok ? null : "invalid_after_repetition",
+        parsedOutput: inspected.ok ? (inspected.value as unknown as Record<string, unknown>) : null,
+      });
       await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
       if (!inspected.ok) {
         await this.recordFailedGeneration(conversation, department, result, inspected.diagnostic, "invalid_after_repetition");
@@ -516,6 +604,20 @@ export class ConversationRunner {
       const corrected = repetitionVerdict(parsed.body, turns);
       if ((isNearVerbatim(parsed.body, recentBodies) && !permitsEcho(parsed.body, parsed.kind, recentBodies)) || corrected.duplicate) {
         await this.recordFailedGeneration(conversation, department, result, corrected.reason, "repetitive");
+        if (lastAttemptId) {
+          await this.persistence.repos.evidence.updateAttempt(lastAttemptId, {
+            acceptanceStatus: "rejected",
+            failureClass: "repetition",
+            failureSymptom: corrected.reason,
+            failureRootCause: null,
+            failureProvisional: true,
+            classificationConfidence: "observed",
+            classificationEvidence:
+              "Repeated dialogue content is an observed quality symptom. It is not automatically a verified reasoning deficiency.",
+          }).catch(async () => {
+            await this.markEvidenceCaptureFailed(job.conversationId, "failed to update repetitive attempt");
+          });
+        }
         const others = participantIds.filter((id) => id !== department.id);
         const plan = planRecovery({ total: conversation.progressState.recoveryTotal, otherDepartmentIds: others });
         if (plan.action === "close" || !plan.departmentId) {
@@ -542,6 +644,20 @@ export class ConversationRunner {
     const acceptance = repetitionVerdict(parsed.body, turns);
     if (acceptance.duplicate) {
       await this.recordFailedGeneration(conversation, department, result, acceptance.reason, "repetitive");
+      if (lastAttemptId) {
+        await this.persistence.repos.evidence.updateAttempt(lastAttemptId, {
+          acceptanceStatus: "rejected",
+          failureClass: "repetition",
+          failureSymptom: acceptance.reason,
+          failureRootCause: null,
+          failureProvisional: true,
+          classificationConfidence: "observed",
+          classificationEvidence:
+            "Repeated dialogue content is an observed quality symptom. It is not automatically a verified reasoning deficiency.",
+        }).catch(async () => {
+          await this.markEvidenceCaptureFailed(job.conversationId, "failed to mark repetitive attempt");
+        });
+      }
       const others = participantIds.filter((id) => id !== department.id);
       const plan = planRecovery({ total: conversation.progressState.recoveryTotal, otherDepartmentIds: others });
       if (plan.action === "close" || !plan.departmentId) {
@@ -616,7 +732,7 @@ export class ConversationRunner {
     const addressed = parsed.addressedSlug ? await this.persistence.repos.objectives.findDepartmentBySlug(parsed.addressedSlug) : null;
     const activeIds = new Set(participantIds);
     try {
-      await this.dialogue.speak(speaker, provider, route, job.conversationId, {
+      const turn = await this.dialogue.speak(speaker, provider, route, job.conversationId, {
         kind,
         instruction: parsed.body,
         idempotencyKey: `runner:${job.id}`,
@@ -628,6 +744,16 @@ export class ConversationRunner {
           outputTokens: result.usage.outputTokens ?? 0,
         },
       });
+      if (lastAttemptId) {
+        await this.persistence.repos.evidence.updateAttempt(lastAttemptId, {
+          turnId: turn.id,
+          acceptanceStatus: recoveredFromInvalid ? "recovered" : "accepted",
+          parsedOutput: parsed as unknown as Record<string, unknown>,
+          validationResult: acceptance.reason,
+        }).catch(async () => {
+          await this.markEvidenceCaptureFailed(job.conversationId, "failed to finalize accepted attempt");
+        });
+      }
     } catch (error) {
       const latest = await this.requireConversation(job.conversationId);
       if (latest.status !== "open") {
@@ -724,6 +850,8 @@ export class ConversationRunner {
         recoverySpeakerId: conversation.progressState.recoverySpeakerId,
         failedGenerations: conversation.progressState.failedGenerations,
         inferenceLog: conversation.progressState.inferenceLog,
+        evidenceCaptureFailures: conversation.progressState.evidenceCaptureFailures,
+        lastEvidenceCaptureError: conversation.progressState.lastEvidenceCaptureError,
       },
     });
     if (checkpointDue) {
@@ -968,6 +1096,62 @@ export class ConversationRunner {
       status: input.status,
       reason: input.reason.slice(0, 200),
     };
+  }
+
+  private async captureEvidenceAttempt(input: {
+    conversationId: string;
+    department: { id: string; slug: string };
+    messages: Array<{ role: string; content: string }>;
+    result: InferenceResult & { routingModel?: string; routingEndpoint?: string };
+    attemptNumber: number;
+    parentAttemptId: string | null;
+    recoveryOfAttemptId?: string | null;
+    acceptanceStatus: AcceptanceStatus;
+    diagnostic: string | null;
+    reason: string | null;
+    parsedOutput: Record<string, unknown> | null;
+  }): Promise<string | null> {
+    const recorded = await this.evidence.captureAttempt({
+      conversationId: input.conversationId,
+      departmentId: input.department.id,
+      messages: input.messages,
+      rawOutput: input.result.text,
+      parsedOutput: input.parsedOutput,
+      validationResult: input.diagnostic,
+      inferenceEndpoint: input.result.routingEndpoint ?? "shared",
+      attemptNumber: input.attemptNumber,
+      parentAttemptId: input.parentAttemptId,
+      recoveryOfAttemptId: input.recoveryOfAttemptId ?? null,
+      modelRegistryId: QWEN3_8B_MODEL_ID,
+      modelVersion: input.result.routingModel ?? null,
+      adapterId: null,
+      adapterVersion: null,
+      inputTokens: input.result.usage.inputTokens ?? null,
+      outputTokens: input.result.usage.outputTokens ?? null,
+      latencyMs: input.result.latencyMs,
+      acceptanceStatus: input.acceptanceStatus,
+      diagnostic: input.diagnostic,
+      reason: input.reason,
+    });
+    if (!recorded) {
+      await this.markEvidenceCaptureFailed(input.conversationId, "durable inference attempt capture failed");
+      return null;
+    }
+    return recorded.id;
+  }
+
+  private async markEvidenceCaptureFailed(conversationId: string, error: string): Promise<void> {
+    const latest = await this.persistence.repos.autonomy.findConversation(conversationId);
+    if (!latest) {
+      return;
+    }
+    await this.persistence.repos.autonomy.saveConversation(conversationId, {
+      progressState: {
+        ...latest.progressState,
+        evidenceCaptureFailures: latest.progressState.evidenceCaptureFailures + 1,
+        lastEvidenceCaptureError: redactSensitive(error).slice(0, 240),
+      },
+    });
   }
 
   private async recordFailedGeneration(

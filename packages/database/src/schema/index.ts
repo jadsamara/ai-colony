@@ -2390,3 +2390,195 @@ export const conversationContextEvents = pgTable(
     check("conversation_context_events_kind_check", sql`${table.kind} in ('search', 'summary')`),
   ],
 );
+
+const EVIDENCE_ACCEPTANCE = ["accepted", "rejected", "recovered", "failed", "partial"] as const;
+const EVIDENCE_FAILURE_CLASSES = [
+  "json_invalid",
+  "schema_invalid",
+  "serialization_error",
+  "meta_validation_chatter",
+  "repetition",
+  "context_missing",
+  "orchestration_failure",
+  "math_unverified",
+  "unsupported_evidence",
+  "reasoning_error",
+  "inference_timeout",
+  "inference_error",
+  "unknown",
+] as const;
+const EVIDENCE_CLASSIFICATION_SOURCES = ["runtime", "human", "evaluation", "system"] as const;
+const EVIDENCE_CLASSIFICATION_CONFIDENCE = ["observed", "provisional", "reviewed", "verified"] as const;
+const EVIDENCE_ELIGIBILITY = ["not_reviewed", "ineligible", "candidate", "verified_for_dataset"] as const;
+const EVIDENCE_CAPTURE = ["captured", "capture_failed", "unavailable"] as const;
+const EVIDENCE_CORRECTION_STATUSES = ["unverified", "verified", "rejected"] as const;
+const EVIDENCE_CORRECTION_EVENTS = ["proposed", "verified", "rejected", "revised"] as const;
+
+export const trainingInferenceAttempts = pgTable(
+  "training_inference_attempts",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => departmentConversations.id, { onDelete: "restrict" }),
+    turnId: uuid("turn_id").references(() => conversationTurns.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    modelRegistryId: uuid("model_registry_id").references(() => models.id, { onDelete: "restrict" }),
+    modelVersion: text("model_version"),
+    adapterId: uuid("adapter_id"),
+    adapterVersion: text("adapter_version"),
+    inferenceEndpoint: text("inference_endpoint").notNull(),
+    attemptNumber: integer("attempt_number").notNull(),
+    parentAttemptId: uuid("parent_attempt_id").references((): AnyPgColumn => trainingInferenceAttempts.id, {
+      onDelete: "restrict",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    promptHash: text("prompt_hash").notNull(),
+    promptSnapshot: text("prompt_snapshot"),
+    promptTruncated: boolean("prompt_truncated").notNull().default(false),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    latencyMs: integer("latency_ms").notNull(),
+    rawOutput: text("raw_output"),
+    rawOutputHash: text("raw_output_hash").notNull(),
+    rawTruncated: boolean("raw_truncated").notNull().default(false),
+    rawExpired: boolean("raw_expired").notNull().default(false),
+    parsedOutput: jsonb("parsed_output").$type<Record<string, unknown> | null>(),
+    validationResult: text("validation_result"),
+    acceptanceStatus: text("acceptance_status").notNull(),
+    failureClass: text("failure_class"),
+    failureSymptom: text("failure_symptom"),
+    failureRootCause: text("failure_root_cause"),
+    failureProvisional: boolean("failure_provisional").notNull().default(true),
+    classificationSource: text("classification_source").notNull().default("runtime"),
+    classificationConfidence: text("classification_confidence").notNull().default("observed"),
+    classificationEvidence: text("classification_evidence"),
+    recoveryOfAttemptId: uuid("recovery_of_attempt_id").references((): AnyPgColumn => trainingInferenceAttempts.id, {
+      onDelete: "restrict",
+    }),
+    trainingEligible: boolean("training_eligible").notNull().default(false),
+    eligibilityStatus: text("eligibility_status").notNull().default("not_reviewed"),
+    captureStatus: text("capture_status").notNull().default("captured"),
+    captureError: text("capture_error"),
+  },
+  (table) => [
+    index("training_inference_attempts_conversation_idx").on(table.conversationId, table.createdAt),
+    index("training_inference_attempts_department_idx").on(table.departmentId, table.createdAt),
+    index("training_inference_attempts_model_idx").on(table.modelRegistryId, table.createdAt),
+    index("training_inference_attempts_failure_idx").on(table.failureClass, table.acceptanceStatus, table.createdAt),
+    index("training_inference_attempts_parent_idx").on(table.parentAttemptId),
+    check("training_inference_attempts_attempt_number_check", sql`${table.attemptNumber} >= 1`),
+    check("training_inference_attempts_latency_check", sql`${table.latencyMs} >= 0`),
+    check("training_inference_attempts_acceptance_check", textIn("acceptance_status", EVIDENCE_ACCEPTANCE)),
+    check(
+      "training_inference_attempts_failure_class_check",
+      sql`${table.failureClass} is null or ${textIn("failure_class", EVIDENCE_FAILURE_CLASSES)}`,
+    ),
+    check("training_inference_attempts_classification_source_check", textIn("classification_source", EVIDENCE_CLASSIFICATION_SOURCES)),
+    check(
+      "training_inference_attempts_classification_confidence_check",
+      textIn("classification_confidence", EVIDENCE_CLASSIFICATION_CONFIDENCE),
+    ),
+    check("training_inference_attempts_eligibility_status_check", textIn("eligibility_status", EVIDENCE_ELIGIBILITY)),
+    check("training_inference_attempts_capture_status_check", textIn("capture_status", EVIDENCE_CAPTURE)),
+    check("training_inference_attempts_prompt_hash_check", sql`char_length(${table.promptHash}) = 64`),
+    check("training_inference_attempts_raw_hash_check", sql`char_length(${table.rawOutputHash}) = 64`),
+    check(
+      "training_inference_attempts_eligible_default_check",
+      sql`${table.trainingEligible} = false or ${table.eligibilityStatus} = 'verified_for_dataset'`,
+    ),
+  ],
+);
+
+export const trainingEvidenceCorrections = pgTable(
+  "training_evidence_corrections",
+  {
+    id: uuid("id").primaryKey(),
+    attemptId: uuid("attempt_id")
+      .notNull()
+      .references(() => trainingInferenceAttempts.id, { onDelete: "restrict" }),
+    proposedResponse: text("proposed_response").notNull(),
+    artifactRef: text("artifact_ref"),
+    authorType: text("author_type").notNull(),
+    authorId: text("author_id").notNull(),
+    verificationStatus: text("verification_status").notNull().default("unverified"),
+    verifierId: text("verifier_id"),
+    verificationMethod: text("verification_method"),
+    supportingEvidence: text("supporting_evidence"),
+    departmentId: uuid("department_id").references(() => departments.id, { onDelete: "restrict" }),
+    modelRegistryId: uuid("model_registry_id").references(() => models.id, { onDelete: "restrict" }),
+    taskLabel: text("task_label"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    revision: integer("revision").notNull().default(1),
+  },
+  (table) => [
+    index("training_evidence_corrections_attempt_idx").on(table.attemptId, table.createdAt),
+    check("training_evidence_corrections_author_type_check", sql`${table.authorType} in ('human', 'evaluation', 'system')`),
+    check("training_evidence_corrections_status_check", textIn("verification_status", EVIDENCE_CORRECTION_STATUSES)),
+    check("training_evidence_corrections_revision_check", sql`${table.revision} >= 1`),
+  ],
+);
+
+export const trainingEvidenceCorrectionEvents = pgTable(
+  "training_evidence_correction_events",
+  {
+    id: uuid("id").primaryKey(),
+    correctionId: uuid("correction_id")
+      .notNull()
+      .references(() => trainingEvidenceCorrections.id, { onDelete: "restrict" }),
+    eventType: text("event_type").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status"),
+    actorId: text("actor_id").notNull(),
+    method: text("method"),
+    evidence: text("evidence"),
+    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("training_evidence_correction_events_correction_idx").on(table.correctionId, table.createdAt),
+    check("training_evidence_correction_events_type_check", textIn("event_type", EVIDENCE_CORRECTION_EVENTS)),
+  ],
+);
+
+export const trainingEvidenceEligibilityEvents = pgTable(
+  "training_evidence_eligibility_events",
+  {
+    id: uuid("id").primaryKey(),
+    attemptId: uuid("attempt_id")
+      .notNull()
+      .references(() => trainingInferenceAttempts.id, { onDelete: "restrict" }),
+    fromStatus: text("from_status").notNull(),
+    toStatus: text("to_status").notNull(),
+    fromEligible: boolean("from_eligible").notNull(),
+    toEligible: boolean("to_eligible").notNull(),
+    actorId: text("actor_id").notNull(),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("training_evidence_eligibility_events_attempt_idx").on(table.attemptId, table.createdAt),
+    check("training_evidence_eligibility_events_to_check", textIn("to_status", EVIDENCE_ELIGIBILITY)),
+    check(
+      "training_evidence_eligibility_events_eligible_check",
+      sql`${table.toEligible} = false or ${table.toStatus} = 'verified_for_dataset'`,
+    ),
+  ],
+);
+
+export const trainingEvidenceCaptureFailures = pgTable(
+  "training_evidence_capture_failures",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id").references(() => departmentConversations.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").references(() => departments.id, { onDelete: "restrict" }),
+    attemptNumber: integer("attempt_number"),
+    error: text("error").notNull(),
+    context: jsonb("context").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("training_evidence_capture_failures_created_idx").on(table.createdAt)],
+);

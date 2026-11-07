@@ -9,7 +9,7 @@ describe("migration 0011", () => {
     };
     const routing = journal.entries.find((entry) => entry.tag === "0011_routing_decisions");
     expect(routing).toMatchObject({ idx: 11, tag: "0011_routing_decisions", when: 1793553000000 });
-    expect(journal.entries.at(-1)).toMatchObject({ idx: 20, tag: "0020_conversation_integrity", when: 1793562000000 });
+    expect(journal.entries.at(-1)).toMatchObject({ idx: 21, tag: "0021_training_evidence", when: 1793563000000 });
     expect(journal.entries.filter((entry) => entry.when > 1793552000000).map((entry) => entry.tag)).toEqual([
       "0011_routing_decisions",
       "0012_dedicated_serving",
@@ -21,6 +21,7 @@ describe("migration 0011", () => {
       "0018_conversation_continuity",
       "0019_governed_conversations",
       "0020_conversation_integrity",
+      "0021_training_evidence",
     ]);
     expect(sql).toContain('CREATE TABLE "routing_decisions"');
     expect(sql).toContain("routing_decisions_task_unique");

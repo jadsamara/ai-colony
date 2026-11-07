@@ -31,6 +31,7 @@ import { createLearningRepository } from "./learning.js";
 import { createCapabilityRepository } from "./capability.js";
 import { createExperimentRepository } from "./experiments.js";
 import { createTrainingRepository } from "./training.js";
+import { createEvidenceRepository } from "./evidence.js";
 import { createMessageRepository } from "./messages.js";
 import { createObjectiveRepository } from "./objectives.js";
 import { createRoutingRepository } from "./routing.js";
@@ -589,6 +590,7 @@ export function createRepositories(db: DbExecutor): Repositories {
     objectives: createObjectiveRepository(db),
     memories: createMemoryRepository(db),
     training: createTrainingRepository(db),
+    evidence: createEvidenceRepository(db),
     experiments: createExperimentRepository(db),
     evaluation: createEvaluationRepository(db),
     learning: createLearningRepository(db),

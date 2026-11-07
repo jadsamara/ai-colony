@@ -24,6 +24,9 @@ export interface ConversationProgress {
   recoverySpeakerId: string | null;
   failedGenerations: FailedGeneration[];
   inferenceLog: InferenceTurnLog[];
+  /** Observable evidence-writer failures; does not claim capture succeeded. */
+  evidenceCaptureFailures: number;
+  lastEvidenceCaptureError: string | null;
 }
 
 export type RecoveryMode = "none" | "handoff" | "synthesis";
@@ -101,6 +104,8 @@ export function emptyProgress(): ConversationProgress {
     recoverySpeakerId: null,
     failedGenerations: [],
     inferenceLog: [],
+    evidenceCaptureFailures: 0,
+    lastEvidenceCaptureError: null,
   };
 }
 
@@ -128,6 +133,8 @@ export function readProgress(value: unknown): ConversationProgress {
     recoverySpeakerId: typeof row.recoverySpeakerId === "string" ? row.recoverySpeakerId : null,
     failedGenerations: readFailedGenerations(row.failedGenerations),
     inferenceLog: readInferenceLog(row.inferenceLog),
+    evidenceCaptureFailures: typeof row.evidenceCaptureFailures === "number" ? row.evidenceCaptureFailures : 0,
+    lastEvidenceCaptureError: typeof row.lastEvidenceCaptureError === "string" ? row.lastEvidenceCaptureError : null,
   };
 }
 
