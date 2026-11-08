@@ -69,6 +69,16 @@ export { DepartmentLearningService } from "./learning/learning-service.js";
 export { CollaborationService } from "./learning/collaboration-service.js";
 export { AutonomyService } from "./autonomy/autonomy-service.js";
 export { DialogueService } from "./autonomy/dialogue-service.js";
+export { DepartmentRoutingService, type DepartmentRoutingResult } from "./autonomy/department-routing-service.js";
+export {
+  tryDeterministicDepartmentRoute,
+  validateRoutedDepartments,
+  boundedFallbackDepartments,
+  routingIdempotencyKey,
+  orchestrationRouteSchema,
+  ORCHESTRATION_ROUTE_SCHEMA,
+} from "./autonomy/department-routing.js";
+export type { DepartmentRoutingDecisionRecord, DepartmentRoutingRepository } from "./autonomy/department-routing-repository.js";
 export { ConversationRunner, type ConversationRunResult, inspectDecision, correctionInstruction, DECISION_JSON_SCHEMA } from "./autonomy/conversation-runner.js";
 export { assessProgress, departmentContributions, departmentFollowUp, isNearVerbatim, permitsEcho, readProgress, repetitionCorrection } from "./autonomy/conversation-quality.js";
 export { buildCheckpoint, classifyClaim, classifyNovelty, measureProgress, parseModelJson, renderCheckpoint, repetitionVerdict, reviewMathClaim, validateContribution } from "./autonomy/conversation-integrity.js";

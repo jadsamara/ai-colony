@@ -140,19 +140,65 @@ export async function registerAutonomyRoutes(app: FastifyInstance): Promise<void
   );
 
   route.post(
-    "/api/v1/department-conversations",
+    "/api/v1/department-conversations/route",
     {
       schema: {
         tags: ["dialogue"],
         body: z.object({
-          recipientDepartmentId: z.string().uuid(),
-          participantDepartmentIds: z.array(z.string().uuid()).max(10).optional(),
-          topic: z.string().min(1).max(500),
+          task: z.string().trim().min(1).max(2000),
           objectiveId: z.string().uuid().nullable().optional(),
-          kind: kindSchema,
-          instruction: z.string().min(1).max(2000),
+          maxParticipants: z.number().int().min(2).max(12).optional(),
           idempotencyKey: z.string().regex(/^[A-Za-z0-9_.:-]{8,128}$/),
         }),
+        response: { 200: json, ...errorResponses },
+      },
+    },
+    async (request) => {
+      const inference = app.services.inference;
+      const provider = new OpenAICompatibleProvider({
+        baseUrl: inference.baseUrl,
+        apiKey: inference.apiKey,
+        maxConcurrency: 1,
+        transportRetries: 0,
+      });
+      const inferenceRoute = await routeWithDepartmentEndpoints(inference.route, app.database, inference.apiKey);
+      const routing = await app.services.dialogue.routeDepartments(
+        requestContext(request),
+        provider,
+        inferenceRoute,
+        request.body,
+      );
+      return { routing };
+    },
+  );
+
+  route.post(
+    "/api/v1/department-conversations",
+    {
+      schema: {
+        tags: ["dialogue"],
+        body: z.union([
+          z.object({
+            routingMode: z.literal("hybrid"),
+            task: z.string().trim().min(1).max(2000),
+            topic: z.string().min(1).max(500).optional(),
+            objectiveId: z.string().uuid().nullable().optional(),
+            kind: kindSchema,
+            instruction: z.string().min(1).max(2000),
+            idempotencyKey: z.string().regex(/^[A-Za-z0-9_.:-]{8,128}$/),
+            routingIdempotencyKey: z.string().regex(/^[A-Za-z0-9_.:-]{8,128}$/).optional(),
+          }),
+          z.object({
+            routingMode: z.literal("manual").optional(),
+            recipientDepartmentId: z.string().uuid(),
+            participantDepartmentIds: z.array(z.string().uuid()).max(10).optional(),
+            topic: z.string().min(1).max(500),
+            objectiveId: z.string().uuid().nullable().optional(),
+            kind: kindSchema,
+            instruction: z.string().min(1).max(2000),
+            idempotencyKey: z.string().regex(/^[A-Za-z0-9_.:-]{8,128}$/),
+          }),
+        ]),
         response: { 201: json, ...errorResponses },
       },
     },
@@ -164,7 +210,17 @@ export async function registerAutonomyRoutes(app: FastifyInstance): Promise<void
         maxConcurrency: 1,
         transportRetries: 0,
       });
-      const turn = await app.services.dialogue.open(requestContext(request), provider, inference.route, request.body);
+      const inferenceRoute = await routeWithDepartmentEndpoints(inference.route, app.database, inference.apiKey);
+      if (request.body.routingMode === "hybrid") {
+        const opened = await app.services.dialogue.openHybrid(
+          requestContext(request),
+          provider,
+          inferenceRoute,
+          request.body,
+        );
+        return reply.status(201).send(opened);
+      }
+      const turn = await app.services.dialogue.open(requestContext(request), provider, inferenceRoute, request.body);
       return reply.status(201).send({ turn });
     },
   );

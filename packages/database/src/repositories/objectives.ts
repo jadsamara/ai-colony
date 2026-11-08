@@ -89,6 +89,7 @@ function mapInference(row: typeof inferenceRequests.$inferSelect) {
   return {
     id: row.id,
     objectiveId: row.objectiveId,
+    departmentId: row.departmentId,
     taskId: row.taskId,
     attempt: row.attempt,
     purpose: row.purpose,
@@ -330,6 +331,7 @@ export function createObjectiveRepository(db: DbExecutor): ObjectiveRepository {
         .values({
           id: input.id,
           objectiveId: input.objectiveId,
+          departmentId: input.departmentId ?? null,
           taskId: input.taskId,
           attempt: input.attempt,
           purpose: input.purpose,
@@ -380,6 +382,20 @@ export function createObjectiveRepository(db: DbExecutor): ObjectiveRepository {
       await db.insert(inferenceUsage).values(input);
     },
     async reserve(input) {
+      if (!input.objectiveId) {
+        const rows = await db.execute(sql`
+          update colony_autonomy
+          set reserved_inference_requests = reserved_inference_requests + 1,
+              reserved_output_tokens = reserved_output_tokens + ${input.outputTokens},
+              updated_at = now()
+          where id = 'default'
+            and consumed_inference_requests + reserved_inference_requests + 1 <= max_inference_requests
+            and consumed_output_tokens + estimated_output_tokens + reserved_output_tokens + ${input.outputTokens} <= max_inference_output_tokens
+            and estimated_input_tokens + estimated_output_tokens + ${input.estimatedTokens} <= max_inference_estimated_tokens
+          returning id
+        `);
+        return rows.length > 0;
+      }
       const rows = await db.execute(sql`
         update objective_runs
         set reserved_requests = reserved_requests + 1,
@@ -394,6 +410,16 @@ export function createObjectiveRepository(db: DbExecutor): ObjectiveRepository {
       return rows.length > 0;
     },
     async releaseReservation(objectiveId, outputTokens) {
+      if (!objectiveId) {
+        await db.execute(sql`
+          update colony_autonomy
+          set reserved_inference_requests = greatest(reserved_inference_requests - 1, 0),
+              reserved_output_tokens = greatest(reserved_output_tokens - ${outputTokens}, 0),
+              updated_at = now()
+          where id = 'default'
+        `);
+        return;
+      }
       await db.execute(sql`
         update objective_runs
         set reserved_requests = greatest(reserved_requests - 1, 0),
@@ -403,6 +429,25 @@ export function createObjectiveRepository(db: DbExecutor): ObjectiveRepository {
       `);
     },
     async reconcile(input) {
+      if (!input.objectiveId) {
+        await db.execute(sql`
+          update colony_autonomy
+          set reserved_inference_requests = greatest(reserved_inference_requests - 1, 0),
+              reserved_output_tokens = greatest(reserved_output_tokens - ${input.reservedOutputTokens}, 0),
+              consumed_inference_requests = consumed_inference_requests + 1,
+              consumed_input_tokens = consumed_input_tokens + ${input.observedInputTokens},
+              consumed_output_tokens = consumed_output_tokens + ${input.observedOutputTokens},
+              estimated_input_tokens = estimated_input_tokens + ${input.estimatedInputTokens},
+              estimated_output_tokens = estimated_output_tokens + ${input.estimatedOutputTokens},
+              estimated_cost_usd_micros = case
+                when ${input.estimatedCostUsdMicros}::bigint is null then estimated_cost_usd_micros
+                else coalesce(estimated_cost_usd_micros, 0) + ${input.estimatedCostUsdMicros ?? 0}
+              end,
+              updated_at = now()
+          where id = 'default'
+        `);
+        return;
+      }
       await db.execute(sql`
         update objective_runs
         set reserved_requests = greatest(reserved_requests - 1, 0),

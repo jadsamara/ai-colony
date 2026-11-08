@@ -414,6 +414,15 @@ export class ObjectiveService {
     if (!stored) {
       throw notFound("InferenceRequest", input.requestId);
     }
+    const objectiveId = stored.objectiveId;
+    if (!objectiveId) {
+      throw new DomainError(
+        "INVALID_STATE",
+        "Objective completion requires an objective-linked inference request",
+        409,
+        { requestId: stored.id, purpose: stored.purpose },
+      );
+    }
     if (stored.status === "completed" && stored.responseText) {
       return stored.purpose === "synthesize" ? "completed" : "accepted";
     }
@@ -437,7 +446,7 @@ export class ObjectiveService {
         overrideApplied: stored.intendedModelId !== stored.registryModelId,
       });
       await repos.objectives.reconcile({
-        objectiveId: stored.objectiveId,
+        objectiveId,
         reservedOutputTokens: stored.reservedOutputTokens,
         observedInputTokens: input.usage.inputTokens ?? 0,
         observedOutputTokens: input.usage.outputTokens ?? 0,
@@ -445,10 +454,10 @@ export class ObjectiveService {
         estimatedOutputTokens: estimatedOut,
         estimatedCostUsdMicros: cost,
       });
-      const run = await repos.objectives.getRun(stored.objectiveId);
+      const run = await repos.objectives.getRun(objectiveId);
       const decision = stored.taskId
         ? await repos.routing.findByTask(stored.taskId)
-        : await repos.routing.findByObjectivePurpose(stored.objectiveId, stored.purpose);
+        : await repos.routing.findByObjectivePurpose(objectiveId, stored.purpose);
       await repos.audit.append({
         eventType: "routing.execution",
         actorId: WORKER_ACTOR,
@@ -456,11 +465,11 @@ export class ObjectiveService {
         targetType: "inference_request",
         targetId: stored.id,
         action: "completed",
-        correlationId: run?.correlationId ?? stored.objectiveId,
+        correlationId: run?.correlationId ?? objectiveId,
         beforeState: null,
         afterState: null,
         metadata: {
-          objectiveId: stored.objectiveId,
+          objectiveId,
           taskId: stored.taskId,
           registryModelId: stored.registryModelId,
           requestedAlias: stored.requestedAlias,
@@ -477,19 +486,20 @@ export class ObjectiveService {
         },
       });
     });
+    const linked = { purpose: stored.purpose, objectiveId, taskId: stored.taskId };
     if (stored.purpose === "synthesize") {
-      await this.finishSynthesis(stored.objectiveId, input.text);
-      await this.remember(stored, input.text);
+      await this.finishSynthesis(objectiveId, input.text);
+      await this.remember(linked, input.text);
       return "completed";
     }
     if (stored.purpose === "plan" || stored.purpose === "correct") {
-      const outcome = await this.acceptPlan(stored.objectiveId, input.text);
+      const outcome = await this.acceptPlan(objectiveId, input.text);
       if (outcome === "accepted") {
-        await this.remember(stored, input.text);
+        await this.remember(linked, input.text);
       }
       return outcome;
     }
-    await this.remember(stored, input.text);
+    await this.remember(linked, input.text);
     return "accepted";
   }
 
@@ -524,7 +534,7 @@ export class ObjectiveService {
         error: error.slice(0, 500),
       });
       await repos.objectives.releaseReservation(stored.objectiveId, stored.reservedOutputTokens);
-      const run = await repos.objectives.getRun(stored.objectiveId);
+      const run = stored.objectiveId ? await repos.objectives.getRun(stored.objectiveId) : null;
       await repos.audit.append({
         eventType: "routing.execution",
         actorId: WORKER_ACTOR,
@@ -532,7 +542,7 @@ export class ObjectiveService {
         targetType: "inference_request",
         targetId: stored.id,
         action: "failed",
-        correlationId: run?.correlationId ?? stored.objectiveId,
+        correlationId: run?.correlationId ?? stored.objectiveId ?? stored.id,
         beforeState: null,
         afterState: null,
         metadata: { objectiveId: stored.objectiveId, error: error.slice(0, 120) },

@@ -166,6 +166,7 @@ BEGIN
     'ledger_snapshots',
     'ledger_retention_events',
     'routing_decisions',
+    'department_routing_decisions',
     'department_serving_events',
     'product_improvement_events'
   ]

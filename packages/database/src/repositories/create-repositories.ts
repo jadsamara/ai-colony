@@ -35,6 +35,7 @@ import { createEvidenceRepository } from "./evidence.js";
 import { createMessageRepository } from "./messages.js";
 import { createObjectiveRepository } from "./objectives.js";
 import { createRoutingRepository } from "./routing.js";
+import { createDepartmentRoutingRepository } from "./department-routing.js";
 import {
   mapAgent,
   mapApproval,
@@ -596,6 +597,7 @@ export function createRepositories(db: DbExecutor): Repositories {
     learning: createLearningRepository(db),
     capability: createCapabilityRepository(db),
     routing: createRoutingRepository(db),
+    departmentRouting: createDepartmentRoutingRepository(db),
     autonomy: createAutonomyRepository(db),
   };
 }

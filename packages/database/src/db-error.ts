@@ -35,6 +35,10 @@ const CONSTRAINT_MESSAGES: Record<string, { code: string; message: string }> = {
     code: "APPROVAL_ALREADY_PENDING",
     message: "An approval of this type is already pending for the target",
   },
+  department_routing_decisions_idempotency_unique: {
+    code: "IDEMPOTENCY_CONFLICT",
+    message: "This department routing idempotency key was already used",
+  },
 };
 
 export function rethrowAsDomainError(error: unknown): never {

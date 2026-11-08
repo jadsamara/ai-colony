@@ -1,6 +1,6 @@
 import type { TokenUsage } from "./usage.js";
 
-export type InferencePurpose = "plan" | "correct" | "specialist" | "synthesize" | "monitor";
+export type InferencePurpose = "plan" | "correct" | "specialist" | "synthesize" | "monitor" | "routing";
 
 export interface ChatMessage {
   role: "system" | "user";

@@ -29,6 +29,7 @@ import type {
 } from "@ai-colony/contracts";
 import type { DecodedCursor } from "../pagination.js";
 import type { AutonomyRepository } from "../autonomy/repository.js";
+import type { DepartmentRoutingRepository } from "../autonomy/department-routing-repository.js";
 import type { CapabilityRepository } from "../capability/repository.js";
 import type { EvaluationRepository } from "../evaluation/repository.js";
 import type { LearningRepository } from "../learning/repository.js";
@@ -506,7 +507,8 @@ export interface MessageTiming {
 
 export interface InferenceRow {
   id: string;
-  objectiveId: string;
+  objectiveId: string | null;
+  departmentId: string | null;
   taskId: string | null;
   attempt: number;
   purpose: string;
@@ -649,7 +651,8 @@ export interface ObjectiveRepository {
   findResult(taskId: string, attempt: number): Promise<{ id: string } | null>;
   insertInference(input: {
     id: string;
-    objectiveId: string;
+    objectiveId: string | null;
+    departmentId?: string | null;
     taskId: string | null;
     attempt: number;
     purpose: string;
@@ -679,13 +682,13 @@ export interface ObjectiveRepository {
     overrideApplied: boolean;
   }): Promise<void>;
   reserve(input: {
-    objectiveId: string;
+    objectiveId: string | null;
     outputTokens: number;
     estimatedTokens: number;
   }): Promise<boolean>;
-  releaseReservation(objectiveId: string, outputTokens: number): Promise<void>;
+  releaseReservation(objectiveId: string | null, outputTokens: number): Promise<void>;
   reconcile(input: {
-    objectiveId: string;
+    objectiveId: string | null;
     reservedOutputTokens: number;
     observedInputTokens: number;
     observedOutputTokens: number;
@@ -953,6 +956,7 @@ export interface Repositories {
   experiments: ExperimentRepository;
   capability: CapabilityRepository;
   routing: RoutingRepository;
+  departmentRouting: DepartmentRoutingRepository;
   autonomy: AutonomyRepository;
 }
 

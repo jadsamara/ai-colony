@@ -248,6 +248,8 @@ async function seedFoundationsInTx(tx: SeedExecutor): Promise<void> {
       conversationSoftTokenBudget: 20_000,
       conversationHardTokenCeiling: 60_000,
       conversationCheckpointTurns: 10,
+      maxInferenceOutputTokens: 4_000,
+      maxInferenceEstimatedTokens: 32_000,
     })
     .onConflictDoNothing();
 }
@@ -527,6 +529,12 @@ export async function truncateColony(db: Database): Promise<void> {
       memories,
       inference_usage,
       inference_requests,
+      training_evidence_correction_events,
+      training_evidence_eligibility_events,
+      training_evidence_corrections,
+      training_evidence_capture_failures,
+      training_inference_attempts,
+      department_routing_decisions,
       conversation_context_events,
       conversation_jobs,
       conversation_turn_claims,

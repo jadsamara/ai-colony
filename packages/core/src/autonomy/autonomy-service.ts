@@ -197,8 +197,11 @@ export class AutonomyService {
     if (settings.lastCycleAt && this.now().getTime() - Date.parse(settings.lastCycleAt) < waitMs) {
       return this.finish(ctx, "cooldown", "The goal-generation cooldown has not elapsed.", null, [], null);
     }
-    if (settings.maxInferenceRequests < 1) {
-      return this.finish(ctx, "budget", "The goal-generation inference budget is zero.", null, [], null);
+    if (
+      settings.maxInferenceRequests < 1 ||
+      settings.consumedInferenceRequests + settings.reservedInferenceRequests >= settings.maxInferenceRequests
+    ) {
+      return this.finish(ctx, "budget", "The colony inference budget is exhausted.", null, [], null);
     }
     const active = await this.persistence.repos.autonomy.countSelectedGoals();
     if (active >= settings.maxActiveGoals) {

@@ -13,20 +13,113 @@ import { dialoguePrompt, redactMessages } from "./policy.js";
 import type { ConversationRecord, ConversationTurnRecord, MembershipAction, MembershipState, TurnClaim } from "./repository.js";
 import type { ParticipantRole } from "./repository.js";
 import { buildDialogueContext, maySpeak, orchestrationRecommendation } from "./speakers.js";
+import { routingIdempotencyKey } from "./department-routing.js";
+import { DepartmentRoutingService } from "./department-routing-service.js";
+import type { DepartmentRoutingResult } from "./department-routing-service.js";
 
 const KEY = /^[A-Za-z0-9_.:-]{8,128}$/;
 const CLAIM_LEASE_MS = 15_000;
 const AVAILABLE = new Set(["idle", "running", "paused"]);
 
-type Route = Pick<InferenceRoute, "alias" | "temperature" | "maxOutputTokens" | "timeoutMs" | "dedicatedRouting">;
+type Route = Pick<
+  InferenceRoute,
+  | "alias"
+  | "temperature"
+  | "maxOutputTokens"
+  | "timeoutMs"
+  | "dedicatedRouting"
+  | "rates"
+  | "globalConcurrency"
+  | "departmentConcurrency"
+>;
 
 export class DialogueService {
+  private readonly routing: DepartmentRoutingService;
+
   constructor(
     private readonly persistence: Persistence,
     private readonly authorizer: Authorizer,
     private readonly messages: MessagingService,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+  ) {
+    this.routing = new DepartmentRoutingService(persistence, authorizer, now);
+  }
+
+  /**
+   * Hybrid routing entry: select departments, then open a conversation.
+   * Compatible design for a single specialist: opener (requester) + primary specialist.
+   * Does not invent a fictitious peer department.
+   */
+  async openHybrid(
+    ctx: RequestContext,
+    provider: InferenceProvider,
+    route: Route,
+    input: {
+      task: string;
+      topic?: string;
+      objectiveId?: string | null;
+      kind: DialogueKind;
+      instruction: string;
+      idempotencyKey: string;
+      routingIdempotencyKey?: string;
+    },
+  ): Promise<{ turn: ConversationTurnRecord; routing: DepartmentRoutingResult }> {
+    this.requireAgent(ctx);
+    const decision = await this.routing.route(ctx, provider, route, {
+      task: input.task,
+      objectiveId: input.objectiveId ?? null,
+      idempotencyKey: routingIdempotencyKey(input.routingIdempotencyKey, input.idempotencyKey),
+      excludeDepartmentId: ctx.actor.departmentId,
+    });
+    if (decision.approvalRequired && ctx.actor.role !== "system_administrator" && ctx.actor.role !== "ceo_agent") {
+      throw new DomainError(
+        "APPROVAL_REQUIRED",
+        "This routing decision requires CEO or system administrator approval before opening a conversation",
+        403,
+        { decisionId: decision.decisionId, method: decision.method },
+      );
+    }
+    try {
+      const turn = await this.open(ctx, provider, route, {
+        recipientDepartmentId: decision.primaryDepartmentId,
+        participantDepartmentIds: decision.additionalDepartmentIds,
+        topic: (input.topic ?? input.task).slice(0, 500),
+        objectiveId: input.objectiveId ?? null,
+        kind: input.kind,
+        instruction: input.instruction,
+        idempotencyKey: input.idempotencyKey,
+      });
+      return { turn, routing: decision };
+    } catch (error) {
+      // Routing decision remains durable. Retry with the same keys reuses the decision and turn idempotency.
+      if (error instanceof DomainError) {
+        throw new DomainError(error.code, error.message, error.statusCode, {
+          ...(error.details ?? {}),
+          routingDecisionId: decision.decisionId,
+          routingMethod: decision.method,
+          openFailed: true,
+        });
+      }
+      throw error;
+    }
+  }
+
+  async routeDepartments(
+    ctx: RequestContext,
+    provider: InferenceProvider,
+    route: Route,
+    input: {
+      task: string;
+      objectiveId?: string | null;
+      idempotencyKey: string;
+      maxParticipants?: number;
+    },
+  ): Promise<DepartmentRoutingResult> {
+    return this.routing.route(ctx, provider, route, {
+      ...input,
+      excludeDepartmentId: ctx.actor.departmentId,
+    });
+  }
 
   async open(
     ctx: RequestContext,

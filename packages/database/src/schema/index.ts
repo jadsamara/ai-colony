@@ -605,9 +605,8 @@ export const inferenceRequests = pgTable(
   "inference_requests",
   {
     id: uuid("id").primaryKey(),
-    objectiveId: uuid("objective_id")
-      .notNull()
-      .references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    objectiveId: uuid("objective_id").references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    departmentId: uuid("department_id").references(() => departments.id, { onDelete: "restrict" }),
     taskId: uuid("task_id").references(() => objectiveTasks.id, { onDelete: "restrict" }),
     attempt: integer("attempt").notNull(),
     purpose: text("purpose").notNull(),
@@ -631,10 +630,12 @@ export const inferenceRequests = pgTable(
   (table) => [
     unique("inference_requests_key_unique").on(table.idempotencyKey),
     index("inference_requests_objective_idx").on(table.objectiveId, table.createdAt),
+    index("inference_requests_department_idx").on(table.departmentId, table.createdAt),
+    index("inference_requests_adhoc_idx").on(table.createdAt),
     check("inference_requests_status_check", textIn("status", INFERENCE_REQUEST_STATUSES)),
     check(
       "inference_requests_purpose_check",
-      sql`${table.purpose} in ('plan', 'correct', 'specialist', 'synthesize', 'monitor')`,
+      sql`${table.purpose} in ('plan', 'correct', 'specialist', 'synthesize', 'monitor', 'routing')`,
     ),
   ],
 );
@@ -2136,28 +2137,59 @@ export const productImprovementEvents = pgTable(
   (table) => [index("product_improvement_events_proposal_idx").on(table.proposalId, table.createdAt)],
 );
 
-export const colonyAutonomy = pgTable("colony_autonomy", {
-  id: text("id").primaryKey(),
-  enabled: boolean("enabled").notNull().default(false),
-  paused: boolean("paused").notNull().default(false),
-  intervalMs: integer("interval_ms").notNull(),
-  cooldownMs: integer("cooldown_ms").notNull(),
-  maxActiveGoals: integer("max_active_goals").notNull(),
-  maxInferenceRequests: integer("max_inference_requests").notNull(),
-  maxDurationMs: integer("max_duration_ms").notNull(),
-  maxConversations: integer("max_conversations").notNull(),
-  maxConversationMessages: integer("max_conversation_messages").notNull(),
-  maxConversationTokens: integer("max_conversation_tokens").notNull(),
-  maxConversationParticipants: integer("max_conversation_participants").notNull().default(12),
-  conversationExecutionEnabled: boolean("conversation_execution_enabled").notNull().default(false),
-  maxConcurrentConversationTurns: integer("max_concurrent_conversation_turns").notNull().default(1),
-  contextTokenBudget: integer("context_token_budget").notNull().default(1500),
-  conversationSoftTokenBudget: integer("conversation_soft_token_budget").notNull().default(20_000),
-  conversationHardTokenCeiling: integer("conversation_hard_token_ceiling").notNull().default(60_000),
-  conversationCheckpointTurns: integer("conversation_checkpoint_turns").notNull().default(10),
-  lastCycleAt: timestamp("last_cycle_at", { withTimezone: true }),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const colonyAutonomy = pgTable(
+  "colony_autonomy",
+  {
+    id: text("id").primaryKey(),
+    enabled: boolean("enabled").notNull().default(false),
+    paused: boolean("paused").notNull().default(false),
+    intervalMs: integer("interval_ms").notNull(),
+    cooldownMs: integer("cooldown_ms").notNull(),
+    maxActiveGoals: integer("max_active_goals").notNull(),
+    maxInferenceRequests: integer("max_inference_requests").notNull(),
+    maxDurationMs: integer("max_duration_ms").notNull(),
+    maxConversations: integer("max_conversations").notNull(),
+    maxConversationMessages: integer("max_conversation_messages").notNull(),
+    maxConversationTokens: integer("max_conversation_tokens").notNull(),
+    maxConversationParticipants: integer("max_conversation_participants").notNull().default(12),
+    conversationExecutionEnabled: boolean("conversation_execution_enabled").notNull().default(false),
+    maxConcurrentConversationTurns: integer("max_concurrent_conversation_turns").notNull().default(1),
+    contextTokenBudget: integer("context_token_budget").notNull().default(1500),
+    conversationSoftTokenBudget: integer("conversation_soft_token_budget").notNull().default(20_000),
+    conversationHardTokenCeiling: integer("conversation_hard_token_ceiling").notNull().default(60_000),
+    conversationCheckpointTurns: integer("conversation_checkpoint_turns").notNull().default(10),
+    maxInferenceOutputTokens: integer("max_inference_output_tokens").notNull().default(4_000),
+    maxInferenceEstimatedTokens: integer("max_inference_estimated_tokens").notNull().default(32_000),
+    consumedInferenceRequests: integer("consumed_inference_requests").notNull().default(0),
+    reservedInferenceRequests: integer("reserved_inference_requests").notNull().default(0),
+    consumedInputTokens: integer("consumed_input_tokens").notNull().default(0),
+    consumedOutputTokens: integer("consumed_output_tokens").notNull().default(0),
+    estimatedInputTokens: integer("estimated_input_tokens").notNull().default(0),
+    estimatedOutputTokens: integer("estimated_output_tokens").notNull().default(0),
+    reservedOutputTokens: integer("reserved_output_tokens").notNull().default(0),
+    estimatedCostUsdMicros: bigint("estimated_cost_usd_micros", { mode: "number" }),
+    lastCycleAt: timestamp("last_cycle_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "colony_autonomy_inference_counters_check",
+      sql`${table.consumedInferenceRequests} >= 0
+        and ${table.reservedInferenceRequests} >= 0
+        and ${table.consumedInputTokens} >= 0
+        and ${table.consumedOutputTokens} >= 0
+        and ${table.estimatedInputTokens} >= 0
+        and ${table.estimatedOutputTokens} >= 0
+        and ${table.reservedOutputTokens} >= 0`,
+    ),
+    check(
+      "colony_autonomy_inference_token_limits_check",
+      sql`${table.maxInferenceOutputTokens} > 0
+        and ${table.maxInferenceEstimatedTokens} > 0
+        and ${table.maxInferenceEstimatedTokens} >= ${table.maxInferenceOutputTokens}`,
+    ),
+  ],
+);
 
 export const colonyGoalCycles = pgTable(
   "colony_goal_cycles",
@@ -2581,4 +2613,40 @@ export const trainingEvidenceCaptureFailures = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("training_evidence_capture_failures_created_idx").on(table.createdAt)],
+);
+
+const DEPARTMENT_ROUTING_METHODS = ["deterministic", "model_assisted", "fallback"] as const;
+const DEPARTMENT_ROUTING_CONFIDENCE = ["high", "medium", "low"] as const;
+
+export const departmentRoutingDecisions = pgTable(
+  "department_routing_decisions",
+  {
+    id: uuid("id").primaryKey(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    taskText: text("task_text").notNull(),
+    objectiveId: uuid("objective_id").references(() => objectiveRuns.id, { onDelete: "restrict" }),
+    method: text("method").notNull(),
+    primaryDepartmentId: uuid("primary_department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    recommendedDepartmentIds: jsonb("recommended_department_ids").$type<string[]>().notNull(),
+    rejectedRecommendations: jsonb("rejected_recommendations").$type<Array<Record<string, unknown>>>().notNull(),
+    finalParticipantIds: jsonb("final_participant_ids").$type<string[]>().notNull(),
+    rationale: text("rationale").notNull(),
+    confidence: text("confidence").notNull(),
+    uncertainty: text("uncertainty"),
+    approvalRequired: boolean("approval_required").notNull().default(false),
+    modelMetadata: jsonb("model_metadata").$type<Record<string, unknown> | null>(),
+    fallbackReason: text("fallback_reason"),
+    createdBy: text("created_by").notNull(),
+    correlationId: text("correlation_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("department_routing_decisions_idempotency_unique").on(table.idempotencyKey),
+    index("department_routing_decisions_created_idx").on(table.createdAt),
+    index("department_routing_decisions_method_idx").on(table.method, table.createdAt),
+    check("department_routing_decisions_method_check", textIn("method", DEPARTMENT_ROUTING_METHODS)),
+    check("department_routing_decisions_confidence_check", textIn("confidence", DEPARTMENT_ROUTING_CONFIDENCE)),
+  ],
 );

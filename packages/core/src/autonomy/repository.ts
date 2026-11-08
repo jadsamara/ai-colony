@@ -18,6 +18,16 @@ export interface AutonomySettings {
   conversationSoftTokenBudget: number;
   conversationHardTokenCeiling: number;
   conversationCheckpointTurns: number;
+  maxInferenceOutputTokens: number;
+  maxInferenceEstimatedTokens: number;
+  consumedInferenceRequests: number;
+  reservedInferenceRequests: number;
+  consumedInputTokens: number;
+  consumedOutputTokens: number;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  reservedOutputTokens: number;
+  estimatedCostUsdMicros: number | null;
   lastCycleAt: string | null;
   updatedAt: string;
 }
