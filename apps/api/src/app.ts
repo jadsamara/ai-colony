@@ -28,6 +28,7 @@ import {
   MlxTrainingProvider,
   AutonomyService,
   DialogueService,
+  DepartmentJoinService,
   ConversationRunner,
   ObjectiveService,
   ScriptedTrainingProvider,
@@ -133,6 +134,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const collaboration = new CollaborationService(options.persistence, authorizer, memories, messages);
   const objectives = new ObjectiveService(options.persistence, authorizer, messages);
   const dialogue = new DialogueService(options.persistence, authorizer, messages);
+  const joins = new DepartmentJoinService(options.persistence, authorizer, dialogue);
   app.decorate("services", {
     identity: new IdentityService(options.persistence),
     departments: new DepartmentService(options.persistence, authorizer),
@@ -149,6 +151,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     objectives,
     autonomy: new AutonomyService(options.persistence, authorizer, objectives),
     dialogue,
+    joins,
     runner: new ConversationRunner(options.persistence, authorizer, dialogue),
     memories,
     inference: {

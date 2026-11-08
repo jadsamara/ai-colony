@@ -635,7 +635,7 @@ export const inferenceRequests = pgTable(
     check("inference_requests_status_check", textIn("status", INFERENCE_REQUEST_STATUSES)),
     check(
       "inference_requests_purpose_check",
-      sql`${table.purpose} in ('plan', 'correct', 'specialist', 'synthesize', 'monitor', 'routing')`,
+      sql`${table.purpose} in ('plan', 'correct', 'specialist', 'synthesize', 'monitor', 'routing', 'join_approval')`,
     ),
   ],
 );
@@ -2617,6 +2617,46 @@ export const trainingEvidenceCaptureFailures = pgTable(
 
 const DEPARTMENT_ROUTING_METHODS = ["deterministic", "model_assisted", "fallback"] as const;
 const DEPARTMENT_ROUTING_CONFIDENCE = ["high", "medium", "low"] as const;
+const DEPARTMENT_JOIN_STATUSES = ["pending", "approved", "rejected", "failed"] as const;
+
+export const departmentJoinRequests = pgTable(
+  "department_join_requests",
+  {
+    id: uuid("id").primaryKey(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => departmentConversations.id, { onDelete: "restrict" }),
+    requesterDepartmentId: uuid("requester_department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    targetDepartmentId: uuid("target_department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    justification: text("justification").notNull(),
+    status: text("status").notNull(),
+    decisionRationale: text("decision_rationale"),
+    confidence: text("confidence"),
+    taskBrief: text("task_brief"),
+    inferenceRequestId: uuid("inference_request_id").references(() => inferenceRequests.id, { onDelete: "restrict" }),
+    modelMetadata: jsonb("model_metadata").$type<Record<string, unknown> | null>(),
+    failureReason: text("failure_reason"),
+    createdBy: text("created_by").notNull(),
+    correlationId: text("correlation_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("department_join_requests_idempotency_unique").on(table.idempotencyKey),
+    index("department_join_requests_conversation_idx").on(table.conversationId, table.createdAt),
+    index("department_join_requests_status_idx").on(table.status, table.createdAt),
+    check("department_join_requests_status_check", textIn("status", DEPARTMENT_JOIN_STATUSES)),
+    check(
+      "department_join_requests_confidence_check",
+      sql`${table.confidence} is null or ${table.confidence} in ('high', 'medium', 'low')`,
+    ),
+  ],
+);
 
 export const departmentRoutingDecisions = pgTable(
   "department_routing_decisions",

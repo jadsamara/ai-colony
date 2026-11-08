@@ -79,6 +79,15 @@ export {
   ORCHESTRATION_ROUTE_SCHEMA,
 } from "./autonomy/department-routing.js";
 export type { DepartmentRoutingDecisionRecord, DepartmentRoutingRepository } from "./autonomy/department-routing-repository.js";
+export { DepartmentJoinService, type DepartmentJoinResult } from "./autonomy/department-join-service.js";
+export {
+  orchestrationJoinSchema,
+  ORCHESTRATION_JOIN_SCHEMA,
+  buildJoinTaskBrief,
+  JOIN_REQUEST_STATUSES,
+} from "./autonomy/department-join.js";
+export type { DepartmentJoinRequestRecord, DepartmentJoinRequestRepository } from "./autonomy/department-join-repository.js";
+export type { JoinRequestStatus, JoinConfidence } from "./autonomy/department-join.js";
 export { ConversationRunner, type ConversationRunResult, inspectDecision, correctionInstruction, DECISION_JSON_SCHEMA } from "./autonomy/conversation-runner.js";
 export { assessProgress, departmentContributions, departmentFollowUp, isNearVerbatim, permitsEcho, readProgress, repetitionCorrection } from "./autonomy/conversation-quality.js";
 export { buildCheckpoint, classifyClaim, classifyNovelty, measureProgress, parseModelJson, renderCheckpoint, repetitionVerdict, reviewMathClaim, validateContribution } from "./autonomy/conversation-integrity.js";

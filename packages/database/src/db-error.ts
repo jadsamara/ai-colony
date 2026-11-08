@@ -39,6 +39,10 @@ const CONSTRAINT_MESSAGES: Record<string, { code: string; message: string }> = {
     code: "IDEMPOTENCY_CONFLICT",
     message: "This department routing idempotency key was already used",
   },
+  department_join_requests_idempotency_unique: {
+    code: "IDEMPOTENCY_CONFLICT",
+    message: "This department join request idempotency key was already used",
+  },
 };
 
 export function rethrowAsDomainError(error: unknown): never {

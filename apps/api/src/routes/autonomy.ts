@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { DIALOGUE_KINDS } from "@ai-colony/contracts";
+import { DomainError } from "@ai-colony/core";
 import { OpenAICompatibleProvider } from "@ai-colony/inference";
 import { routeWithDepartmentEndpoints } from "../conversation-inference.js";
 import { errorResponses, requestContext } from "./common.js";
@@ -316,6 +317,74 @@ export async function registerAutonomyRoutes(app: FastifyInstance): Promise<void
         request.body,
       );
       return reply.status(201).send({ turn });
+    },
+  );
+
+  route.post(
+    "/api/v1/department-conversations/:id/join-requests",
+    {
+      schema: {
+        tags: ["dialogue"],
+        params: idParams,
+        body: z.object({
+          targetDepartmentId: z.string().uuid(),
+          justification: z.string().trim().min(1).max(2000),
+          idempotencyKey: z.string().regex(/^[A-Za-z0-9_.:-]{8,128}$/),
+        }),
+        response: { 201: json, ...errorResponses },
+      },
+    },
+    async (request, reply) => {
+      const inference = app.services.inference;
+      const provider = new OpenAICompatibleProvider({
+        baseUrl: inference.baseUrl,
+        apiKey: inference.apiKey,
+        maxConcurrency: 1,
+        transportRetries: 0,
+      });
+      const inferenceRoute = await routeWithDepartmentEndpoints(inference.route, app.database, inference.apiKey);
+      const joinRequest = await app.services.joins.requestJoin(
+        requestContext(request),
+        provider,
+        inferenceRoute,
+        request.params.id,
+        request.body,
+      );
+      return reply.status(201).send({ joinRequest });
+    },
+  );
+
+  route.get(
+    "/api/v1/department-conversations/:id/join-requests",
+    {
+      schema: {
+        tags: ["dialogue"],
+        params: idParams,
+        response: { 200: json, ...errorResponses },
+      },
+    },
+    async (request) => ({
+      joinRequests: await app.services.joins.listJoinRequests(requestContext(request), request.params.id),
+    }),
+  );
+
+  route.get(
+    "/api/v1/department-conversations/:id/join-requests/:requestId",
+    {
+      schema: {
+        tags: ["dialogue"],
+        params: z.object({ id: z.string().uuid(), requestId: z.string().uuid() }),
+        response: { 200: json, ...errorResponses },
+      },
+    },
+    async (request) => {
+      const joinRequest = await app.services.joins.getJoinRequest(requestContext(request), request.params.requestId);
+      if (joinRequest.conversationId !== request.params.id) {
+        throw new DomainError("NOT_FOUND", "DepartmentJoinRequest was not found", 404, {
+          requestId: request.params.requestId,
+        });
+      }
+      return { joinRequest };
     },
   );
 

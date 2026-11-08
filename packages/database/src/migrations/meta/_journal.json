@@ -183,6 +183,13 @@
       "when": 1793567000000,
       "tag": "0025_colony_inference_token_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793568000000,
+      "tag": "0026_department_join_requests",
+      "breakpoints": true
     }
   ]
 }

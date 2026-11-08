@@ -528,6 +528,7 @@ export async function truncateColony(db: Database): Promise<void> {
       memory_embedding_usage,
       memories,
       inference_usage,
+      department_join_requests,
       inference_requests,
       training_evidence_correction_events,
       training_evidence_eligibility_events,

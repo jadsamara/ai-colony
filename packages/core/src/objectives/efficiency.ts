@@ -245,7 +245,7 @@ function departmentFor(row: InferenceObservation, departmentByTask: Map<string, 
   if (row.purpose === "plan" || row.purpose === "correct" || row.purpose === "synthesize" || row.purpose === "monitor") {
     return "ceo";
   }
-  if (row.purpose === "routing") {
+  if (row.purpose === "routing" || row.purpose === "join_approval") {
     return "orchestration";
   }
   return "unattributed";
