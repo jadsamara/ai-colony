@@ -238,6 +238,8 @@ export interface AutonomyRepository {
   insertClaim(input: Omit<TurnClaim, "updatedAt" | "body" | "prompt" | "inputTokens" | "outputTokens"> & { body?: string | null; prompt?: Array<{ role: string; content: string }> | null; inputTokens?: number | null; outputTokens?: number | null; updatedAt?: Date }): Promise<void>;
   saveClaimBody(key: string, patch: { body: string; prompt: Array<{ role: string; content: string }>; inputTokens: number; outputTokens: number; at: Date }): Promise<void>;
   recordTurnUsage(conversationId: string, usage: { requests: number; inputTokens: number; outputTokens: number; at: Date }): Promise<void>;
+  /** Account inference cost without advancing messageCount (rejected / recovery generations). */
+  recordInferenceUsage(conversationId: string, usage: { requests: number; inputTokens: number; outputTokens: number; at: Date }): Promise<void>;
   addContextTokens(conversationId: string, tokens: number): Promise<void>;
   countMemories(): Promise<number>;
   countBlockingHumanWork(): Promise<number>;

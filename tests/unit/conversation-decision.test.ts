@@ -33,8 +33,21 @@ describe("conversation decision parsing", () => {
       return;
     }
     expect(inspected.diagnostic).toContain("kind: invalid value");
+    expect(inspected.diagnostic).toContain("allowed:");
+    expect(inspected.diagnostic).toContain("response");
     expect(inspected.diagnostic).not.toContain("SECRET-MODEL-OUTPUT");
     expect(inspected.diagnostic.length).toBeLessThanOrEqual(240);
+  });
+
+  it("rejects essay as an invalid kind and keeps the schema enum explicit", () => {
+    const inspected = inspectDecision(JSON.stringify({ kind: "essay", body: "A long analytical essay about forgetting." }));
+    expect(inspected.ok).toBe(false);
+    if (inspected.ok) {
+      return;
+    }
+    expect(inspected.diagnostic).toContain("kind: invalid value");
+    expect(DECISION_JSON_SCHEMA).toContain("Do not invent kinds such as essay");
+    expect(DECISION_JSON_SCHEMA).toContain("question|response|proposal");
   });
 
   it("builds a clean correction prompt without leaking the previous model output into research context", () => {

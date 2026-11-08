@@ -374,7 +374,7 @@ describe("autonomous conversation runtime", () => {
     expect(parent.turns.some((turn) => turn.prompt.some((message) => message.content.includes("Working-group findings")))).toBe(true);
   });
 
-  it("corrects invalid model JSON once and stores a bounded diagnostic when correction fails", async () => {
+  it("corrects invalid model JSON with bounded recovery and stores diagnostics when corrections fail", async () => {
     await seed(testDb());
     await enable();
     const { dialogue, runner } = services();
@@ -401,10 +401,11 @@ describe("autonomous conversation runtime", () => {
     }
 
     const secret = "SECRET-MODEL-OUTPUT-UNCORRECTED";
-    const stuck = outputsProvider([`not-json ${secret}`, `{still ${secret}`]);
+    const stuck = outputsProvider([`not-json ${secret}`, `{still ${secret}`, `{"kind":"essay","body":"${secret}"}`]);
     const failedId = await openRepair(dialogue, stuck, "fix-failed", "private-topic-token");
     await runner.run(admin(), failedId, stuck, route, { maxTurns: 1 });
     const failed = await persistence.repos.autonomy.findConversation(failedId);
+    const runtime = await runner.status(admin(), failedId);
     expect(failed?.status).toBe("terminated");
     expect(failed?.closeReason).toBe("model_invalid");
     expect(failed?.outcome).toBe("failed");
@@ -412,7 +413,12 @@ describe("autonomous conversation runtime", () => {
     expect(failed?.lastError?.length).toBeLessThanOrEqual(240);
     expect(failed?.lastError).not.toContain(secret);
     expect(failed?.lastError).not.toContain("private-topic-token");
-    expect(stuck.requests.filter((request) => request.messages.some((message) => message.content.includes("Return one JSON object")))).toHaveLength(2);
+    expect(failed?.progressState.failedGenerations.length).toBeGreaterThanOrEqual(3);
+    expect(failed?.progressState.inferenceLog.some((entry) => entry.status === "failed")).toBe(true);
+    expect(runtime.failedGenerations.length).toBeGreaterThanOrEqual(3);
+    expect(runtime.inferenceLog.length).toBeGreaterThanOrEqual(3);
+    expect(runtime.lastError?.startsWith("model_invalid:")).toBe(true);
+    expect(stuck.requests.filter((request) => request.messages.some((message) => message.content.includes("Return one JSON object")))).toHaveLength(3);
   });
 
   it("corrects a near-verbatim turn, continues through a checkpoint, and pauses at the hard ceiling", async () => {

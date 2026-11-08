@@ -20,9 +20,23 @@ import type { AcceptanceStatus } from "../training/evidence-taxonomy.js";
 
 const LEASE_MS = 30_000;
 const MAX_ATTEMPTS = 3;
+/** Corrections after the initial generation for invalid model output. */
+export const MAX_INVALID_CORRECTIONS = 2;
+const DECISION_KINDS = [
+  "question",
+  "response",
+  "proposal",
+  "challenge",
+  "evidence",
+  "counterargument",
+  "agreement",
+  "disagreement",
+  "resolution",
+  "close",
+] as const;
 const UNCERTAIN = /uncertain|cannot verify|not established|unresolved|open question/i;
 const decisionSchema = z.object({
-  kind: z.enum(["question", "response", "proposal", "challenge", "evidence", "counterargument", "agreement", "disagreement", "resolution", "close"]),
+  kind: z.enum(DECISION_KINDS),
   body: z.string().trim().min(1).max(4_000),
   addressedSlug: z.string().trim().min(1).max(64).nullable().optional(),
   inviteSlug: z.string().trim().min(1).max(64).nullable().optional(),
@@ -35,9 +49,10 @@ const DIAGNOSTIC_LIMIT = 240;
 
 export const DECISION_JSON_SCHEMA = [
   "Return one JSON object and no other text.",
-  "Required JSON schema: {\"kind\":\"question\"|\"response\"|\"proposal\"|\"challenge\"|\"evidence\"|\"counterargument\"|\"agreement\"|\"disagreement\"|\"resolution\"|\"close\",\"body\":\"string\"}.",
-  "kind is required and must be one of: question, response, proposal, challenge, evidence, counterargument, agreement, disagreement, resolution, close.",
-  "body is required and must be a non-empty string of at most 4000 characters.",
+  `Required JSON schema: {"kind":"${DECISION_KINDS.join("|")}","body":"string"}.`,
+  `kind is required. Use exactly one of these enum values and no synonyms: ${DECISION_KINDS.join(", ")}.`,
+  "Do not invent kinds such as essay, answer, analysis, statement, comment, or message.",
+  "body is required and must be a non-empty research contribution of at most 4000 characters.",
   "Write a backslash inside a JSON string as two backslashes. A single backslash before frac, nabla, theta, text, or times is not valid JSON.",
   "Optional fields: addressedSlug (string or null), inviteSlug (string or null), decision (speak, accept, or decline), searchQuery (string or null), workingGroup (array of at most 4 department slugs).",
   "Do not omit kind or body. Do not invent fields. Do not invent citations.",
@@ -75,9 +90,10 @@ export function inspectDecision(text: string): DecisionInspection {
 
 export function correctionInstruction(_previousOutput: string, diagnostic: string): string {
   return [
-    "The previous generation was rejected and was not stored.",
+    "The previous generation was rejected and was not stored as a transcript turn.",
     `Reason: ${diagnostic}`,
     "Return one new JSON object with kind and body.",
+    `kind must be exactly one of: ${DECISION_KINDS.join(", ")}.`,
     "body must be research content only. Do not mention JSON, validation, schemas, retries, or formatting.",
     DECISION_JSON_SCHEMA,
   ].join("\n");
@@ -110,6 +126,10 @@ export interface ConversationRunResult {
 function formatIssue(issue: { code: string; path: PropertyKey[]; message: string }): string {
   const path = issue.path.length ? issue.path.map(String).join(".") : "object";
   if (issue.code === "invalid_enum_value" || issue.code === "invalid_value") {
+    // Do not echo the received value (may contain secrets). Name the allowed enum for kind.
+    if (path === "kind") {
+      return `kind: invalid value; allowed: ${DECISION_KINDS.join("|")}`;
+    }
     return `${path}: invalid value`;
   }
   return `${path}: ${issue.message.replace(/\s+/g, " ").trim().slice(0, 120)}`;
@@ -499,48 +519,73 @@ export class ConversationRunner {
       }
     }
     if (!inspected.ok) {
-      const diagnostic = inspected.diagnostic;
-      await this.recordFailedGeneration(conversation, department, result, diagnostic, "invalid_output");
-      const recoveryPrompt: Array<{ role: "system" | "user"; content: string }> = [
-        { role: "system", content: `You are the ${speakerRow?.name ?? "department"} department. ${DECISION_JSON_SCHEMA}` },
-        {
-          role: "user",
-          content: cleanRecoveryPrompt({
-            departmentSlug: department.slug,
-            openingInstruction: conversation.openingInstruction ?? conversation.topic,
-            topic: conversation.topic,
-            mode: conversation.progressState.recoveryMode === "none" ? "handoff" : conversation.progressState.recoveryMode,
-            recentTurns: turns.map((turn) => ({ department: turn.departmentSlug, kind: turn.kind, body: turn.body })),
-          }) + `\n\n${correctionInstruction(result.text, diagnostic)}`,
-        },
-      ];
-      activeMessages = recoveryPrompt;
-      const failedAttemptId = lastAttemptId;
-      result = await this.generate(provider, route, recoveryPrompt, department, job.conversationId);
-      inspected = inspectDecision(result.text);
-      attemptNumber += 1;
-      lastAttemptId = await this.captureEvidenceAttempt({
-        conversationId: job.conversationId,
-        department,
-        messages: recoveryPrompt,
-        result,
-        attemptNumber,
-        parentAttemptId: failedAttemptId,
-        recoveryOfAttemptId: failedAttemptId,
-        acceptanceStatus: inspected.ok ? "recovered" : "rejected",
-        diagnostic: inspected.ok ? null : inspected.diagnostic,
-        reason: inspected.ok ? null : "invalid_output",
-        parsedOutput: inspected.ok ? (inspected.value as unknown as Record<string, unknown>) : null,
-      });
-      parentAttemptId = lastAttemptId ?? parentAttemptId;
-      recoveredFromInvalid = true;
+      let corrections = 0;
+      while (!inspected.ok && corrections < MAX_INVALID_CORRECTIONS) {
+        const diagnostic = inspected.diagnostic;
+        await this.recordFailedGeneration(conversation, department, result, diagnostic, "invalid_output");
+        await this.accountGenerationUsage(job.conversationId, result);
+        const budget = await this.canAffordCorrection(job.conversationId, route.maxOutputTokens);
+        if (!budget.ok) {
+          await this.terminateInvalidOutput({
+            conversationId: job.conversationId,
+            jobId: job.id,
+            token,
+            department,
+            result,
+            diagnostic: boundDiagnostic(`${diagnostic}; recovery stopped: ${budget.reason}`),
+            reason: "invalid_output_budget",
+          });
+          return { generated: false, continue: false, stop: "failed", childId: null };
+        }
+        const recoveryPrompt: Array<{ role: "system" | "user"; content: string }> = [
+          { role: "system", content: `You are the ${speakerRow?.name ?? "department"} department. ${DECISION_JSON_SCHEMA}` },
+          {
+            role: "user",
+            content:
+              cleanRecoveryPrompt({
+                departmentSlug: department.slug,
+                openingInstruction: conversation.openingInstruction ?? conversation.topic,
+                topic: conversation.topic,
+                mode: conversation.progressState.recoveryMode === "none" ? "handoff" : conversation.progressState.recoveryMode,
+                recentTurns: turns.map((turn) => ({ department: turn.departmentSlug, kind: turn.kind, body: turn.body })),
+              }) + `\n\n${correctionInstruction(result.text, diagnostic)}`,
+          },
+        ];
+        activeMessages = recoveryPrompt;
+        const failedAttemptId = lastAttemptId;
+        result = await this.generate(provider, route, recoveryPrompt, department, job.conversationId);
+        inspected = inspectDecision(result.text);
+        attemptNumber += 1;
+        corrections += 1;
+        lastAttemptId = await this.captureEvidenceAttempt({
+          conversationId: job.conversationId,
+          department,
+          messages: recoveryPrompt,
+          result,
+          attemptNumber,
+          parentAttemptId: failedAttemptId,
+          recoveryOfAttemptId: failedAttemptId,
+          acceptanceStatus: inspected.ok ? "recovered" : "rejected",
+          diagnostic: inspected.ok ? null : inspected.diagnostic,
+          reason: inspected.ok ? null : "invalid_output",
+          parsedOutput: inspected.ok ? (inspected.value as unknown as Record<string, unknown>) : null,
+        });
+        parentAttemptId = lastAttemptId ?? parentAttemptId;
+        recoveredFromInvalid = true;
+      }
     }
     await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
     if (!inspected.ok) {
-      await this.recordFailedGeneration(conversation, department, result, inspected.diagnostic, "invalid_output");
-      await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastError: inspected.diagnostic });
-      await this.dialogueClose(this.persistence.repos, job.conversationId, "terminated", "model_invalid");
-      await this.finishJob(job.id, token, false, inspected.diagnostic);
+      await this.accountGenerationUsage(job.conversationId, result);
+      await this.terminateInvalidOutput({
+        conversationId: job.conversationId,
+        jobId: job.id,
+        token,
+        department,
+        result,
+        diagnostic: inspected.diagnostic,
+        reason: "invalid_output",
+      });
       return { generated: false, continue: false, stop: "failed", childId: null };
     }
     let parsed = inspected.value;
@@ -594,10 +639,16 @@ export class ConversationRunner {
       });
       await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
       if (!inspected.ok) {
-        await this.recordFailedGeneration(conversation, department, result, inspected.diagnostic, "invalid_after_repetition");
-        await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastError: inspected.diagnostic });
-        await this.dialogueClose(this.persistence.repos, job.conversationId, "terminated", "model_invalid");
-        await this.finishJob(job.id, token, false, inspected.diagnostic);
+        await this.accountGenerationUsage(job.conversationId, result);
+        await this.terminateInvalidOutput({
+          conversationId: job.conversationId,
+          jobId: job.id,
+          token,
+          department,
+          result,
+          diagnostic: inspected.diagnostic,
+          reason: "invalid_after_repetition",
+        });
         return { generated: false, continue: false, stop: "failed", childId: null };
       }
       parsed = inspected.value;
@@ -826,11 +877,13 @@ export class ConversationRunner {
     });
     const measured = measureProgress(checkpoint, conversation.messageCount);
     const rendered = renderCheckpoint(checkpoint);
+    // Reload progressState so checkpoint writes cannot wipe failedGenerations / inferenceLog.
+    const latestProgress = (await this.requireConversation(conversationId)).progressState;
     const terminationReason = overSoft && !assessment.justified
       ? "soft_budget"
       : checkpointDue && assessment.decision === "conclude"
         ? "checkpoint_stalled"
-        : conversation.progressState.terminationReason;
+        : latestProgress.terminationReason;
     await this.persistence.repos.autonomy.saveConversation(conversationId, {
       contextSummary: rendered,
       progressState: {
@@ -844,14 +897,14 @@ export class ConversationRunner {
         substantialProgress: measured.substantial,
         progressReason: measured.reason,
         terminationReason,
-        turnDecisions: conversation.progressState.turnDecisions,
-        recoveryTotal: conversation.progressState.recoveryTotal,
-        recoveryMode: conversation.progressState.recoveryMode,
-        recoverySpeakerId: conversation.progressState.recoverySpeakerId,
-        failedGenerations: conversation.progressState.failedGenerations,
-        inferenceLog: conversation.progressState.inferenceLog,
-        evidenceCaptureFailures: conversation.progressState.evidenceCaptureFailures,
-        lastEvidenceCaptureError: conversation.progressState.lastEvidenceCaptureError,
+        turnDecisions: latestProgress.turnDecisions,
+        recoveryTotal: latestProgress.recoveryTotal,
+        recoveryMode: latestProgress.recoveryMode,
+        recoverySpeakerId: latestProgress.recoverySpeakerId,
+        failedGenerations: latestProgress.failedGenerations,
+        inferenceLog: latestProgress.inferenceLog,
+        evidenceCaptureFailures: latestProgress.evidenceCaptureFailures,
+        lastEvidenceCaptureError: latestProgress.lastEvidenceCaptureError,
       },
     });
     if (checkpointDue) {
@@ -1187,6 +1240,74 @@ export class ConversationRunner {
     });
   }
 
+  private async accountGenerationUsage(
+    conversationId: string,
+    result: InferenceResult,
+  ): Promise<void> {
+    await this.persistence.repos.autonomy.recordInferenceUsage(conversationId, {
+      requests: 1,
+      inputTokens: result.usage.inputTokens ?? 0,
+      outputTokens: result.usage.outputTokens ?? 0,
+      at: this.now(),
+    });
+  }
+
+  private async canAffordCorrection(
+    conversationId: string,
+    maxOutputTokens: number,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const settings = await this.persistence.repos.autonomy.settings();
+    const conversation = await this.requireConversation(conversationId);
+    const spent = conversation.inputTokens + conversation.outputTokens;
+    const ceiling = Math.min(conversation.maxTokens, settings.conversationHardTokenCeiling);
+    if (spent >= ceiling) {
+      return { ok: false, reason: "hard token ceiling reached" };
+    }
+    if (spent + Math.max(1, maxOutputTokens) > ceiling) {
+      return { ok: false, reason: "insufficient token budget for another correction" };
+    }
+    if (conversation.messageCount >= conversation.maxMessages) {
+      return { ok: false, reason: "message limit reached" };
+    }
+    return { ok: true };
+  }
+
+  private async terminateInvalidOutput(input: {
+    conversationId: string;
+    jobId: string;
+    token: string;
+    department: { id: string; slug: string };
+    result: InferenceResult & { routingModel?: string; routingEndpoint?: string };
+    diagnostic: string;
+    reason: string;
+  }): Promise<void> {
+    await this.recordFailedGeneration(
+      await this.requireConversation(input.conversationId),
+      input.department,
+      input.result,
+      input.diagnostic,
+      input.reason,
+    );
+    const latest = await this.requireConversation(input.conversationId);
+    const lastError = boundDiagnostic(input.diagnostic.replace(/^model_invalid:\s*/i, ""));
+    await this.persistence.repos.autonomy.saveConversation(input.conversationId, {
+      lastError,
+      progressState: {
+        ...latest.progressState,
+        terminationReason: "model_invalid",
+        recoveryMode: "none",
+        recoverySpeakerId: null,
+        failedGenerations: latest.progressState.failedGenerations,
+        inferenceLog: latest.progressState.inferenceLog,
+        turnDecisions: latest.progressState.turnDecisions,
+        evidenceCaptureFailures: latest.progressState.evidenceCaptureFailures,
+        lastEvidenceCaptureError: latest.progressState.lastEvidenceCaptureError,
+      },
+    });
+    await this.dialogueClose(this.persistence.repos, input.conversationId, "terminated", "model_invalid");
+    await this.finishJob(input.jobId, input.token, false, lastError);
+  }
+
   private async closeWithoutProgress(conversation: ConversationRecord, turns: Awaited<ReturnType<Persistence["repos"]["autonomy"]["listTurns"]>>): Promise<void> {
     const checkpoint = buildCheckpoint({
       topic: conversation.topic,
@@ -1194,14 +1315,15 @@ export class ConversationRunner {
       turns: turns.map((turn) => ({ id: turn.id, department: turn.departmentSlug, kind: turn.kind, body: turn.body, addressedDepartment: turn.addressedDepartmentSlug })),
     });
     const unresolved = checkpoint.openQuestions.slice(0, 4).join(" | ") || "none recorded";
+    const latest = await this.requireConversation(conversation.id);
     await this.persistence.repos.autonomy.saveConversation(conversation.id, {
       lastError: `no_progress: bounded recovery ended. Unresolved questions: ${unresolved}`,
       progressState: {
-        ...conversation.progressState,
+        ...latest.progressState,
         terminationReason: "no_progress",
         recoveryMode: "none",
         recoverySpeakerId: null,
-        turnDecisions: [...conversation.progressState.turnDecisions, "rejected: bounded recovery produced no new contribution"].slice(-12),
+        turnDecisions: [...latest.progressState.turnDecisions, "rejected: bounded recovery produced no new contribution"].slice(-12),
       },
     });
     await this.dialogueClose(this.persistence.repos, conversation.id, "unresolved", "no_progress");
@@ -1215,12 +1337,24 @@ export class ConversationRunner {
         : status === "resolved"
           ? "resolved"
           : "unresolved";
+    // Reload so termination never clobbers failedGenerations / inferenceLog written earlier in the turn.
+    const latest = await repos.autonomy.findConversation(conversationId);
     await repos.autonomy.saveConversation(conversationId, {
       status,
       closeReason: reason,
       outcome,
       closedAt: this.now(),
       runnerStatus: "stopped",
+      ...(latest
+        ? {
+            progressState: {
+              ...latest.progressState,
+              terminationReason: latest.progressState.terminationReason ?? reason,
+              failedGenerations: latest.progressState.failedGenerations,
+              inferenceLog: latest.progressState.inferenceLog,
+            },
+          }
+        : {}),
     });
   }
 

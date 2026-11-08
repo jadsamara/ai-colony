@@ -415,6 +415,16 @@ export function createAutonomyRepository(db: DbExecutor): AutonomyRepository {
         })
         .where(eq(departmentConversations.id, conversationId));
     },
+    async recordInferenceUsage(conversationId, usage) {
+      await db
+        .update(departmentConversations)
+        .set({
+          inferenceRequests: sql`${departmentConversations.inferenceRequests} + ${usage.requests}`,
+          inputTokens: sql`${departmentConversations.inputTokens} + ${usage.inputTokens}`,
+          outputTokens: sql`${departmentConversations.outputTokens} + ${usage.outputTokens}`,
+        })
+        .where(eq(departmentConversations.id, conversationId));
+    },
     async countMemories() {
       const [row] = await db.select({ value: count() }).from(memories);
       return Number(row?.value ?? 0);
