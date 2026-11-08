@@ -26,6 +26,21 @@ pnpm install
 
 No Google Cloud project, GPU, or model credentials are required.
 
+## One-command ops (C1.7.5)
+
+On the Linux test VM, prefer the checked-out entrypoint (never pulls git; never `docker compose down -v`; never auto-downloads models):
+
+```bash
+cp .env.example .env   # once
+pnpm db:seed           # once if founding departments are absent
+./scripts/colony up
+./scripts/colony status
+./scripts/colony test  # C1.7.4 spacecraft API collaboration; needs local Ollama model
+./scripts/colony down
+```
+
+After updating the checkout yourself: `./scripts/colony deploy`. Details: `docs/milestones/C1_7_5_ONE_COMMAND_COLONY.md`. Dedicated GPU compose remains `pnpm colony:start` / `pnpm colony:stop`.
+
 ## Database
 
 The canonical database is Homebrew PostgreSQL 17 on `127.0.0.1:5433`. pgvector 0.8.7 is installed for that server, and Milestone 4 rows from the Docker database have been merged into it. Compose still publishes the untouched `pgvector/pgvector:pg16` fallback on `POSTGRES_PORT` (5434 on this machine). Do not point `DATABASE_URL` at the fallback, and do not bind that container to 5433.

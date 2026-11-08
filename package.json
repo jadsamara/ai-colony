@@ -45,6 +45,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsc -b && node packages/database/dist/migrate-cli.js",
     "db:seed": "tsc -b && node packages/database/dist/seed-cli.js",
+    "colony": "./scripts/colony",
     "colony:provision": "tsc -b packages/contracts packages/core packages/database packages/inference packages/workflows --pretty false && tsx packages/database/src/colony-cli.ts provision",
     "colony:start": "tsc -b packages/contracts packages/core packages/database packages/inference packages/workflows --pretty false && tsx packages/database/src/colony-cli.ts start",
     "colony:stop": "tsx packages/database/src/colony-cli.ts stop",

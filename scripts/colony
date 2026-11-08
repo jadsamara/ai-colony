@@ -1,0 +1,337 @@
+#!/usr/bin/env bash
+# C1.7.5 — One-command Colony deployment and testing entrypoint.
+# Uses checked-out repository code. Never runs `docker compose down -v`.
+# Never auto-downloads multi-GB models. Never truncates/reseeds an existing DB.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/colony-common.sh
+source "${SCRIPT_DIR}/lib/colony-common.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: ./scripts/colony <command> [args]
+
+Commands:
+  up        Start Compose services (no rebuild), wait for DB, migrate, ensure API, check Ollama
+  down      Stop API + Compose services; preserves PostgreSQL/RabbitMQ volumes (never -v)
+  deploy    Rebuild from checked-out code (does NOT git pull), migrate, start services
+  restart   Restart Compose + API and re-check readiness
+  status    Show database, API, Ollama/model, and migration status
+  logs      Show/follow service logs (compose [service...] [--follow|-f])
+  test      Run C1.7.4 spacecraft collaboration via authenticated API and print results
+  help      Show this help
+
+Environment:
+  Loads repo .env (required). Key vars: DATABASE_URL, AUTH_MODE, PORT, INFERENCE_BASE_URL,
+  INFERENCE_MODEL_ALIAS. Optional: COLONY_API_BASE, COLONY_*_WAIT_SECONDS, COLONY_*_BEARER.
+
+Notes:
+  - `up` does not rebuild images or pull git.
+  - `deploy` uses the current checkout only; operators must git pull/checkout themselves.
+  - Seed once manually with `pnpm db:seed` if founding departments are absent.
+  - Dedicated GPU compose remains available via `pnpm colony:start` / colony-cli.
+EOF
+}
+
+cmd_up() {
+  colony_reject_volume_wipe "$@"
+  colony_load_env
+  colony_ensure_state_dir
+  colony_log "Starting existing Compose services (no rebuild)..."
+  colony_compose up -d --no-build
+  colony_wait_postgres
+  colony_wait_rabbit
+  colony_migrate
+  colony_start_api
+  if colony_check_ollama; then
+    colony_log "Ollama/model check passed."
+  else
+    colony_warn "Ollama/model not ready. Infra and API are up; inference tests will fail until the model is installed locally."
+  fi
+  if ! colony_seed_present; then
+    colony_warn "Founding Science department missing. Run once: pnpm db:seed (idempotent; does not wipe data)."
+  fi
+  colony_log "up complete."
+}
+
+cmd_down() {
+  colony_reject_volume_wipe "$@"
+  if [[ "$*" == *"-v"* || "$*" == *"--volumes"* ]]; then
+    colony_die "${EXIT_USAGE}" "Refusing docker compose down -v / --volumes."
+  fi
+  colony_load_env || true
+  colony_stop_api || true
+  colony_log "Stopping Compose services without deleting volumes..."
+  # Prefer stop (keeps containers) then down without -v for a clean stopped state.
+  colony_compose stop -t 30 || true
+  colony_compose down --remove-orphans
+  colony_log "down complete. Named volumes ai_colony_postgres / ai_colony_rabbitmq preserved."
+}
+
+cmd_deploy() {
+  colony_reject_volume_wipe "$@"
+  colony_load_env
+  colony_ensure_state_dir
+  colony_log "deploy uses CHECKED-OUT code only (no git pull)."
+  colony_log "Building TypeScript packages..."
+  if ! (cd "${COLONY_ROOT}" && pnpm build); then
+    colony_die "${EXIT_BUILD}" "Build failed. Migrations and API start aborted."
+  fi
+  colony_log "Starting Compose services..."
+  colony_compose up -d --no-build
+  colony_wait_postgres
+  colony_wait_rabbit
+  colony_migrate
+  colony_stop_api || true
+  colony_start_api
+  if colony_check_ollama; then
+    colony_log "Ollama/model check passed."
+  else
+    colony_warn "Ollama/model not ready after deploy."
+  fi
+  colony_log "deploy complete."
+}
+
+cmd_restart() {
+  colony_reject_volume_wipe "$@"
+  colony_load_env
+  colony_log "Restarting Compose services..."
+  colony_compose restart
+  colony_wait_postgres
+  colony_wait_rabbit
+  colony_stop_api || true
+  colony_start_api
+  colony_check_ollama || colony_warn "Ollama/model not ready after restart."
+  colony_log "restart complete."
+}
+
+cmd_status() {
+  colony_load_env
+  echo "=== Compose ==="
+  colony_compose ps || true
+  echo
+  echo "=== Database ==="
+  if colony_compose exec -T postgres pg_isready -U colony -d ai_colony >/dev/null 2>&1; then
+    echo "postgres=ready"
+  else
+    echo "postgres=not_ready"
+  fi
+  local tip applied expected
+  tip="$(colony_journal_tip || true)"
+  expected="$(node -e 'const j=require(process.argv[1]); process.stdout.write(String(j.entries.length))' "${COLONY_JOURNAL}")"
+  applied="$(colony_drizzle_rows)"
+  echo "migration_journal_tip=${tip:-unknown}"
+  echo "migration_journal_entries=${expected}"
+  echo "migration_applied_rows=${applied}"
+  if [[ "${applied}" == "${expected}" ]]; then
+    echo "migrations=current"
+  else
+    echo "migrations=pending_or_unknown (applied=${applied} expected=${expected})"
+  fi
+  echo
+  echo "=== API ==="
+  if colony_api_health; then
+    echo "api_health=ok base=${COLONY_API_BASE}"
+  else
+    echo "api_health=down base=${COLONY_API_BASE}"
+  fi
+  if colony_api_ready; then
+    echo "api_ready=ok"
+  else
+    echo "api_ready=down"
+  fi
+  if colony_api_pid_alive; then
+    echo "api_pid=$(cat "${COLONY_API_PID_FILE}")"
+  else
+    echo "api_pid=none"
+  fi
+  echo
+  echo "=== Ollama ==="
+  colony_check_ollama || true
+  echo
+  echo "=== Seed ==="
+  if colony_seed_present; then
+    echo "seed_science=present"
+  else
+    echo "seed_science=missing (run: pnpm db:seed)"
+  fi
+}
+
+cmd_logs() {
+  colony_load_env
+  local follow=()
+  local services=()
+  local arg
+  for arg in "$@"; do
+    case "${arg}" in
+      -f|--follow) follow=(--follow) ;;
+      api)
+        if [[ -f "${COLONY_API_LOG_FILE}" ]]; then
+          if [[ ${#follow[@]} -gt 0 ]]; then
+            tail -f "${COLONY_API_LOG_FILE}"
+          else
+            tail -n 120 "${COLONY_API_LOG_FILE}"
+          fi
+        else
+          colony_warn "No API log at ${COLONY_API_LOG_FILE}"
+        fi
+        return 0
+        ;;
+      *) services+=("${arg}") ;;
+    esac
+  done
+  if [[ ${#services[@]} -eq 0 ]]; then
+    colony_compose logs --tail 80 --no-color "${follow[@]}"
+  else
+    colony_compose logs --tail 80 --no-color "${follow[@]}" "${services[@]}"
+  fi
+}
+
+cmd_test() {
+  colony_reject_volume_wipe "$@"
+  colony_load_env
+  colony_ensure_state_dir
+
+  if ! command -v jq >/dev/null 2>&1; then
+    colony_die "${EXIT_CONFIG}" "jq is required for ./scripts/colony test. Install jq, then retry."
+  fi
+  if [[ "${AUTH_MODE}" != "development" ]]; then
+    colony_die "${EXIT_CONFIG}" "test requires AUTH_MODE=development for Bearer principal auth."
+  fi
+  if ! colony_api_ready; then
+    colony_die "${EXIT_READY}" "API not ready at ${COLONY_API_BASE}. Run ./scripts/colony up first."
+  fi
+  if ! colony_check_ollama; then
+    colony_die "${EXIT_INFERENCE}" "Ollama/model unavailable. Install ${INFERENCE_MODEL_ALIAS} locally; this script never downloads models."
+  fi
+  if ! colony_seed_present; then
+    colony_die "${EXIT_CONFIG}" "Science department missing. Run once: pnpm db:seed"
+  fi
+
+  colony_log "Enabling conversation execution (does not enable CEO goals)..."
+  colony_http_json PATCH "/api/v1/autonomy/settings" "${COLONY_ADMIN_BEARER}" \
+    '{"conversationExecutionEnabled":true,"enabled":false}' >/dev/null
+
+  local key="c174-colony-$(date +%s)"
+  local instruction="Compare chemical and ion propellant mass for a spacecraft with dry mass 1000 kg, delta-v 3000 m/s, chemical Isp 350 s, ion Isp 3000 s. Include thrust/duration tradeoff, assumptions, and a final comparison."
+  local open_body
+  open_body="$(jq -nc \
+    --arg recipient "${COLONY_MATH_DEPARTMENT_ID}" \
+    --arg reasoning "${COLONY_REASONING_DEPARTMENT_ID}" \
+    --arg instruction "${instruction}" \
+    --arg key "${key}" \
+    '{
+      recipientDepartmentId: $recipient,
+      participantDepartmentIds: [$reasoning],
+      topic: "Spacecraft propellant comparison (C1.7.4)",
+      kind: "question",
+      instruction: $instruction,
+      idempotencyKey: $key
+    }')"
+
+  colony_log "Opening spacecraft conversation as Science..."
+  local opened
+  opened="$(colony_http_json POST "/api/v1/department-conversations" "${COLONY_SCIENCE_BEARER}" "${open_body}")"
+  local conversation_id
+  conversation_id="$(printf '%s' "${opened}" | jq -r '.turn.conversationId // .conversation.id // empty')"
+  if [[ -z "${conversation_id}" || "${conversation_id}" == "null" ]]; then
+    printf '%s\n' "${opened}" >&2
+    colony_die "${EXIT_TEST}" "Could not parse conversation id from open response."
+  fi
+  colony_log "conversation_id=${conversation_id}"
+
+  colony_log "Running autonomous loop (admin)..."
+  local run_result
+  run_result="$(colony_http_json POST "/api/v1/department-conversations/${conversation_id}/run" "${COLONY_ADMIN_BEARER}")" || true
+  printf '%s\n' "${run_result}" | jq '.' 2>/dev/null || printf '%s\n' "${run_result}"
+
+  local deadline=$((SECONDS + COLONY_TEST_POLL_SECONDS))
+  local status="open"
+  while (( SECONDS < deadline )); do
+    local runtime
+    runtime="$(colony_http_json GET "/api/v1/department-conversations/${conversation_id}/runtime" "${COLONY_ADMIN_BEARER}")"
+    status="$(printf '%s' "${runtime}" | jq -r '.status // "unknown"')"
+    local runner
+    runner="$(printf '%s' "${runtime}" | jq -r '.runnerStatus // "unknown"')"
+    colony_log "poll status=${status} runner=${runner}"
+    if [[ "${status}" != "open" ]]; then
+      break
+    fi
+    # Drive another bounded run slice if still open (runner may have stopped on budget/backpressure).
+    if [[ "${runner}" == "idle" || "${runner}" == "stopped" || "${runner}" == "scheduled" ]]; then
+      colony_http_json POST "/api/v1/department-conversations/${conversation_id}/run" "${COLONY_ADMIN_BEARER}" >/dev/null || true
+    fi
+    sleep 3
+  done
+
+  local detail claims verifications
+  detail="$(colony_http_json GET "/api/v1/department-conversations/${conversation_id}" "${COLONY_ADMIN_BEARER}")"
+  claims="$(colony_http_json GET "/api/v1/department-conversations/${conversation_id}/claims" "${COLONY_ADMIN_BEARER}")"
+  verifications="$(colony_http_json GET "/api/v1/department-conversations/${conversation_id}/claim-verifications" "${COLONY_ADMIN_BEARER}")"
+
+  local out="${COLONY_STATE_DIR}/c174-last.json"
+  jq -n \
+    --argjson detail "${detail}" \
+    --argjson claims "${claims}" \
+    --argjson verifications "${verifications}" \
+    --argjson run "${run_result:-null}" \
+    '{detail:$detail, claims:$claims, verifications:$verifications, lastRun:$run}' >"${out}"
+
+  echo
+  echo "=== Transcript ==="
+  printf '%s' "${detail}" | jq -r '.lines[]? // empty'
+  echo
+  echo "=== Claims ==="
+  printf '%s' "${claims}" | jq -r '.claims[]? | "\(.verificationStatus)\t\(.claimText)"'
+  echo
+  echo "=== Verifications ==="
+  printf '%s' "${verifications}" | jq -r '.verifications[]? | "\(.verdict)\tmethod=\(.method)\tclaimed=\(.claimedValue)\tcomputed=\(.computedValue)\t\(.diagnostic // "")"'
+  echo
+  echo "=== Deliverables / progress ==="
+  printf '%s' "${detail}" | jq '.conversation.progressState.deliverables // []'
+  printf '%s' "${detail}" | jq '{
+    status: .conversation.status,
+    outcome: .conversation.outcome,
+    closeReason: .conversation.closeReason,
+    finalConclusion: .conversation.finalConclusion,
+    deliverableParseStatus: .conversation.progressState.deliverableParseStatus,
+    pendingCorrections: .conversation.progressState.pendingCorrections,
+    refutedClaimNotices: .conversation.progressState.refutedClaimNotices,
+    substantialProgress: .conversation.progressState.substantialProgress,
+    terminationReason: .conversation.progressState.terminationReason,
+    evidenceRefs: .conversation.evidenceRefs
+  }'
+  echo
+  echo "Artifact: ${out}"
+
+  local final_status
+  final_status="$(printf '%s' "${detail}" | jq -r '.conversation.status')"
+  if [[ "${final_status}" == "open" ]]; then
+    colony_warn "Conversation still open after poll window (${COLONY_TEST_POLL_SECONDS}s). Partial results printed."
+    exit "${EXIT_TEST}"
+  fi
+  colony_log "test complete status=${final_status}"
+}
+
+main() {
+  local cmd="${1:-help}"
+  shift || true
+  colony_reject_volume_wipe "$@"
+  case "${cmd}" in
+    up) cmd_up "$@" ;;
+    down) cmd_down "$@" ;;
+    deploy) cmd_deploy "$@" ;;
+    restart) cmd_restart "$@" ;;
+    status) cmd_status "$@" ;;
+    logs) cmd_logs "$@" ;;
+    test) cmd_test "$@" ;;
+    help|-h|--help) usage ;;
+    *)
+      usage >&2
+      colony_die "${EXIT_USAGE}" "Unknown command: ${cmd}"
+      ;;
+  esac
+}
+
+main "$@"
