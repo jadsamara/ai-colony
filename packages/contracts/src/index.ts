@@ -320,3 +320,14 @@ export type {
   TrainingRunCreate,
   TrainingRunStatus,
 } from "./schemas/training.js";
+
+export {
+  claimProvenanceSchema,
+  claimVerificationSchema,
+  claimVerificationStatusSchema,
+  conversationClaimDetailResponseSchema,
+  conversationClaimListResponseSchema,
+  conversationClaimSchema,
+  conversationVerificationListResponseSchema,
+} from "./schemas/claims.js";
+export type { ClaimVerification, ConversationClaim } from "./schemas/claims.js";

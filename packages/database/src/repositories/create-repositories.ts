@@ -37,6 +37,7 @@ import { createObjectiveRepository } from "./objectives.js";
 import { createRoutingRepository } from "./routing.js";
 import { createDepartmentRoutingRepository } from "./department-routing.js";
 import { createDepartmentJoinRequestRepository } from "./department-join.js";
+import { createClaimVerificationRepository } from "./claims.js";
 import {
   mapAgent,
   mapApproval,
@@ -600,6 +601,7 @@ export function createRepositories(db: DbExecutor): Repositories {
     routing: createRoutingRepository(db),
     departmentRouting: createDepartmentRoutingRepository(db),
     departmentJoinRequests: createDepartmentJoinRequestRepository(db),
+    claims: createClaimVerificationRepository(db),
     autonomy: createAutonomyRepository(db),
   };
 }

@@ -1,3 +1,8 @@
+import type {
+  ConversationDeliverable,
+  DeliverableParseStatus,
+} from "../verification/deliverables.js";
+
 export type CheckpointDecision = "continue" | "invite" | "redirect" | "conclude";
 
 export interface DepartmentContributionTally {
@@ -27,6 +32,13 @@ export interface ConversationProgress {
   /** Observable evidence-writer failures; does not claim capture succeeded. */
   evidenceCaptureFailures: number;
   lastEvidenceCaptureError: string | null;
+  /** Independent verification notices for the next speaker (not transcript rows). */
+  refutedClaimNotices: string[];
+  claimCaptureFailures: number;
+  lastClaimCaptureError: string | null;
+  deliverableParseStatus: DeliverableParseStatus;
+  deliverables: ConversationDeliverable[];
+  pendingCorrections: string[];
 }
 
 export type RecoveryMode = "none" | "handoff" | "synthesis";
@@ -106,6 +118,12 @@ export function emptyProgress(): ConversationProgress {
     inferenceLog: [],
     evidenceCaptureFailures: 0,
     lastEvidenceCaptureError: null,
+    refutedClaimNotices: [],
+    claimCaptureFailures: 0,
+    lastClaimCaptureError: null,
+    deliverableParseStatus: "pending",
+    deliverables: [],
+    pendingCorrections: [],
   };
 }
 
@@ -135,7 +153,52 @@ export function readProgress(value: unknown): ConversationProgress {
     inferenceLog: readInferenceLog(row.inferenceLog),
     evidenceCaptureFailures: typeof row.evidenceCaptureFailures === "number" ? row.evidenceCaptureFailures : 0,
     lastEvidenceCaptureError: typeof row.lastEvidenceCaptureError === "string" ? row.lastEvidenceCaptureError : null,
+    refutedClaimNotices: stringList(row.refutedClaimNotices).slice(-8),
+    claimCaptureFailures: typeof row.claimCaptureFailures === "number" ? row.claimCaptureFailures : 0,
+    lastClaimCaptureError: typeof row.lastClaimCaptureError === "string" ? row.lastClaimCaptureError : null,
+    deliverableParseStatus:
+      row.deliverableParseStatus === "derived" || row.deliverableParseStatus === "unknown"
+        ? row.deliverableParseStatus
+        : "pending",
+    deliverables: readDeliverables(row.deliverables),
+    pendingCorrections: stringList(row.pendingCorrections).slice(-8),
   };
+}
+
+function readDeliverables(value: unknown): ConversationDeliverable[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const kinds = new Set(["numerical", "qualitative", "comparison", "assumptions"]);
+  const statuses = new Set(["open", "verified", "refuted", "blocked", "unknown"]);
+  const slugs = new Set(["math", "science", "reasoning"]);
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item) => {
+      const preferred = item.preferredDepartmentSlug;
+      return {
+        id: typeof item.id === "string" ? item.id : "unknown",
+        label: typeof item.label === "string" ? item.label : "Unknown deliverable",
+        kind: kinds.has(String(item.kind)) ? (item.kind as ConversationDeliverable["kind"]) : "qualitative",
+        required: item.required === true,
+        status: statuses.has(String(item.status)) ? (item.status as ConversationDeliverable["status"]) : "open",
+        preferredDepartmentSlug:
+          preferred === null
+            ? null
+            : slugs.has(String(preferred))
+              ? (preferred as ConversationDeliverable["preferredDepartmentSlug"])
+              : null,
+        matchHints: Array.isArray(item.matchHints)
+          ? item.matchHints.filter((hint): hint is string => typeof hint === "string").slice(0, 12)
+          : [],
+        claimId: typeof item.claimId === "string" ? item.claimId : null,
+        turnId: typeof item.turnId === "string" ? item.turnId : null,
+        verifiedValue: typeof item.verifiedValue === "number" ? item.verifiedValue : null,
+        provenance: typeof item.provenance === "string" ? item.provenance : "deterministic_instruction_parse",
+      } satisfies ConversationDeliverable;
+    })
+    .filter((item) => item.id !== "unknown")
+    .slice(0, 24);
 }
 
 function readFailedGenerations(value: unknown): FailedGeneration[] {

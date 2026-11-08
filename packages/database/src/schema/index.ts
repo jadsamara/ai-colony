@@ -2690,3 +2690,64 @@ export const departmentRoutingDecisions = pgTable(
     check("department_routing_decisions_confidence_check", textIn("confidence", DEPARTMENT_ROUTING_CONFIDENCE)),
   ],
 );
+
+const CONVERSATION_CLAIM_STATUSES = ["unverified", "verified", "refuted", "inconclusive"] as const;
+const CONVERSATION_CLAIM_PROVENANCES = ["model_turn", "human", "system", "evaluation"] as const;
+
+export const conversationClaims = pgTable(
+  "conversation_claims",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => departmentConversations.id, { onDelete: "restrict" }),
+    proposingDepartmentId: uuid("proposing_department_id")
+      .notNull()
+      .references(() => departments.id, { onDelete: "restrict" }),
+    supportingTurnId: uuid("supporting_turn_id").references(() => conversationTurns.id, { onDelete: "restrict" }),
+    claimText: text("claim_text").notNull(),
+    provenance: text("provenance").notNull(),
+    verificationStatus: text("verification_status").notNull().default("unverified"),
+    verifierId: text("verifier_id"),
+    verificationMethod: text("verification_method"),
+    idempotencyKey: text("idempotency_key"),
+    normalizedExpression: text("normalized_expression"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    revision: integer("revision").notNull().default(1),
+  },
+  (table) => [
+    index("conversation_claims_conversation_idx").on(table.conversationId, table.createdAt),
+    index("conversation_claims_status_idx").on(table.verificationStatus, table.createdAt),
+    uniqueIndex("conversation_claims_idempotency_unique").on(table.idempotencyKey),
+    index("conversation_claims_turn_expr_idx").on(table.supportingTurnId, table.normalizedExpression),
+    check("conversation_claims_status_check", textIn("verification_status", CONVERSATION_CLAIM_STATUSES)),
+    check("conversation_claims_provenance_check", textIn("provenance", CONVERSATION_CLAIM_PROVENANCES)),
+    check("conversation_claims_revision_check", sql`${table.revision} >= 1`),
+  ],
+);
+
+export const conversationClaimVerifications = pgTable(
+  "conversation_claim_verifications",
+  {
+    id: uuid("id").primaryKey(),
+    claimId: uuid("claim_id")
+      .notNull()
+      .references(() => conversationClaims.id, { onDelete: "restrict" }),
+    method: text("method").notNull(),
+    verdict: text("verdict").notNull(),
+    inputs: jsonb("inputs").$type<Record<string, unknown>>().notNull(),
+    outputs: jsonb("outputs").$type<Record<string, unknown>>().notNull(),
+    units: jsonb("units").$type<Record<string, string>>().notNull(),
+    tolerance: jsonb("tolerance").$type<Record<string, unknown> | null>(),
+    diagnostic: text("diagnostic"),
+    computedValue: doublePrecision("computed_value"),
+    claimedValue: doublePrecision("claimed_value"),
+    verifierId: text("verifier_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("conversation_claim_verifications_claim_idx").on(table.claimId, table.createdAt),
+    check("conversation_claim_verifications_verdict_check", textIn("verdict", CONVERSATION_CLAIM_STATUSES)),
+  ],
+);

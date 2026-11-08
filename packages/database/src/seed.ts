@@ -539,6 +539,8 @@ export async function truncateColony(db: Database): Promise<void> {
       conversation_context_events,
       conversation_jobs,
       conversation_turn_claims,
+      conversation_claim_verifications,
+      conversation_claims,
       conversation_membership_events,
       conversation_turns,
       conversation_participants,

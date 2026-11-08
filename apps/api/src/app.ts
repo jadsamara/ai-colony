@@ -35,6 +35,7 @@ import {
   ExperimentService,
   TrainingService,
   TrainingEvidenceService,
+  ClaimVerificationService,
   type EmbeddingProvider,
   type Persistence,
   type TrainingProvider,
@@ -60,6 +61,7 @@ import { registerExperimentRoutes } from "./routes/experiments.js";
 import { registerTrainingRoutes } from "./routes/training.js";
 import { registerTrainingEvidenceRoutes } from "./routes/training-evidence.js";
 import { registerAutonomyRoutes } from "./routes/autonomy.js";
+import { registerClaimRoutes } from "./routes/claims.js";
 import { registerObjectiveRoutes } from "./routes/objectives.js";
 import "./types.js";
 
@@ -135,6 +137,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const objectives = new ObjectiveService(options.persistence, authorizer, messages);
   const dialogue = new DialogueService(options.persistence, authorizer, messages);
   const joins = new DepartmentJoinService(options.persistence, authorizer, dialogue);
+  const claims = new ClaimVerificationService(options.persistence, authorizer);
   app.decorate("services", {
     identity: new IdentityService(options.persistence),
     departments: new DepartmentService(options.persistence, authorizer),
@@ -153,6 +156,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     dialogue,
     joins,
     runner: new ConversationRunner(options.persistence, authorizer, dialogue),
+    claims,
     memories,
     inference: {
       baseUrl: inferenceConfig.baseUrl,
@@ -227,6 +231,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await registerMessageRoutes(app);
   await registerObjectiveRoutes(app);
   await registerAutonomyRoutes(app);
+  await registerClaimRoutes(app);
   await registerMemoryRoutes(app);
   await registerGovernanceRoutes(app);
 

@@ -22,6 +22,7 @@ import type {
   DialogueService,
   DepartmentJoinService,
   ConversationRunner,
+  ClaimVerificationService,
   ObjectiveService,
 } from "@ai-colony/core";
 
@@ -39,6 +40,7 @@ export interface AppServices {
   dialogue: DialogueService;
   joins: DepartmentJoinService;
   runner: ConversationRunner;
+  claims: ClaimVerificationService;
   memories: MemoryService;
   training: TrainingService;
   evidence: TrainingEvidenceService;

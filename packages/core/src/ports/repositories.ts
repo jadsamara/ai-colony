@@ -31,6 +31,7 @@ import type { DecodedCursor } from "../pagination.js";
 import type { AutonomyRepository } from "../autonomy/repository.js";
 import type { DepartmentRoutingRepository } from "../autonomy/department-routing-repository.js";
 import type { DepartmentJoinRequestRepository } from "../autonomy/department-join-repository.js";
+import type { ClaimVerificationRepository } from "../verification/claim-repository.js";
 import type { CapabilityRepository } from "../capability/repository.js";
 import type { EvaluationRepository } from "../evaluation/repository.js";
 import type { LearningRepository } from "../learning/repository.js";
@@ -959,6 +960,7 @@ export interface Repositories {
   routing: RoutingRepository;
   departmentRouting: DepartmentRoutingRepository;
   departmentJoinRequests: DepartmentJoinRequestRepository;
+  claims: ClaimVerificationRepository;
   autonomy: AutonomyRepository;
 }
 

@@ -14,9 +14,18 @@ import { logConversationInference, selectConversationInference } from "./convers
 import type { DialogueService } from "./dialogue-service.js";
 import { redactSensitive } from "./policy.js";
 import type { ConversationJob, ConversationRecord } from "./repository.js";
-import { buildDialogueContext, orchestrationRecommendation } from "./speakers.js";
+import { buildDialogueContext, maySpeak, orchestrationRecommendation } from "./speakers.js";
 import { TrainingEvidenceService } from "../training/evidence-service.js";
 import type { AcceptanceStatus } from "../training/evidence-taxonomy.js";
+import { ClaimVerificationService } from "../verification/claim-verification-service.js";
+import {
+  deriveDeliverables,
+  evaluateConclusionGate,
+  preferredSpeakerForDeliverables,
+  reconcileDeliverables,
+  renderDeliverableChecklist,
+} from "../verification/deliverables.js";
+import type { ConversationProgress } from "./conversation-quality.js";
 
 const LEASE_MS = 30_000;
 const MAX_ATTEMPTS = 3;
@@ -161,6 +170,7 @@ type ClaimResult =
  */
 export class ConversationRunner {
   private readonly evidence: TrainingEvidenceService;
+  private readonly claims: ClaimVerificationService;
 
   constructor(
     private readonly persistence: Persistence,
@@ -171,6 +181,7 @@ export class ConversationRunner {
     private readonly leaseMs = LEASE_MS,
   ) {
     this.evidence = new TrainingEvidenceService(persistence, authorizer, undefined, now);
+    this.claims = new ClaimVerificationService(persistence, authorizer, now);
   }
 
   async run(
@@ -419,6 +430,7 @@ export class ConversationRunner {
       if (!leasedOk) {
         return { kind: "in_flight" as const };
       }
+      const seededProgress = this.seedDeliverables(locked);
       await repos.autonomy.saveConversation(conversationId, {
         runnerStatus: "running",
         runnerLeaseUntil: until,
@@ -430,6 +442,9 @@ export class ConversationRunner {
             ? "An unverified equation is open for another department."
             : "",
         ].filter(Boolean).join(" "),
+        ...(locked.progressState.deliverableParseStatus === "pending"
+          ? { progressState: seededProgress }
+          : {}),
       });
       const stored = await repos.autonomy.findJob(job.id);
       return stored
@@ -805,6 +820,12 @@ export class ConversationRunner {
           await this.markEvidenceCaptureFailed(job.conversationId, "failed to finalize accepted attempt");
         });
       }
+      await this.captureClaimsAfterTurn(admin, job.conversationId, turn.id, department.id, parsed.body).catch(async (error: unknown) => {
+        await this.markClaimCaptureFailed(
+          job.conversationId,
+          error instanceof Error ? error.message : "claim capture failed",
+        );
+      });
     } catch (error) {
       const latest = await this.requireConversation(job.conversationId);
       if (latest.status !== "open") {
@@ -905,6 +926,12 @@ export class ConversationRunner {
         inferenceLog: latestProgress.inferenceLog,
         evidenceCaptureFailures: latestProgress.evidenceCaptureFailures,
         lastEvidenceCaptureError: latestProgress.lastEvidenceCaptureError,
+        refutedClaimNotices: latestProgress.refutedClaimNotices,
+        claimCaptureFailures: latestProgress.claimCaptureFailures,
+        lastClaimCaptureError: latestProgress.lastClaimCaptureError,
+        deliverableParseStatus: latestProgress.deliverableParseStatus,
+        deliverables: latestProgress.deliverables,
+        pendingCorrections: latestProgress.pendingCorrections,
       },
     });
     if (checkpointDue) {
@@ -936,6 +963,7 @@ export class ConversationRunner {
   }
 
   private async prompt(conversation: ConversationRecord, departmentName: string, departmentSlug: string, action: ConversationJob["action"], turns: Awaited<ReturnType<Persistence["repos"]["autonomy"]["listTurns"]>>) {
+    const progress = await this.ensureDeliverablesPersisted(conversation);
     const lines = turns.map((turn) => ({ id: turn.id, department: turn.departmentSlug, kind: turn.kind, body: turn.body }));
     const settings = await this.persistence.repos.autonomy.settings();
     const context = buildDialogueContext(lines, settings.contextTokenBudget);
@@ -949,6 +977,11 @@ export class ConversationRunner {
         childNote = `Working-group findings:\n${children}`;
       }
     }
+    const preference = preferredSpeakerForDeliverables(progress.deliverables);
+    const mathAsk =
+      departmentSlug === "math" && preference?.slug === "math"
+        ? `Concrete calculation request: compute the open deliverable "${preference.deliverableId}" with explicit inputs; do not assert an unverified number as fact.`
+        : null;
     return [
       {
         role: "system" as const,
@@ -961,14 +994,41 @@ export class ConversationRunner {
           `Topic:\n${conversation.topic}`,
           `Original instruction:\n${conversation.openingInstruction ?? conversation.topic}`,
           "Advance the original instruction. Do not replace the objective.",
-          recoveryInstruction(conversation.progressState.recoveryMode),
+          recoveryInstruction(progress.recoveryMode),
           childNote || null,
           action === "invitation" ? "You were invited. Set decision to accept or decline." : "Set decision to speak.",
           departmentFollowUp(departmentSlug),
-          conversation.progressState.lastDecision === "redirect"
+          mathAsk,
+          progress.lastDecision === "redirect"
             ? "The recent turns are not adding a new contribution. Add evidence, a calculation, a question, or a proposal, or propose closure."
             : null,
-          conversation.progressState.turnDecisions.filter((decision) => decision.startsWith("flagged")).slice(-2).join("\n") || null,
+          progress.turnDecisions.filter((decision) => decision.startsWith("flagged")).slice(-2).join("\n") || null,
+          progress.refutedClaimNotices.length
+            ? [
+              "Independent verification feedback (not model consensus):",
+              "Distinguish verified calculator results, refuted claims, and unresolved questions. Repeated LLM assertions do not make unverified claims verified.",
+              ...progress.refutedClaimNotices.slice(-3),
+            ].join("\n")
+            : null,
+          progress.pendingCorrections.length
+            ? [
+              "Required corrections before a deliverable can be treated as settled:",
+              ...progress.pendingCorrections.slice(-4),
+            ].join("\n")
+            : null,
+          renderDeliverableChecklist(progress.deliverables, progress.deliverableParseStatus),
+          progress.deliverables.some((item) => item.status === "verified")
+            ? [
+              "Verified calculator results (may be cited; do not re-assert unverified numbers as facts):",
+              ...progress.deliverables
+                .filter((item) => item.status === "verified")
+                .map((item) =>
+                  `- ${item.label}`
+                  + (item.verifiedValue !== null ? ` = ${item.verifiedValue}` : "")
+                  + (item.claimId ? ` (claim ${item.claimId})` : ""),
+                ),
+            ].join("\n")
+            : null,
           context.summary ? `Omitted transcript excerpts:\n${context.summary}` : null,
           conversation.contextSummary ? `Checkpoint:\n${conversation.contextSummary}` : null,
           context.verbatim.length ? `Recent transcript:\n${context.verbatim.map((turn) => `message ${turn.id} ${turn.department} (${turn.kind}): ${turn.body}`).join("\n")}` : null,
@@ -1013,8 +1073,18 @@ export class ConversationRunner {
     if (kind !== "resolution") {
       return kind;
     }
+    const conversation = await this.requireConversation(conversationId);
+    const progress = await this.ensureDeliverablesPersisted(conversation);
+    const gate = evaluateConclusionGate({
+      parseStatus: progress.deliverableParseStatus,
+      deliverables: progress.deliverables,
+      conclusionBody: body,
+    });
+    if (!gate.ok) {
+      return "response";
+    }
     const turns = await this.persistence.repos.autonomy.listTurns(conversationId);
-    if (turns.some((turn) => turn.kind === "evidence") || UNCERTAIN.test(body)) {
+    if (turns.some((turn) => turn.kind === "evidence") || UNCERTAIN.test(body) || progress.deliverables.some((item) => item.status === "verified")) {
       return "resolution";
     }
     return "response";
@@ -1044,7 +1114,31 @@ export class ConversationRunner {
         };
       }
     }
+    const progress = this.seedDeliverables(conversation);
     const turns = await repos.autonomy.listTurns(conversation.id);
+    const preference = preferredSpeakerForDeliverables(progress.deliverables);
+    if (preference) {
+      const preferred = participants.find((participant) => participant.slug === preference.slug);
+      if (preferred) {
+        const allowed = maySpeak({
+          departmentId: preferred.id,
+          participantIds: participants.map((participant) => participant.id),
+          turns,
+        });
+        if (allowed.allowed) {
+          const concrete =
+            preference.slug === "math"
+              ? " Provide a concrete calculator-backed calculation for the missing or refuted numerical deliverable."
+              : preference.slug === "science"
+                ? " Address the unsupported physical assumption or thrust/duration tradeoff with an explicit, qualified statement."
+                : " Resolve the contradiction and synthesize only from independently verified values.";
+          return {
+            departmentId: preferred.id,
+            reason: `${preference.reason}.${concrete}`,
+          };
+        }
+      }
+    }
     const choice = orchestrationRecommendation({
       participants,
       turns,
@@ -1052,6 +1146,29 @@ export class ConversationRunner {
       remainingMessages: Math.max(0, conversation.maxMessages - conversation.messageCount),
     });
     return choice ? { departmentId: choice.departmentId, reason: choice.reason } : null;
+  }
+
+  /** In-memory only — safe inside claim() transactions that already lock the conversation row. */
+  private seedDeliverables(conversation: ConversationRecord): ConversationProgress {
+    if (conversation.progressState.deliverableParseStatus !== "pending") {
+      return conversation.progressState;
+    }
+    const derived = deriveDeliverables(conversation.openingInstruction ?? conversation.topic, conversation.topic);
+    return {
+      ...conversation.progressState,
+      deliverableParseStatus: derived.parseStatus,
+      deliverables: derived.deliverables,
+      pendingCorrections: conversation.progressState.pendingCorrections ?? [],
+    };
+  }
+
+  /** Persist checklist outside lock-holding claim transactions. */
+  private async ensureDeliverablesPersisted(conversation: ConversationRecord): Promise<ConversationProgress> {
+    const progressState = this.seedDeliverables(conversation);
+    if (conversation.progressState.deliverableParseStatus === "pending") {
+      await this.persistence.repos.autonomy.saveConversation(conversation.id, { progressState });
+    }
+    return progressState;
   }
 
   private async recordLedger(conversationId: string): Promise<void> {
@@ -1207,6 +1324,101 @@ export class ConversationRunner {
     });
   }
 
+  private async captureClaimsAfterTurn(
+    ctx: RequestContext,
+    conversationId: string,
+    turnId: string,
+    proposingDepartmentId: string,
+    body: string,
+  ): Promise<void> {
+    const turns = await this.persistence.repos.autonomy.listTurns(conversationId);
+    const contextBodies = turns
+      .filter((turn) => turn.id !== turnId)
+      .slice(-6)
+      .map((turn) => turn.body);
+    const result = await this.claims.captureTurnClaims(ctx, {
+      conversationId,
+      turnId,
+      proposingDepartmentId,
+      body,
+      contextBodies,
+    });
+    const latest = await this.requireConversation(conversationId);
+    const seeded = await this.ensureDeliverablesPersisted(latest);
+    const claims = await this.persistence.repos.claims.listClaimsByConversation(conversationId, 100);
+    const reconciled = reconcileDeliverables({
+      deliverables: seeded.deliverables,
+      claims,
+      recentBodies: turns.map((turn) => turn.body),
+    });
+    const decisions = [...seeded.turnDecisions];
+    if (result.verified > 0) {
+      decisions.push(`verified claims: ${result.verified}`);
+    }
+    if (result.refuted > 0) {
+      decisions.push(`refuted claims: ${result.refuted}`);
+    }
+    if (result.inconclusive > 0) {
+      decisions.push(`inconclusive claims: ${result.inconclusive}`);
+    }
+    const completed = reconciled.deliverables.filter((item) => item.status === "verified").length;
+    const previouslyCompleted = seeded.deliverables.filter((item) => item.status === "verified").length;
+    if (completed > previouslyCompleted) {
+      decisions.push(`deliverables verified: ${completed}`);
+    }
+    const repeatedUnsupported =
+      result.inconclusive > 0
+      && isNearVerbatim(
+        body,
+        turns.filter((turn) => turn.id !== turnId).map((turn) => turn.body),
+      );
+    if (repeatedUnsupported) {
+      decisions.push("flagged: repeated unsupported assertion");
+    }
+    const substantial =
+      completed > 0
+      || result.verified > 0
+      || result.refuted > 0
+      || seeded.substantialProgress;
+    const progressReason =
+      completed > 0
+        ? `${completed} deliverable(s) independently verified.`
+        : result.verified > 0
+          ? "New independently verified evidence was recorded."
+          : result.refuted > 0
+            ? "A contradiction was resolved by independent refutation."
+            : seeded.progressReason;
+    await this.persistence.repos.autonomy.saveConversation(conversationId, {
+      progressState: {
+        ...seeded,
+        turnDecisions: decisions.slice(-12),
+        refutedClaimNotices: [...seeded.refutedClaimNotices, ...result.refutedNotices].slice(-8),
+        claimCaptureFailures: seeded.claimCaptureFailures + result.errors.length,
+        lastClaimCaptureError: result.errors.at(-1)
+          ? redactSensitive(result.errors.at(-1)!).slice(0, 240)
+          : seeded.lastClaimCaptureError,
+        deliverables: reconciled.deliverables,
+        pendingCorrections: reconciled.pendingCorrections.slice(-8),
+        substantialProgress: substantial,
+        progressReason,
+      },
+    });
+  }
+
+  private async markClaimCaptureFailed(conversationId: string, error: string): Promise<void> {
+    const latest = await this.persistence.repos.autonomy.findConversation(conversationId);
+    if (!latest) {
+      return;
+    }
+    await this.persistence.repos.autonomy.saveConversation(conversationId, {
+      progressState: {
+        ...latest.progressState,
+        claimCaptureFailures: latest.progressState.claimCaptureFailures + 1,
+        lastClaimCaptureError: redactSensitive(error).slice(0, 240),
+      },
+    });
+  }
+
   private async recordFailedGeneration(
     conversation: ConversationRecord,
     department: { id: string; slug: string },
@@ -1302,6 +1514,12 @@ export class ConversationRunner {
         turnDecisions: latest.progressState.turnDecisions,
         evidenceCaptureFailures: latest.progressState.evidenceCaptureFailures,
         lastEvidenceCaptureError: latest.progressState.lastEvidenceCaptureError,
+        refutedClaimNotices: latest.progressState.refutedClaimNotices,
+        claimCaptureFailures: latest.progressState.claimCaptureFailures,
+        lastClaimCaptureError: latest.progressState.lastClaimCaptureError,
+        deliverableParseStatus: latest.progressState.deliverableParseStatus,
+        deliverables: latest.progressState.deliverables,
+        pendingCorrections: latest.progressState.pendingCorrections,
       },
     });
     await this.dialogueClose(this.persistence.repos, input.conversationId, "terminated", "model_invalid");

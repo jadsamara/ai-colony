@@ -104,6 +104,59 @@ export type { ConversationWake } from "./autonomy/conversation-runner.js";
 export { acceptGoalEvidence, normalizeGoal, redactSensitive } from "./autonomy/policy.js";
 export { buildDialogueContext, maySpeak, orchestrationRecommendation, selectSpeaker } from "./autonomy/speakers.js";
 export type { SpeakerChoice, SpeakerReason } from "./autonomy/speakers.js";
+export {
+  CALC_CONSTANTS,
+  CalculationError,
+  STANDARD_GRAVITY_M_S2,
+  evaluateCalc,
+  tsiolkovskyPropellantMass,
+} from "./verification/calculation.js";
+export type { CalcConstantName, CalcNode, TsiolkovskyPropellantInput, TsiolkovskyPropellantResult } from "./verification/calculation.js";
+export { withinTolerance } from "./verification/tolerance.js";
+export type { ToleranceCheck, ToleranceSpec } from "./verification/tolerance.js";
+export { verifyNumericalClaim } from "./verification/numerical.js";
+export type {
+  ClaimRelation,
+  NumericalVerificationRequest,
+  NumericalVerificationResult,
+  NumericalVerdict,
+} from "./verification/numerical.js";
+export { ClaimVerificationService } from "./verification/claim-verification-service.js";
+export type { TurnClaimCaptureResult } from "./verification/claim-verification-service.js";
+export {
+  claimIdempotencyKey,
+  extractNumericalClaims,
+  extractQuantities,
+  formatRefutedClaimNotice,
+} from "./verification/extraction.js";
+export type { ExtractedClaimCandidate, QuantityBundle } from "./verification/extraction.js";
+export {
+  conclusionAttributesValue,
+  deriveDeliverables,
+  evaluateConclusionGate,
+  preferredSpeakerForDeliverables,
+  reconcileDeliverables,
+  renderDeliverableChecklist,
+} from "./verification/deliverables.js";
+export type {
+  ConversationDeliverable,
+  DeliverableDerivation,
+  DeliverableKind,
+  DeliverableParseStatus,
+  DeliverableStatus,
+  PreferredDepartmentSlug,
+} from "./verification/deliverables.js";
+export {
+  CLAIM_PROVENANCES,
+  CLAIM_VERIFICATION_STATUSES,
+} from "./verification/claim-repository.js";
+export type {
+  ClaimProvenance,
+  ClaimVerificationRecord,
+  ClaimVerificationRepository,
+  ClaimVerificationStatus,
+  ConversationClaimRecord,
+} from "./verification/claim-repository.js";
 export type {
   AutonomyRepository,
   AutonomySettings,

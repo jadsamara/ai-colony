@@ -16,6 +16,11 @@ import { buildDialogueContext, maySpeak, orchestrationRecommendation } from "./s
 import { routingIdempotencyKey } from "./department-routing.js";
 import { DepartmentRoutingService } from "./department-routing-service.js";
 import type { DepartmentRoutingResult } from "./department-routing-service.js";
+import {
+  deriveDeliverables,
+  evaluateConclusionGate,
+  reconcileDeliverables,
+} from "../verification/deliverables.js";
 
 const KEY = /^[A-Za-z0-9_.:-]{8,128}$/;
 const CLAIM_LEASE_MS = 15_000;
@@ -1023,18 +1028,66 @@ export class DialogueService {
     }
     const turns = await repos.autonomy.listTurns(id);
     const resolution = [...turns].reverse().find((turn) => turn.kind === "resolution");
+    let closedStatus = status;
+    let closeReason = reason;
+    let finalConclusion = resolution?.body ?? null;
+    const progress = current.progressState;
+    const parseStatus =
+      progress.deliverableParseStatus === "pending"
+        ? deriveDeliverables(current.openingInstruction ?? current.topic, current.topic).parseStatus
+        : progress.deliverableParseStatus;
+    const deliverables =
+      progress.deliverableParseStatus === "pending"
+        ? deriveDeliverables(current.openingInstruction ?? current.topic, current.topic).deliverables
+        : progress.deliverables;
+    const claims = await repos.claims.listClaimsByConversation(id, 100).catch(() => []);
+    const reconciled = reconcileDeliverables({
+      deliverables,
+      claims,
+      recentBodies: turns.map((turn) => turn.body),
+    });
+    if (closedStatus === "resolved" && resolution) {
+      const gate = evaluateConclusionGate({
+        parseStatus,
+        deliverables: reconciled.deliverables,
+        conclusionBody: resolution.body,
+      });
+      if (!gate.ok) {
+        closedStatus = "unresolved";
+        closeReason = gate.reason;
+        finalConclusion = null;
+      }
+    }
+    const claimEvidence = reconciled.deliverables
+      .filter((item) => item.status === "verified" && item.claimId)
+      .map((item) => item.claimId!);
     await repos.autonomy.saveConversation(id, {
-      status,
-      closeReason: reason,
+      status: closedStatus,
+      closeReason,
       closedAt: this.now(),
-      finalConclusion: resolution?.body ?? null,
-      remainingDisagreements: turns
-        .filter((turn) => turn.kind === "disagreement" || turn.kind === "counterargument" || turn.kind === "challenge")
-        .slice(-8)
-        .map((turn) => `${turn.departmentSlug}: ${turn.body}`),
-      evidenceRefs: turns.filter((turn) => turn.kind === "evidence").map((turn) => turn.id),
-      outcome: conversationOutcome(status, reason),
+      finalConclusion,
+      remainingDisagreements: [
+        ...turns
+          .filter((turn) => turn.kind === "disagreement" || turn.kind === "counterargument" || turn.kind === "challenge")
+          .slice(-8)
+          .map((turn) => `${turn.departmentSlug}: ${turn.body}`),
+        ...(closedStatus === "unresolved" && resolution && closeReason !== reason
+          ? [`incomplete resolution: ${resolution.body.slice(0, 240)}`]
+          : []),
+      ].slice(-10),
+      evidenceRefs: [
+        ...turns.filter((turn) => turn.kind === "evidence").map((turn) => turn.id),
+        ...claimEvidence,
+      ].slice(0, 40),
+      outcome: conversationOutcome(closedStatus, closeReason),
       runnerStatus: "stopped",
+      progressState: {
+        ...progress,
+        deliverableParseStatus: parseStatus,
+        deliverables: reconciled.deliverables,
+        pendingCorrections: reconciled.pendingCorrections.slice(-8),
+        terminationReason: progress.terminationReason ?? closeReason,
+      },
     });
     await repos.audit.append({
       eventType: "conversation.closed",
@@ -1045,8 +1098,12 @@ export class DialogueService {
       action: "close",
       correlationId: actor.correlationId,
       beforeState: { status: "open" },
-      afterState: { status, closeReason: reason },
-      metadata: { closeReason: reason },
+      afterState: { status: closedStatus, closeReason },
+      metadata: {
+        closeReason,
+        deliverableParseStatus: parseStatus,
+        verifiedDeliverables: claimEvidence,
+      },
     });
   }
 
