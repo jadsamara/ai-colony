@@ -7,6 +7,7 @@ coverage/
 .drizzle/
 deploy/state/
 deploy/colony.env
+deploy/postgres/postgres.env
 deploy/mock-image/
 .pnpm-store/
 tmp/

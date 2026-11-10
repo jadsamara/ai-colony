@@ -1,0 +1,26 @@
+# Overlay for GPU-profile API: reuse colony-api-test, attach to dedicated Ollama network.
+# Does not change GPU resource allocations. Used only by ./scripts/colony with COLONY_PROFILE=gpu.
+services:
+  colony-api-test:
+    environment:
+      AUTH_MODE: ${AUTH_MODE:-development}
+      INFERENCE_BASE_URL: ${COLONY_GPU_INFERENCE_BASE_URL:-http://ollama-science:11434}
+      INFERENCE_MODEL_ALIAS: ${INFERENCE_MODEL_ALIAS:-qwen3:8b}
+      COLONY_ACCEPT_TASKS: ${COLONY_ACCEPT_TASKS:-false}
+      COLONY_DEDICATED_ROUTING: ${COLONY_DEDICATED_ROUTING:-off}
+      COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
+      COLONY_MODE: ${COLONY_MODE:-real}
+      RABBITMQ_URL: ${RABBITMQ_URL:-}
+    volumes:
+      - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
+    networks:
+      - colony-db
+      - colony-dedicated
+
+networks:
+  colony-db:
+    external: true
+    name: colony-db
+  colony-dedicated:
+    external: true
+    name: colony-dedicated

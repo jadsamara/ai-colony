@@ -28,18 +28,24 @@ No Google Cloud project, GPU, or model credentials are required.
 
 ## One-command ops (C1.7.5)
 
-On the Linux test VM, prefer the checked-out entrypoint (never pulls git; never `docker compose down -v`; never auto-downloads models):
+Checked-out entrypoint with profiles (never pulls git; never `docker compose down -v`; never auto-downloads models):
 
 ```bash
-cp .env.example .env   # once
-pnpm db:seed           # once if founding departments are absent
+# Local (default): host API + host Ollama + root Compose DB/broker
+cp .env.example .env
+pnpm db:seed
 ./scripts/colony up
-./scripts/colony status
-./scripts/colony test  # C1.7.4 spacecraft API collaboration; needs local Ollama model
-./scripts/colony down
+./scripts/colony test
+
+# GPU Linux VM: existing deploy Compose + colony-api-test + ollama-<dept>
+cp deploy/colony.env.example deploy/colony.env
+cp deploy/postgres/postgres.env.example deploy/postgres/postgres.env
+./scripts/colony --profile gpu up
+./scripts/colony --profile gpu test
+./scripts/colony --profile gpu down
 ```
 
-After updating the checkout yourself: `./scripts/colony deploy`. Details: `docs/milestones/C1_7_5_ONE_COMMAND_COLONY.md`. Dedicated GPU compose remains `pnpm colony:start` / `pnpm colony:stop`.
+After updating the checkout yourself: `./scripts/colony [--profile gpu] deploy`. Details: `docs/milestones/C1_7_5_ONE_COMMAND_COLONY.md`. `pnpm colony:start` / `pnpm colony:stop` remain for the dedicated CLI.
 
 ## Database
 

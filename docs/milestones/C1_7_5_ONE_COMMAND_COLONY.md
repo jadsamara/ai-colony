@@ -2,50 +2,113 @@
 
 Operator entrypoint: `./scripts/colony`
 
-This wraps the **local** Compose stack (`docker-compose.yml`: PostgreSQL + RabbitMQ), host API process, host Ollama check, and Drizzle migrations. It does **not** replace the dedicated GPU department stack (`pnpm colony:start` / `packages/database/src/colony-cli.ts`).
+Supports two explicit profiles via `COLONY_PROFILE` or `--profile`:
 
-## What it does
+| Profile | Stack |
+| --- | --- |
+| `local` (default) | Root `docker-compose.yml` (Postgres + RabbitMQ), **host** API, **host** Ollama |
+| `gpu` | Existing deploy GPU Compose (`gcp` + `gpu` + `database` [+ `publisher`]), `colony-postgres-data`, containerized `colony-api-test`, department `ollama-*` |
+
+`deploy` **does not** `git pull`. Never `docker compose down -v`. Never auto-downloads models. Never auto-reseeds.
+
+## Commands
+
+```bash
+./scripts/colony [--profile local|gpu] up|down|deploy|restart|status|logs|test
+# or
+COLONY_PROFILE=gpu ./scripts/colony up
+```
 
 | Command | Behavior |
 | --- | --- |
-| `up` | `docker compose up -d --no-build`, wait for Postgres/RabbitMQ, `pnpm db:migrate`, start API if needed, check Ollama/model |
-| `down` | Stop API + Compose; **never** passes `-v` / `--volumes` |
-| `deploy` | Build from **checked-out** code (no `git pull`), migrate, restart API |
-| `restart` | Restart Compose services + API, re-check readiness |
-| `status` | Compose, DB readiness, migration journal tip vs applied rows, API, Ollama, seed presence |
-| `logs` | Compose logs; `logs api` for the host API log under `tmp/colony/api.log` |
-| `test` | Authenticated C1.7.4 spacecraft conversation via API; prints transcript, claims, verifications, deliverables, conclusion |
+| `up` | Start profile services, wait for DB, migrate once, start API only after migrate, check Ollama |
+| `down` | Stop profile services with `stop -t 30` / safe down; volumes preserved |
+| `deploy` | Build from **checked-out** code, migrate, start |
+| `restart` | Restart and re-check readiness |
+| `status` | Profile, compose, DB, migrations, API, Ollama, seed |
+| `logs` | Compose logs; `logs api` for API |
+| `test` | Authenticated C1.7.4 spacecraft conversation; prints transcript, claims, verifications, deliverables, conclusion, diagnostics |
 
-## VM commands
+## Local VM / laptop
 
 ```bash
-# One-time on a fresh checkout
-cp .env.example .env          # AUTH_MODE=development, DATABASE_URL, Ollama URL
-corepack enable && corepack prepare pnpm@10.18.2 --activate
+cp .env.example .env
 pnpm install
-pnpm db:seed                  # once; idempotent; never auto-run by colony up
-
-# Day-to-day
-./scripts/colony up
+pnpm db:seed                 # once if departments missing
+./scripts/colony up          # COLONY_PROFILE=local
 ./scripts/colony status
-./scripts/colony test         # requires local Ollama with INFERENCE_MODEL_ALIAS (default qwen3:8b)
-./scripts/colony logs api
+./scripts/colony test        # needs host Ollama with INFERENCE_MODEL_ALIAS
 ./scripts/colony down
-
-# After pulling/checkout of new code on the VM
-git pull                      # operator-controlled; deploy does not pull
-./scripts/colony deploy
 ```
 
-`package.json` also exposes `"colony": "./scripts/colony"` so `pnpm colony up` works.
+## GPU Linux VM
 
-## Safety rules
+Prerequisites:
 
-- No `docker compose down -v`. The script rejects `-v` / `--volumes` arguments.
-- No automatic multi-GB model download. Missing models are reported; `test` fails with exit `13`.
-- No automatic truncate/reset/reseed. `pnpm db:seed` remains a manual one-time operator step.
-- Migrations run as one controlled step before API start on `up`/`deploy`. Migration failure aborts with exit `11` and does not start the API.
-- Conversation recovery / lease fencing are unchanged application behavior; this script only starts infrastructure and drives HTTP.
+- NVIDIA GPU + Docker with GPU support
+- Node 22 / pnpm only needed on the operator machine for host-side `pnpm build` during `deploy` (image build uses Dockerfile)
+- `jq` for `test`
+- Copy env once:
+  - `cp deploy/colony.env.example deploy/colony.env` and set `DATABASE_URL` / `RABBITMQ_URL`
+  - `cp deploy/postgres/postgres.env.example deploy/postgres/postgres.env`
+  - `DATABASE_URL` for containers must use hostname `postgres` on network `colony-db`, e.g. `postgres://colony:colony@postgres:5432/ai_colony`
+- Models already present in `colony-model-*` volumes (script never pulls)
+- Founding departments already seeded (or seed once manually)
+
+```bash
+export COLONY_PROFILE=gpu
+# or: ./scripts/colony --profile gpu …
+
+./scripts/colony up
+./scripts/colony status
+./scripts/colony test
+./scripts/colony logs api
+./scripts/colony down
+```
+
+After updating the checkout yourself:
+
+```bash
+git pull   # operator-controlled
+./scripts/colony --profile gpu deploy
+```
+
+### GPU compose files reused (unchanged service names / volumes)
+
+Dedicated project name remains `ai-colony-dedicated` from `deploy/docker-compose.gcp.yml`:
+
+```text
+docker compose \
+  -f deploy/docker-compose.gcp.yml \
+  -f deploy/docker-compose.gpu.yml \
+  -f deploy/docker-compose.database.yml \
+  -f deploy/docker-compose.publisher.yml   # unless COLONY_GPU_PUBLISHER=false
+```
+
+Plus:
+
+- `deploy/docker-compose.postgres.yml` → volume `colony-postgres-data`, network `colony-db`
+- `deploy/docker-compose.api-test.yml` + `deploy/docker-compose.api-gpu.yml` → `colony-api-test` on `colony-db` **and** `colony-dedicated` so the API can reach `ollama-science:11434` etc.
+
+Stop dedicated services with `stop -t 30` (same as `pnpm colony:stop`). Postgres is left running unless `COLONY_GPU_STOP_POSTGRES=true`.
+
+### GPU migration order
+
+1. Ensure Postgres ready on `colony-db`
+2. Run `node packages/database/dist/migrate-cli.js` **once** in a one-shot container on `colony-db` (uses `DATABASE_URL`)
+3. Only then start/recreate `colony-api-test`
+
+Migration failure exits `11` and does not start the API.
+
+### GPU Ollama checks
+
+`up` / `status` / `test` check required department containers (no download):
+
+- `ollama-science`
+- `ollama-math`
+- `ollama-reasoning`
+
+Default shared inference base for the API overlay: `COLONY_GPU_INFERENCE_BASE_URL=http://ollama-science:11434` (same model alias across departments). Dedicated routing stays off until you run `pnpm colony:routing:activate` yourself.
 
 ## Exit codes
 
@@ -55,26 +118,23 @@ git pull                      # operator-controlled; deploy does not pull
 | 2 | Usage |
 | 10 | Build failure |
 | 11 | Migration failure |
-| 12 | Readiness timeout (DB/API) |
+| 12 | Readiness timeout |
 | 13 | Inference/Ollama unavailable |
 | 14 | Test incomplete / failed |
-| 15 | Config (missing `.env`, auth mode, seed) |
+| 15 | Config |
 
-## Assumptions
+## Safety
 
-- Node 22 + pnpm 10.18.2 on the VM
-- Docker Compose v2 available
-- `.env` present (copied from `.env.example`); credentials are not committed
-- Ollama already serving `INFERENCE_MODEL_ALIAS` on `INFERENCE_BASE_URL` for `test`
-- `jq` recommended for `test` pretty-printing (Node fallback is not implemented; install `jq`)
-- Dedicated GPU volumes (`colony-model-*`) are managed by `pnpm colony:*`, not this script
+- No `docker compose down -v` / `--volumes`
+- No automatic multi-GB model download
+- No automatic truncate/reset/reseed
+- No changes to GPU resource allocations in overlays beyond the existing `deploy/docker-compose.gpu.yml`
+- Does not stop unrelated Docker projects; GPU `down` only targets the known compose files for this profile
 
-## Dedicated stack
-
-For the twelve-department Ollama/agent Compose file:
+## Dedicated CLI (unchanged)
 
 ```bash
-pnpm colony:start    # deploy/docker-compose.gcp.yml
+pnpm colony:start
 pnpm colony:status
-pnpm colony:stop     # stop -t 30; never deletes volumes
+pnpm colony:stop
 ```
