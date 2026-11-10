@@ -236,24 +236,33 @@ export {
   C18A_EXPERIMENT_ID,
   evaluationItems,
   fewShotExamples,
+  assignMathDifficulty,
+  assignMathSkill,
   formatQuantity,
+  MATH_DEPARTMENT_ID,
   MATH_FAMILIES,
+  MATH_SKILLS,
   MATH_SUITE_DEPARTMENT,
   MATH_SUITE_GENERATOR_VERSION,
   MATH_SUITE_TOLERANCE,
+  mathSpecialization,
   solveMathItem,
   verifyFrozenMathSuite,
   workedSolution,
 } from "./evaluation/math-suite.js";
 export type {
   FrozenMathSuite,
+  MathDifficulty,
   MathFamilyId,
   MathParameters,
+  MathSkillId,
+  MathSpecialization,
   MathSplit,
   MathSuiteItem,
   SolvedMathItem,
 } from "./evaluation/math-suite.js";
 export {
+  compareMathBaselineSpecializations,
   configurationFingerprintFor,
   gradeMathResponse,
   MATH_ANSWER_EXTRACTOR_VERSION,
@@ -277,6 +286,24 @@ export type {
   MathItemResult,
   MathToolOutcome,
 } from "./evaluation/math-baseline.js";
+export {
+  compareSpecializations,
+  MATH_SKILL_CATALOG_VERSION,
+  MATH_STRONG_SKILL_ACCURACY,
+  MATH_STRONG_SKILL_MIN_ITEMS,
+  summarizeSpecializations,
+} from "./evaluation/math-specialization.js";
+export type {
+  FamilyChange,
+  FamilySlice,
+  SkillChange,
+  SkillSlice,
+  SpecializationComparison,
+  SpecializationObservation,
+  SpecializationSide,
+  SpecializationSlice,
+  SpecializationSummary,
+} from "./evaluation/math-specialization.js";
 export { CapabilityLedgerService, separateModelIdentity } from "./capability/service.js";
 export { MemoryCapabilityRepository, type CapabilityRepository } from "./capability/repository.js";
 export { holmAdjust, applyHolm } from "./capability/holm.js";

@@ -2,11 +2,15 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { QWEN3_8B_MODEL_ID } from "@ai-colony/contracts";
 import {
+  assignMathDifficulty,
+  assignMathSkill,
   buildMathSuite,
+  compareMathBaselineSpecializations,
   evaluationItems,
   extractNumericalClaims,
   fewShotExamples,
   gradeMathResponse,
+  MATH_DEPARTMENT_ID,
   renderFewShotUser,
   runMathBaseline,
   scoreCalculatorCeiling,
@@ -15,6 +19,7 @@ import {
   verifyFrozenMathSuite,
   type InferenceResult,
   type MathBaselineModel,
+  type MathBaselineReport,
 } from "@ai-colony/core";
 import { ScriptedInferenceProvider } from "@ai-colony/inference";
 
@@ -29,6 +34,10 @@ describe("C1.8A math evaluation suite", () => {
     expect(frozen.contentHash).toBe(built.contentHash);
     expect(frozen.itemSetFingerprint).toBe(built.itemSetFingerprint);
     expect(frozen.generatorVersion).toBe("c18a-math-v1");
+    expect(frozen.contentHash).toBe(
+      "18f5d06093f838158f97c1ad06fafbbed84e4dfcde64a6bba8e6612475869225",
+    );
+    expect(frozen.departmentId).toBe(MATH_DEPARTMENT_ID);
     expect(frozen.claimExtractor).toBe("not_used");
     expect(frozen.items).toHaveLength(32);
     expect(evaluationItems(frozen)).toHaveLength(16);
@@ -129,6 +138,96 @@ describe("C1.8A math evaluation suite", () => {
     expect(request.verificationRequest.input.isp_s).toBe(350);
     expect(request.verificationRequest.input.isp_s).not.toBe(ion.parameters.isp_s);
     expect(ion.expected).toBe(solveMathItem(ion.parameters).value);
+  });
+});
+
+describe("C1.8A specialization tracking", () => {
+  it("assigns department, skill, family, difficulty, template, and generator on every item", () => {
+    const suite = buildMathSuite();
+    const skills = new Set<string>();
+    for (const item of suite.items) {
+      expect(item.specialization.departmentId).toBe(MATH_DEPARTMENT_ID);
+      expect(item.specialization.skillId).toBe(assignMathSkill(item.templateId));
+      expect(item.specialization.equationFamily).toBe(item.family);
+      expect(item.specialization.difficulty).toBe(assignMathDifficulty(item.parameters));
+      expect(item.specialization.templateId).toBe(item.templateId);
+      expect(item.specialization.generatorVersion).toBe("c18a-math-v1");
+      skills.add(item.specialization.skillId);
+    }
+    expect([...skills].sort()).toEqual([
+      "algebra",
+      "numerical_reasoning",
+      "physics_equations",
+      "unit_conversion",
+    ]);
+    const line = evaluationItems(suite).find((item) => item.templateId === "affine.eval.line");
+    const grams = evaluationItems(suite).find((item) => item.templateId === "kinetic.eval.grams");
+    expect(line?.specialization.skillId).toBe("algebra");
+    expect(line?.specialization.difficulty).toBe("easy");
+    expect(grams?.specialization.skillId).toBe("unit_conversion");
+  });
+
+  it("reports per-skill accuracy and a regression only on a previously strong skill", async () => {
+    const suite = buildMathSuite();
+    const base = await runScored(suite, () => true);
+    const regressed = await runScored(
+      suite,
+      (item) => item.specialization.skillId !== "unit_conversion",
+    );
+    const standard = base.conditions.find((condition) => condition.conditionId === "standard");
+    expect(standard?.specialization.departmentAccuracy).toBe(1);
+    expect(standard?.specialization.adapterBinding).toBe("none");
+    const unit = standard?.specialization.bySkill.find(
+      (skill) => skill.skillId === "unit_conversion",
+    );
+    const physics = standard?.specialization.byFamily.find(
+      (family) => family.equationFamily === "kinetic_energy",
+    );
+    expect(unit?.sampleSize).toBe(6);
+    expect(unit?.accuracy).toBe(1);
+    expect(physics?.sampleSize).toBe(4);
+    const comparison = compareMathBaselineSpecializations(base, regressed, "standard");
+    expect(comparison.comparable).toBe(true);
+    expect(comparison.benchmark.contentHash).toBe(suite.contentHash);
+    expect(comparison.adapterPerSkill).toBe(false);
+    expect(comparison.memoryWrite).toBe(false);
+    expect(comparison.weightRecalculation).toBe("not_run");
+    const unitChange = comparison.bySkill.find((skill) => skill.skillId === "unit_conversion");
+    const algebra = comparison.bySkill.find((skill) => skill.skillId === "algebra");
+    expect(unitChange?.previouslyStrong).toBe(true);
+    expect(unitChange?.change).toBe("regressed");
+    expect(unitChange?.candidateAccuracy).toBe(0);
+    expect(unitChange?.missedItemIds.length).toBe(6);
+    expect(algebra?.change).toBe("unchanged");
+    expect(comparison.regressions.map((skill) => skill.skillId)).toEqual(["unit_conversion"]);
+    expect(comparison.weakSkills.map((skill) => skill.skillId)).toEqual(["unit_conversion"]);
+    expect(comparison.weakSkills[0]?.trainingProposal).toBe("not_created");
+    const family = comparison.byFamily.find((row) => row.equationFamily === "affine");
+    expect(family?.accuracyChange).toBe(0);
+  });
+
+  it("refuses skill comparisons across conditions or benchmark versions", async () => {
+    const suite = buildMathSuite();
+    const report = await runScored(suite, () => true);
+    const same = compareMathBaselineSpecializations(report, report, "standard");
+    expect(same.comparable).toBe(true);
+    expect(same.regressions).toEqual([]);
+    const mismatched = compareMathBaselineSpecializations(
+      report,
+      { ...report, suite: { ...report.suite, contentHash: "0".repeat(64) } },
+      "standard",
+    );
+    expect(mismatched.comparable).toBe(false);
+    expect(mismatched.reasons.join(" ")).toMatch(/benchmark versions/i);
+    expect(mismatched.regressions).toEqual([]);
+    expect(mismatched.overall).toBeNull();
+    const standardVsThinking = compareMathBaselineSpecializations(
+      retarget(report, "standard", "few_shot_thinking"),
+      report,
+      "few_shot_thinking",
+    );
+    expect(standardVsThinking.comparable).toBe(false);
+    expect(standardVsThinking.regressions).toEqual([]);
   });
 });
 
@@ -242,6 +341,49 @@ describe("C1.8A single-agent baseline", () => {
     }
   });
 });
+
+async function runScored(
+  suite: ReturnType<typeof buildMathSuite>,
+  correctFor: (item: ReturnType<typeof evaluationItems>[number]) => boolean,
+): Promise<MathBaselineReport> {
+  const heldOut = evaluationItems(suite);
+  const provider = scripted((request) => {
+    const user = request.messages[1]?.content ?? "";
+    const item = heldOut.find((candidate) => user.includes(candidate.prompt));
+    const correct = item ? correctFor(item) : false;
+    const value = correct ? item?.expected : 0;
+    const text = request.requestId.includes(":few_shot_thinking:")
+      ? `working\nFINAL: ${value}`
+      : request.requestId.includes(":tool_assisted:")
+        ? `CALCULATOR ${item?.family}`
+        : String(value);
+    return result(text);
+  });
+  return runMathBaseline({
+    suite,
+    model: baseModel(),
+    recordedAt: "2026-11-10T00:00:00.000Z",
+    gitCommit: "abcdef1234567890",
+    providers: { standard: provider, fewShotThinking: provider, toolAssisted: provider },
+  });
+}
+
+function retarget(
+  report: MathBaselineReport,
+  from: MathBaselineReport["conditions"][number]["conditionId"],
+  to: MathBaselineReport["conditions"][number]["conditionId"],
+): MathBaselineReport {
+  const source = report.conditions.find((condition) => condition.conditionId === from);
+  if (!source) {
+    throw new Error(`missing ${from}`);
+  }
+  return {
+    ...report,
+    conditions: report.conditions.map((condition) =>
+      condition.conditionId === to ? { ...source, conditionId: to } : condition,
+    ),
+  };
+}
 
 function baseModel(): MathBaselineModel {
   return {

@@ -2,6 +2,7 @@
   "generatorVersion": "c18a-math-v1",
   "experimentId": "c18a-math-department-baseline",
   "department": "math",
+  "departmentId": "00000000-0000-4000-8000-000000000019",
   "phase": "C1.8A",
   "groundTruth": "bound_parameters_via_calculator",
   "claimExtractor": "not_used",
@@ -50,7 +51,15 @@
       },
       "prompt": "A measured quantity starts at 3 m and changes by 2 m for each s. After 4 s, what is the quantity in m?",
       "expected": 11,
-      "units": "m"
+      "units": "m",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "numerical_reasoning",
+        "equationFamily": "affine",
+        "difficulty": "easy",
+        "templateId": "affine.train.rate",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "b3abcb58c6a84566fc55843dbcab2d3a",
@@ -68,7 +77,15 @@
       },
       "prompt": "A measured quantity starts at -1 m and changes by 0.5 m for each s. After 8 s, what is the quantity in m?",
       "expected": 3,
-      "units": "m"
+      "units": "m",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "numerical_reasoning",
+        "equationFamily": "affine",
+        "difficulty": "moderate",
+        "templateId": "affine.train.rate",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "3637781a0b8e0500b5e65e55ad86b12b",
@@ -86,7 +103,15 @@
       },
       "prompt": "Start with 1 km. Add the product of 3 and 5. The input is measured in h. Give the result in km.",
       "expected": 16,
-      "units": "km"
+      "units": "km",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "algebra",
+        "equationFamily": "affine",
+        "difficulty": "easy",
+        "templateId": "affine.train.shift",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "56bd4af858256559ad1f279bdd5a8fbe",
@@ -104,7 +129,15 @@
       },
       "prompt": "Start with 10 km. Add the product of -2 and 3. The input is measured in h. Give the result in km.",
       "expected": 4,
-      "units": "km"
+      "units": "km",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "algebra",
+        "equationFamily": "affine",
+        "difficulty": "moderate",
+        "templateId": "affine.train.shift",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "c84cb97fbf0027c51f018e06f86479c9",
@@ -122,7 +155,15 @@
       },
       "prompt": "The relation is y = 4 * x + 2, where x is in s and y is in m. Compute y when x = 6.",
       "expected": 26,
-      "units": "m"
+      "units": "m",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "algebra",
+        "equationFamily": "affine",
+        "difficulty": "easy",
+        "templateId": "affine.eval.line",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "52bee93e06b588d8b99725dfc0df73c7",
@@ -140,7 +181,15 @@
       },
       "prompt": "The relation is y = 1.5 * x + 0.5, where x is in s and y is in m. Compute y when x = 4.",
       "expected": 6.5,
-      "units": "m"
+      "units": "m",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "algebra",
+        "equationFamily": "affine",
+        "difficulty": "moderate",
+        "templateId": "affine.eval.line",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "b6473f61405d911a5b98031edce04047",
@@ -158,7 +207,15 @@
       },
       "prompt": "Input (h): 2. Slope: 60 km/h. Intercept: 10 km. Report y in km.",
       "expected": 130,
-      "units": "km"
+      "units": "km",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "numerical_reasoning",
+        "equationFamily": "affine",
+        "difficulty": "hard",
+        "templateId": "affine.eval.table",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "69d306398e865a4445e1e05ddd800e32",
@@ -176,7 +233,15 @@
       },
       "prompt": "Input (min): 10. Slope: 0.25 m/min. Intercept: 2 m. Report y in m.",
       "expected": 4.5,
-      "units": "m"
+      "units": "m",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "numerical_reasoning",
+        "equationFamily": "affine",
+        "difficulty": "moderate",
+        "templateId": "affine.eval.table",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "c925c7a56741935b217bd40799a26c1b",
@@ -191,7 +256,15 @@
       },
       "prompt": "An object of mass 2 kg moves at 3 m/s. Kinetic energy in joules is one half times mass times speed squared. What is the kinetic energy in J?",
       "expected": 9,
-      "units": "J"
+      "units": "J",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "kinetic_energy",
+        "difficulty": "easy",
+        "templateId": "kinetic.train.motion",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "4206618d159e37eba1e188744f845567",
@@ -206,7 +279,15 @@
       },
       "prompt": "An object of mass 0.5 kg moves at 4 m/s. Kinetic energy in joules is one half times mass times speed squared. What is the kinetic energy in J?",
       "expected": 4,
-      "units": "J"
+      "units": "J",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "kinetic_energy",
+        "difficulty": "moderate",
+        "templateId": "kinetic.train.motion",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "84dd8cb7111bc536c498b1193df9159c",
@@ -221,7 +302,15 @@
       },
       "prompt": "A sample has mass 1200 g (1.2 kg) and speed 5 m/s. Using kilograms and meters per second, what is the kinetic energy in joules?",
       "expected": 15,
-      "units": "J"
+      "units": "J",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "kinetic_energy",
+        "difficulty": "moderate",
+        "templateId": "kinetic.train.grams",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "c2c3b334418184f758219030894aa18f",
@@ -236,7 +325,15 @@
       },
       "prompt": "A sample has mass 250 g (0.25 kg) and speed 2 m/s. Using kilograms and meters per second, what is the kinetic energy in joules?",
       "expected": 0.5,
-      "units": "J"
+      "units": "J",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "kinetic_energy",
+        "difficulty": "moderate",
+        "templateId": "kinetic.train.grams",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "7b139936528e9d34e1c36f49ad79b1d8",
@@ -251,7 +348,15 @@
       },
       "prompt": "Mass = 3 kg. Speed = 2 m/s. Compute kinetic energy (1/2 m v^2) in joules.",
       "expected": 6,
-      "units": "J"
+      "units": "J",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "kinetic_energy",
+        "difficulty": "easy",
+        "templateId": "kinetic.eval.energy",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "587be3157693ca4c4f107cf4d880264f",
@@ -266,7 +371,15 @@
       },
       "prompt": "Mass = 10 kg. Speed = 1 m/s. Compute kinetic energy (1/2 m v^2) in joules.",
       "expected": 5,
-      "units": "J"
+      "units": "J",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "kinetic_energy",
+        "difficulty": "hard",
+        "templateId": "kinetic.eval.energy",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "913b5513b92804e5ef77944c05dc8975",
@@ -281,7 +394,15 @@
       },
       "prompt": "Mass = 400 g = 0.4 kg. Speed = 10 meters per second. Kinetic energy in J?",
       "expected": 20,
-      "units": "J"
+      "units": "J",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "kinetic_energy",
+        "difficulty": "hard",
+        "templateId": "kinetic.eval.grams",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "f4d35620cd0cb96fe93b003600628c7c",
@@ -296,7 +417,15 @@
       },
       "prompt": "Mass = 1500 g = 1.5 kg. Speed = 2 meters per second. Kinetic energy in J?",
       "expected": 3,
-      "units": "J"
+      "units": "J",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "kinetic_energy",
+        "difficulty": "moderate",
+        "templateId": "kinetic.eval.grams",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "9615a124a52ad90facbf058890f41495",
@@ -311,7 +440,15 @@
       },
       "prompt": "Current is 2 A through a 5 ohm resistor. Power in watts is current squared times resistance. What is the power in W?",
       "expected": 20,
-      "units": "W"
+      "units": "W",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "ohm_power",
+        "difficulty": "easy",
+        "templateId": "ohm.train.resistor",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "809cb7fbe2e86de077b3618b747fe18a",
@@ -326,7 +463,15 @@
       },
       "prompt": "Current is 3 A through a 4 ohm resistor. Power in watts is current squared times resistance. What is the power in W?",
       "expected": 36,
-      "units": "W"
+      "units": "W",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "ohm_power",
+        "difficulty": "easy",
+        "templateId": "ohm.train.resistor",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "647ccc1c45b695c2c2194bf50b8c7e17",
@@ -341,7 +486,15 @@
       },
       "prompt": "Current is 500 mA (0.5 A) and resistance is 8 ohms. Compute power in watts from the ampere value.",
       "expected": 2,
-      "units": "W"
+      "units": "W",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "ohm_power",
+        "difficulty": "moderate",
+        "templateId": "ohm.train.milliamp",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "7126bca0356a9b4f788b1e634d73f00f",
@@ -356,7 +509,15 @@
       },
       "prompt": "Current is 1000 mA (1 A) and resistance is 10 ohms. Compute power in watts from the ampere value.",
       "expected": 10,
-      "units": "W"
+      "units": "W",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "ohm_power",
+        "difficulty": "easy",
+        "templateId": "ohm.train.milliamp",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "4c6d14f2c519a246af84d492c566b1b9",
@@ -371,7 +532,15 @@
       },
       "prompt": "I = 4 A and R = 2 ohm. Electrical power P = I^2 R in watts?",
       "expected": 32,
-      "units": "W"
+      "units": "W",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "ohm_power",
+        "difficulty": "easy",
+        "templateId": "ohm.eval.dissipated",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "d5cc3cfc2bc496c53288e9bdaf2e9701",
@@ -386,7 +555,15 @@
       },
       "prompt": "I = 0.2 A and R = 50 ohm. Electrical power P = I^2 R in watts?",
       "expected": 2.0000000000000004,
-      "units": "W"
+      "units": "W",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "ohm_power",
+        "difficulty": "moderate",
+        "templateId": "ohm.eval.dissipated",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "4efc1267c602a2baf495ad1328dee6af",
@@ -401,7 +578,15 @@
       },
       "prompt": "Current = 100 mA = 0.1 A. Resistance = 200 ohm. Power in watts?",
       "expected": 2.0000000000000004,
-      "units": "W"
+      "units": "W",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "ohm_power",
+        "difficulty": "hard",
+        "templateId": "ohm.eval.milliamp",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "63ec5c3cfcae3ab002000f35dce89335",
@@ -416,7 +601,15 @@
       },
       "prompt": "Current = 1500 mA = 1.5 A. Resistance = 4 ohm. Power in watts?",
       "expected": 9,
-      "units": "W"
+      "units": "W",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "ohm_power",
+        "difficulty": "moderate",
+        "templateId": "ohm.eval.milliamp",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "2ca2af8035fa822bf5c29d64b591e514",
@@ -432,7 +625,15 @@
       },
       "prompt": "A stage has dry mass 500 kg, delta-v 1000 m/s, and specific impulse 300 s. Use g0 = 9.80665 m/s^2. Propellant mass in kg is dry mass times (exp(delta-v / (Isp * g0)) - 1). What is the propellant mass in kg?",
       "expected": 202.40734744253675,
-      "units": "kg"
+      "units": "kg",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "tsiolkovsky_propellant",
+        "difficulty": "easy",
+        "templateId": "tsiolkovsky.train.dry",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "d8c4155daee820f89f1ca67d31bb50b5",
@@ -448,7 +649,15 @@
       },
       "prompt": "A stage has dry mass 2000 kg, delta-v 2000 m/s, and specific impulse 450 s. Use g0 = 9.80665 m/s^2. Propellant mass in kg is dry mass times (exp(delta-v / (Isp * g0)) - 1). What is the propellant mass in kg?",
       "expected": 1146.7003199387964,
-      "units": "kg"
+      "units": "kg",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "tsiolkovsky_propellant",
+        "difficulty": "moderate",
+        "templateId": "tsiolkovsky.train.dry",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "50e7ff2bbcdeb5535fa90f93eed48241",
@@ -464,7 +673,15 @@
       },
       "prompt": "Dry mass 800 kg. Delta-v 2.5 km/s, which is 2500 m/s. Specific impulse 320 s. g0 = 9.80665 m/s^2. Propellant mass in kg?",
       "expected": 974.484112920063,
-      "units": "kg"
+      "units": "kg",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "tsiolkovsky_propellant",
+        "difficulty": "moderate",
+        "templateId": "tsiolkovsky.train.kms",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "a3297c5324f44c184ffadf775d20acf9",
@@ -480,7 +697,15 @@
       },
       "prompt": "Dry mass 1500 kg. Delta-v 1.5 km/s, which is 1500 m/s. Specific impulse 400 s. g0 = 9.80665 m/s^2. Propellant mass in kg?",
       "expected": 698.6833149141873,
-      "units": "kg"
+      "units": "kg",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "tsiolkovsky_propellant",
+        "difficulty": "easy",
+        "templateId": "tsiolkovsky.train.kms",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "f5962d8f866625ab51f7ddaf1b3fbcc4",
@@ -496,7 +721,15 @@
       },
       "prompt": "Compute propellant mass in kilograms for dry mass 1000 kg, delta-v 3000 m/s, and specific impulse 350 s. g0 is 9.80665 m/s^2. Formula: m_dry * (exp(delta_v / (Isp * g0)) - 1).",
       "expected": 1396.5793941230227,
-      "units": "kg"
+      "units": "kg",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "tsiolkovsky_propellant",
+        "difficulty": "moderate",
+        "templateId": "tsiolkovsky.eval.propellant",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "0e5ea2022bcd07c3420e738735fada13",
@@ -512,7 +745,15 @@
       },
       "prompt": "Compute propellant mass in kilograms for dry mass 1000 kg, delta-v 3000 m/s, and specific impulse 3000 s. g0 is 9.80665 m/s^2. Formula: m_dry * (exp(delta_v / (Isp * g0)) - 1).",
       "expected": 107.35204606807191,
-      "units": "kg"
+      "units": "kg",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "physics_equations",
+        "equationFamily": "tsiolkovsky_propellant",
+        "difficulty": "hard",
+        "templateId": "tsiolkovsky.eval.propellant",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "bf661b96d6662affdcb4723a75603dfc",
@@ -528,7 +769,15 @@
       },
       "prompt": "Dry mass = 750 kg. Delta-v = 4 km/s = 4000 m/s. Isp = 420 s. g0 = 9.80665 m/s^2. Required propellant mass in kg?",
       "expected": 1230.7513167222671,
-      "units": "kg"
+      "units": "kg",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "tsiolkovsky_propellant",
+        "difficulty": "hard",
+        "templateId": "tsiolkovsky.eval.kms",
+        "generatorVersion": "c18a-math-v1"
+      }
     },
     {
       "id": "4b997eb9476d570baf0ab9c6aff8590f",
@@ -544,7 +793,15 @@
       },
       "prompt": "Dry mass = 1200 kg. Delta-v = 1.8 km/s = 1800 m/s. Isp = 2800 s. g0 = 9.80665 m/s^2. Required propellant mass in kg?",
       "expected": 81.29942902795273,
-      "units": "kg"
+      "units": "kg",
+      "specialization": {
+        "departmentId": "00000000-0000-4000-8000-000000000019",
+        "skillId": "unit_conversion",
+        "equationFamily": "tsiolkovsky_propellant",
+        "difficulty": "hard",
+        "templateId": "tsiolkovsky.eval.kms",
+        "generatorVersion": "c18a-math-v1"
+      }
     }
   ]
 }

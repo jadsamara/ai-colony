@@ -25,10 +25,18 @@ import {
   solveMathItem,
   workedSolution,
   type FrozenMathSuite,
+  type MathDifficulty,
   type MathFamilyId,
   type MathParameters,
+  type MathSkillId,
   type MathSuiteItem,
 } from "./math-suite.js";
+import {
+  compareSpecializations,
+  summarizeSpecializations,
+  type SpecializationComparison,
+  type SpecializationSummary,
+} from "./math-specialization.js";
 
 export const MATH_PROMPT_VERSIONS = {
   standard: "c18a-standard-v1",
@@ -77,6 +85,11 @@ export interface MathGrade {
 export interface MathItemResult {
   itemId: string;
   family: MathFamilyId;
+  departmentId: string;
+  skillId: MathSkillId;
+  equationFamily: MathFamilyId;
+  difficulty: MathDifficulty;
+  generatorVersion: string;
   templateId: string;
   expected: number;
   units: string;
@@ -116,6 +129,7 @@ export interface MathConditionReport {
   latencyMs: number;
   gate: "not_applied";
   manifest: EvaluationManifest;
+  specialization: SpecializationSummary;
   items: MathItemResult[];
 }
 
@@ -450,8 +464,39 @@ function summarizeCondition(input: {
     latencyMs: input.items.reduce((total, item) => total + item.latencyMs, 0),
     gate: "not_applied",
     manifest,
+    specialization: summarizeSpecializations(input.items),
     items: input.items,
   };
+}
+
+export function compareMathBaselineSpecializations(
+  baseline: MathBaselineReport,
+  candidate: MathBaselineReport,
+  conditionId: MathConditionId,
+): SpecializationComparison {
+  const left = baseline.conditions.find((condition) => condition.conditionId === conditionId);
+  const right = candidate.conditions.find((condition) => condition.conditionId === conditionId);
+  if (!left || !right) {
+    throw new Error(`condition ${conditionId} is missing from a math baseline report`);
+  }
+  return compareSpecializations(
+    {
+      conditionId,
+      contentHash: baseline.suite.contentHash,
+      generatorVersion: baseline.suite.generatorVersion,
+      itemSetFingerprint: baseline.suite.itemSetFingerprint,
+      manifest: left.manifest,
+      items: left.items,
+    },
+    {
+      conditionId,
+      contentHash: candidate.suite.contentHash,
+      generatorVersion: candidate.suite.generatorVersion,
+      itemSetFingerprint: candidate.suite.itemSetFingerprint,
+      manifest: right.manifest,
+      items: right.items,
+    },
+  );
 }
 
 function buildManifest(input: {
@@ -540,6 +585,11 @@ function itemResult(
   return {
     itemId: item.id,
     family: item.family,
+    departmentId: item.specialization.departmentId,
+    skillId: item.specialization.skillId,
+    equationFamily: item.specialization.equationFamily,
+    difficulty: item.specialization.difficulty,
+    generatorVersion: item.specialization.generatorVersion,
     templateId: item.templateId,
     expected: item.expected,
     units: item.units,

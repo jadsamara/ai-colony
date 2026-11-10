@@ -14,6 +14,26 @@ import { canonicalize, contentDigest, itemSetFingerprint } from "./manifest.js";
 export const MATH_SUITE_GENERATOR_VERSION = "c18a-math-v1" as const;
 export const C18A_EXPERIMENT_ID = "c18a-math-department-baseline" as const;
 export const MATH_SUITE_DEPARTMENT = "math" as const;
+/** Seeded Math department. A skill is a measured capability, not an adapter. */
+export const MATH_DEPARTMENT_ID = "00000000-0000-4000-8000-000000000019" as const;
+
+export const MATH_SKILLS = [
+  "algebra",
+  "unit_conversion",
+  "numerical_reasoning",
+  "physics_equations",
+] as const;
+export type MathSkillId = (typeof MATH_SKILLS)[number];
+export type MathDifficulty = "easy" | "moderate" | "hard";
+
+export interface MathSpecialization {
+  departmentId: typeof MATH_DEPARTMENT_ID;
+  skillId: MathSkillId;
+  equationFamily: MathFamilyId;
+  difficulty: MathDifficulty;
+  templateId: string;
+  generatorVersion: typeof MATH_SUITE_GENERATOR_VERSION;
+}
 
 export const MATH_SUITE_TOLERANCE: ToleranceSpec = { absolute: 1e-6, relative: 1e-6 };
 
@@ -49,12 +69,14 @@ export interface MathSuiteItem {
   expected: number;
   units: string;
   contentDigest: string;
+  specialization: MathSpecialization;
 }
 
 export interface FrozenMathSuite {
   generatorVersion: typeof MATH_SUITE_GENERATOR_VERSION;
   experimentId: typeof C18A_EXPERIMENT_ID;
   department: typeof MATH_SUITE_DEPARTMENT;
+  departmentId: typeof MATH_DEPARTMENT_ID;
   phase: "C1.8A";
   groundTruth: "bound_parameters_via_calculator";
   claimExtractor: "not_used";
@@ -91,6 +113,25 @@ const TEMPLATE_SPLIT = {
 } as const;
 
 type TemplateId = keyof typeof TEMPLATE_SPLIT;
+
+const TEMPLATE_SKILL: Record<TemplateId, MathSkillId> = {
+  "affine.train.rate": "numerical_reasoning",
+  "affine.train.shift": "algebra",
+  "affine.eval.line": "algebra",
+  "affine.eval.table": "numerical_reasoning",
+  "kinetic.train.motion": "physics_equations",
+  "kinetic.train.grams": "unit_conversion",
+  "kinetic.eval.energy": "physics_equations",
+  "kinetic.eval.grams": "unit_conversion",
+  "ohm.train.resistor": "physics_equations",
+  "ohm.train.milliamp": "unit_conversion",
+  "ohm.eval.dissipated": "physics_equations",
+  "ohm.eval.milliamp": "unit_conversion",
+  "tsiolkovsky.train.dry": "physics_equations",
+  "tsiolkovsky.train.kms": "unit_conversion",
+  "tsiolkovsky.eval.propellant": "physics_equations",
+  "tsiolkovsky.eval.kms": "unit_conversion",
+};
 
 interface SuiteRow {
   split: MathSplit;
@@ -320,6 +361,7 @@ export function buildMathSuite(): FrozenMathSuite {
     generatorVersion: MATH_SUITE_GENERATOR_VERSION,
     experimentId: C18A_EXPERIMENT_ID,
     department: MATH_SUITE_DEPARTMENT,
+    departmentId: MATH_DEPARTMENT_ID,
     phase: "C1.8A",
     groundTruth: "bound_parameters_via_calculator",
     claimExtractor: "not_used",
@@ -388,6 +430,10 @@ export function assertMathSuiteIsolated(suite: FrozenMathSuite): void {
     if (item.units !== solved.units) {
       throw new Error(`unit drift for ${item.id}`);
     }
+    const specialization = mathSpecialization(item.templateId, item.parameters);
+    if (canonicalize(item.specialization) !== canonicalize(specialization)) {
+      throw new Error(`specialization drift for ${item.id}`);
+    }
     if (item.contentDigest !== contentDigest(itemCanonical(item))) {
       throw new Error(`content digest drift for ${item.id}`);
     }
@@ -453,6 +499,76 @@ export function workedSolution(item: MathSuiteItem): string {
   return `${solved.formula} = ${formatQuantity(solved.value)}`;
 }
 
+export function assignMathSkill(templateId: string): MathSkillId {
+  const skill = TEMPLATE_SKILL[templateId as TemplateId];
+  if (!skill) {
+    throw new Error(`template ${templateId} has no math skill`);
+  }
+  return skill;
+}
+
+/** Difficulty is a pure function of the bound parameters. */
+export function assignMathDifficulty(parameters: MathParameters): MathDifficulty {
+  switch (parameters.family) {
+    case "affine": {
+      const values = [parameters.slope, parameters.intercept, parameters.input];
+      const magnitude = Math.max(...values.map((value) => Math.abs(value)));
+      if (magnitude > 20) {
+        return "hard";
+      }
+      if (values.some((value) => !Number.isInteger(value) || value < 0)) {
+        return "moderate";
+      }
+      return "easy";
+    }
+    case "kinetic_energy": {
+      if (parameters.speedMps >= 10 || parameters.massKg >= 10) {
+        return "hard";
+      }
+      if (!Number.isInteger(parameters.massKg) || parameters.speedMps >= 5) {
+        return "moderate";
+      }
+      return "easy";
+    }
+    case "ohm_power": {
+      if (parameters.resistanceOhm >= 100 || parameters.currentA < 0.2) {
+        return "hard";
+      }
+      if (!Number.isInteger(parameters.currentA) || !Number.isInteger(parameters.resistanceOhm)) {
+        return "moderate";
+      }
+      return "easy";
+    }
+    case "tsiolkovsky_propellant": {
+      if (parameters.deltaV_m_s >= 4000 || parameters.isp_s >= 1000) {
+        return "hard";
+      }
+      if (parameters.deltaV_m_s >= 2000) {
+        return "moderate";
+      }
+      return "easy";
+    }
+    default: {
+      const _exhaustive: never = parameters;
+      throw new Error(`unsupported math family: ${JSON.stringify(_exhaustive)}`);
+    }
+  }
+}
+
+export function mathSpecialization(
+  templateId: string,
+  parameters: MathParameters,
+): MathSpecialization {
+  return {
+    departmentId: MATH_DEPARTMENT_ID,
+    skillId: assignMathSkill(templateId),
+    equationFamily: parameters.family,
+    difficulty: assignMathDifficulty(parameters),
+    templateId,
+    generatorVersion: MATH_SUITE_GENERATOR_VERSION,
+  };
+}
+
 function materialize(entry: SuiteRow): MathSuiteItem {
   if (TEMPLATE_SPLIT[entry.templateId] !== entry.split) {
     throw new Error(`row split does not match template ${entry.templateId}`);
@@ -473,6 +589,7 @@ function materialize(entry: SuiteRow): MathSuiteItem {
     id: contentDigestValue.slice(0, 32),
     contentDigest: contentDigestValue,
     ...draft,
+    specialization: mathSpecialization(entry.templateId, entry.parameters),
   };
 }
 

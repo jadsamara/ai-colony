@@ -59,7 +59,13 @@ async function main(): Promise<void> {
   const lines = report.conditions.map(
     (condition) => `${condition.conditionId} ${condition.correct}/${condition.sampleSize}`,
   );
-  process.stdout.write(`C1.8A math baseline written to ${outputPath}\n${lines.join("\n")}\n`);
+  const standard = report.conditions.find((condition) => condition.conditionId === "standard");
+  const skills = (standard?.specialization.bySkill ?? []).map(
+    (skill) => `standard ${skill.skillId} ${skill.correct}/${skill.sampleSize}`,
+  );
+  process.stdout.write(
+    `C1.8A math baseline written to ${outputPath}\n${[...lines, ...skills].join("\n")}\n`,
+  );
 }
 
 function writeReport(report: MathBaselineReport): void {
