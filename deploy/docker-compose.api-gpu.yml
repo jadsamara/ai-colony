@@ -1,5 +1,6 @@
 # Overlay for GPU-profile API: reuse colony-api-test, attach to dedicated Ollama network.
 # Does not change GPU resource allocations. Used only by ./scripts/colony with COLONY_PROFILE=gpu.
+# Re-state host port mapping so Compose merges never drop 127.0.0.1:3000 publication.
 services:
   colony-api-test:
     environment:
@@ -11,11 +12,17 @@ services:
       COLONY_ACTIVATION_FILE: /var/colony/dedicated-routing.json
       COLONY_MODE: ${COLONY_MODE:-real}
       RABBITMQ_URL: ${RABBITMQ_URL:-}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    ports:
+      - "127.0.0.1:3000:3000"
     volumes:
       - ${COLONY_ACTIVATION_HOST_PATH:-./deploy/state}:/var/colony:ro
     networks:
       - colony-db
       - colony-dedicated
+    labels:
+      colony.profile: gpu
+      colony.component: api
 
 networks:
   colony-db:

@@ -239,31 +239,22 @@ cmd_status() {
   fi
   echo
   echo "=== Database ==="
+  echo "database_url_target=${COLONY_DB_NAME} user=${COLONY_DB_USER} host=${COLONY_DB_HOST}:${COLONY_DB_PORT}"
   if [[ "${COLONY_PROFILE}" == "gpu" ]]; then
-    if colony_compose_gpu_postgres exec -T postgres pg_isready -U colony -d ai_colony >/dev/null 2>&1; then
-      echo "postgres=ready stack=deploy/docker-compose.postgres.yml volume=colony-postgres-data"
+    if colony_compose_gpu_postgres exec -T postgres pg_isready -U "${COLONY_DB_USER}" -d "${COLONY_DB_NAME}" >/dev/null 2>&1 \
+      || { cid="$(colony_find_gpu_postgres_container || true)"; [[ -n "${cid}" ]] && docker exec "${cid}" pg_isready -U "${COLONY_DB_USER}" -d "${COLONY_DB_NAME}" >/dev/null 2>&1; }; then
+      echo "postgres=ready db=${COLONY_DB_NAME}"
     else
-      echo "postgres=not_ready"
+      echo "postgres=not_ready db=${COLONY_DB_NAME}"
     fi
   else
-    if colony_compose_local exec -T postgres pg_isready -U colony -d ai_colony >/dev/null 2>&1; then
-      echo "postgres=ready"
+    if colony_compose_local exec -T postgres pg_isready -U "${COLONY_DB_USER}" -d "${COLONY_DB_NAME}" >/dev/null 2>&1; then
+      echo "postgres=ready db=${COLONY_DB_NAME}"
     else
-      echo "postgres=not_ready"
+      echo "postgres=not_ready db=${COLONY_DB_NAME}"
     fi
   fi
-  local tip applied expected
-  tip="$(colony_journal_tip || true)"
-  expected="$(node -e 'const j=require(process.argv[1]); process.stdout.write(String(j.entries.length))' "${COLONY_JOURNAL}")"
-  applied="$(colony_drizzle_rows)"
-  echo "migration_journal_tip=${tip:-unknown}"
-  echo "migration_journal_entries=${expected}"
-  echo "migration_applied_rows=${applied}"
-  if [[ "${applied}" == "${expected}" ]]; then
-    echo "migrations=current"
-  else
-    echo "migrations=pending_or_unknown (applied=${applied} expected=${expected})"
-  fi
+  colony_migration_sync_report || true
   echo
   echo "=== API ==="
   if colony_api_health; then echo "api_health=ok base=${COLONY_API_BASE}"; else echo "api_health=down base=${COLONY_API_BASE}"; fi
@@ -271,14 +262,22 @@ cmd_status() {
   if [[ "${COLONY_PROFILE}" == "local" ]]; then
     if colony_api_pid_alive; then echo "api_pid=$(cat "${COLONY_API_PID_FILE}")"; else echo "api_pid=none"; fi
   else
+    echo "api_project=${COLONY_GPU_API_PROJECT}"
     echo "api_service=colony-api-test"
+    colony_verify_gpu_api_identity || true
+    colony_report_api_port_conflicts || true
   fi
   echo
   echo "=== Ollama ==="
   colony_check_ollama || true
   echo
   echo "=== Seed ==="
-  if colony_seed_present; then echo "seed_science=present"; else echo "seed_science=missing (run: pnpm db:seed)"; fi
+  echo "seed_database=${COLONY_DB_NAME}"
+  if colony_seed_present; then
+    echo "seed_science=present"
+  else
+    echo "seed_science=missing (manual seed only; never auto-reseed)"
+  fi
 }
 
 cmd_logs() {

@@ -105,8 +105,34 @@ colony_load_env() {
   : "${COLONY_GPU_PUBLISHER:=true}"
   : "${COLONY_GPU_INFERENCE_BASE_URL:=http://ollama-science:11434}"
   : "${COLONY_AGENT_IMAGE:=ai-colony-agent:m12.1}"
+  : "${COLONY_GPU_API_PROJECT:=ai-colony-api}"
+  : "${COLONY_SCIENCE_DEPARTMENT_ID:=00000000-0000-4000-8000-00000000001b}"
   export COLONY_PROFILE AUTH_MODE HOST PORT INFERENCE_BASE_URL INFERENCE_MODEL_ALIAS COLONY_API_BASE
   export COLONY_GPU_INFERENCE_BASE_URL COLONY_ACCEPT_TASKS COLONY_DEDICATED_ROUTING COLONY_MODE
+  export COLONY_GPU_API_PROJECT DATABASE_URL
+  colony_parse_database_url
+}
+
+# Derive DB identity from DATABASE_URL (same source the API uses). Never hardcode db name.
+colony_parse_database_url() {
+  local parsed
+  parsed="$(
+    node -e '
+      const raw = process.env.DATABASE_URL || "";
+      let u;
+      try { u = new URL(raw); } catch { process.exit(2); }
+      if (!/^postgres(ql)?:$/i.test(u.protocol)) process.exit(2);
+      const name = decodeURIComponent((u.pathname || "").replace(/^\//, ""));
+      if (!name) process.exit(3);
+      const user = decodeURIComponent(u.username || "colony");
+      const host = u.hostname || "postgres";
+      const port = u.port || "5432";
+      process.stdout.write([name, user, host, port].join("\t"));
+    '
+  )" || colony_die "${EXIT_CONFIG}" "DATABASE_URL is not a usable postgres URL (need postgres://user@host:port/dbname)."
+  IFS=$'\t' read -r COLONY_DB_NAME COLONY_DB_USER COLONY_DB_HOST COLONY_DB_PORT <<<"${parsed}"
+  export COLONY_DB_NAME COLONY_DB_USER COLONY_DB_HOST COLONY_DB_PORT
+  colony_log "database_target name=${COLONY_DB_NAME} user=${COLONY_DB_USER} host=${COLONY_DB_HOST}:${COLONY_DB_PORT}"
 }
 
 colony_ensure_state_dir() {
@@ -137,7 +163,49 @@ colony_compose_gpu_postgres() {
 }
 
 colony_compose_gpu_api() {
-  docker compose -f "${COLONY_GPU_API}" -f "${COLONY_GPU_API_OVERLAY}" "$@"
+  # Stable project name avoids colliding with stale deploy-* / colony-api-test-* projects.
+  docker compose \
+    -p "${COLONY_GPU_API_PROJECT:-ai-colony-api}" \
+    -f "${COLONY_GPU_API}" \
+    -f "${COLONY_GPU_API_OVERLAY}" \
+    "$@"
+}
+
+# Exec psql against the DATABASE_URL database on the GPU postgres container.
+colony_gpu_psql() {
+  local sql="$1"
+  local user="${COLONY_DB_USER:-colony}"
+  local db="${COLONY_DB_NAME:?COLONY_DB_NAME unset; call colony_load_env first}"
+  if colony_compose_gpu_postgres exec -T postgres \
+    psql -U "${user}" -d "${db}" -Atc "${sql}" 2>/dev/null; then
+    return 0
+  fi
+  # Fall back to an already-running postgres container on colony-db (e.g. deploy-postgres-1).
+  local cid
+  cid="$(colony_find_gpu_postgres_container || true)"
+  if [[ -z "${cid}" ]]; then
+    return 1
+  fi
+  docker exec -i "${cid}" psql -U "${user}" -d "${db}" -Atc "${sql}"
+}
+
+colony_find_gpu_postgres_container() {
+  # Prefer compose service, then any running *postgres* attached to colony-db.
+  local cid id name
+  cid="$(colony_compose_gpu_postgres ps -q postgres 2>/dev/null | head -n1 || true)"
+  if [[ -n "${cid}" ]]; then
+    printf '%s\n' "${cid}"
+    return 0
+  fi
+  while IFS=$'\t' read -r id name; do
+    [[ -z "${id}" ]] && continue
+    if [[ "${name}" == *postgres* ]] \
+      && docker inspect "${id}" --format '{{json .NetworkSettings.Networks}}' 2>/dev/null | grep -Fq 'colony-db'; then
+      printf '%s\n' "${id}"
+      return 0
+    fi
+  done < <(docker ps --format '{{.ID}}\t{{.Names}}' 2>/dev/null || true)
+  return 1
 }
 
 colony_compose() {
@@ -151,10 +219,12 @@ colony_compose() {
 
 colony_wait_postgres_local() {
   local deadline=$((SECONDS + COLONY_DB_WAIT_SECONDS))
-  colony_log "Waiting for local PostgreSQL (bounded ${COLONY_DB_WAIT_SECONDS}s)..."
+  local user="${COLONY_DB_USER:-colony}"
+  local db="${COLONY_DB_NAME:-ai_colony}"
+  colony_log "Waiting for local PostgreSQL db=${db} (bounded ${COLONY_DB_WAIT_SECONDS}s)..."
   while (( SECONDS < deadline )); do
-    if colony_compose_local exec -T postgres pg_isready -U colony -d ai_colony >/dev/null 2>&1; then
-      colony_log "PostgreSQL ready."
+    if colony_compose_local exec -T postgres pg_isready -U "${user}" -d "${db}" >/dev/null 2>&1; then
+      colony_log "PostgreSQL ready (db=${db})."
       return 0
     fi
     sleep 1
@@ -177,15 +247,23 @@ colony_wait_rabbit_local() {
 
 colony_wait_postgres_gpu() {
   local deadline=$((SECONDS + COLONY_DB_WAIT_SECONDS))
-  colony_log "Waiting for GPU PostgreSQL on colony-db (bounded ${COLONY_DB_WAIT_SECONDS}s)..."
+  local user="${COLONY_DB_USER:-colony}"
+  local db="${COLONY_DB_NAME:?missing COLONY_DB_NAME}"
+  colony_log "Waiting for GPU PostgreSQL on colony-db db=${db} (bounded ${COLONY_DB_WAIT_SECONDS}s)..."
   while (( SECONDS < deadline )); do
-    if colony_compose_gpu_postgres exec -T postgres pg_isready -U colony -d ai_colony >/dev/null 2>&1; then
-      colony_log "GPU PostgreSQL ready."
+    if colony_compose_gpu_postgres exec -T postgres pg_isready -U "${user}" -d "${db}" >/dev/null 2>&1; then
+      colony_log "GPU PostgreSQL ready (db=${db})."
+      return 0
+    fi
+    local cid
+    cid="$(colony_find_gpu_postgres_container || true)"
+    if [[ -n "${cid}" ]] && docker exec "${cid}" pg_isready -U "${user}" -d "${db}" >/dev/null 2>&1; then
+      colony_log "GPU PostgreSQL ready via container ${cid} (db=${db})."
       return 0
     fi
     sleep 1
   done
-  colony_die "${EXIT_READY}" "GPU PostgreSQL not ready within ${COLONY_DB_WAIT_SECONDS}s"
+  colony_die "${EXIT_READY}" "GPU PostgreSQL db=${db} not ready within ${COLONY_DB_WAIT_SECONDS}s"
 }
 
 colony_migrate_local() {
@@ -198,9 +276,10 @@ colony_migrate_local() {
 
 colony_migrate_gpu() {
   # Run migrator once on colony-db so hostname `postgres` resolves. Never starts API first.
-  colony_log "Applying pending migrations against GPU DATABASE_URL via colony-db network..."
-  if [[ -z "${DATABASE_URL:-}" ]]; then
-    colony_die "${EXIT_CONFIG}" "DATABASE_URL required for GPU migrations (use host postgres://…@postgres:5432/… for containers)."
+  # Uses the same DATABASE_URL the API uses (e.g. .../ai_colony_v2). Never recreates/reseeds DBs.
+  colony_log "Applying pending migrations against GPU DATABASE_URL db=${COLONY_DB_NAME} via colony-db..."
+  if [[ -z "${DATABASE_URL:-}" || -z "${COLONY_DB_NAME:-}" ]]; then
+    colony_die "${EXIT_CONFIG}" "DATABASE_URL required for GPU migrations (derive db name from URL path)."
   fi
   if ! docker image inspect "${COLONY_AGENT_IMAGE}" >/dev/null 2>&1; then
     colony_log "Building agent image ${COLONY_AGENT_IMAGE} for migrate/API..."
@@ -214,9 +293,9 @@ colony_migrate_gpu() {
     -e NODE_ENV=development \
     "${COLONY_AGENT_IMAGE}" \
     node packages/database/dist/migrate-cli.js; then
-    colony_die "${EXIT_MIGRATE}" "GPU migration failed. Dedicated API start aborted."
+    colony_die "${EXIT_MIGRATE}" "GPU migration failed against db=${COLONY_DB_NAME}. API start aborted."
   fi
-  colony_log "GPU migrations applied."
+  colony_log "GPU migrations applied (db=${COLONY_DB_NAME})."
 }
 
 colony_migrate() {
@@ -236,32 +315,39 @@ colony_journal_tip() {
   ' "${COLONY_JOURNAL}"
 }
 
+colony_journal_entry_count() {
+  node -e 'const j=require(process.argv[1]); process.stdout.write(String(j.entries.length))' "${COLONY_JOURNAL}"
+}
+
+colony_journal_whens() {
+  node -e 'const j=require(process.argv[1]); process.stdout.write(j.entries.map((e)=>String(e.when)).join(","))' "${COLONY_JOURNAL}"
+}
+
+colony_psql_local() {
+  local sql="$1"
+  local user="${COLONY_DB_USER:-colony}"
+  local db="${COLONY_DB_NAME:-ai_colony}"
+  colony_compose_local exec -T postgres psql -U "${user}" -d "${db}" -Atc "${sql}" 2>/dev/null
+}
+
 colony_drizzle_rows_local() {
   local has_schema
-  has_schema="$(colony_compose_local exec -T postgres \
-    psql -U colony -d ai_colony -Atc \
-    "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'drizzle';" 2>/dev/null | tr -d '[:space:]' || echo "0")"
+  has_schema="$(colony_psql_local "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'drizzle';" | tr -d '[:space:]' || echo "0")"
   if [[ "${has_schema}" != "1" ]]; then
     echo "0"
     return 0
   fi
-  colony_compose_local exec -T postgres \
-    psql -U colony -d ai_colony -Atc \
-    "SELECT count(*) FROM drizzle.__drizzle_migrations;" 2>/dev/null | tr -d '[:space:]' || echo "0"
+  colony_psql_local "SELECT count(*) FROM drizzle.__drizzle_migrations;" | tr -d '[:space:]' || echo "0"
 }
 
 colony_drizzle_rows_gpu() {
   local has_schema
-  has_schema="$(colony_compose_gpu_postgres exec -T postgres \
-    psql -U colony -d ai_colony -Atc \
-    "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'drizzle';" 2>/dev/null | tr -d '[:space:]' || echo "0")"
+  has_schema="$(colony_gpu_psql "SELECT count(*) FROM information_schema.schemata WHERE schema_name = 'drizzle';" | tr -d '[:space:]' || echo "0")"
   if [[ "${has_schema}" != "1" ]]; then
     echo "0"
     return 0
   fi
-  colony_compose_gpu_postgres exec -T postgres \
-    psql -U colony -d ai_colony -Atc \
-    "SELECT count(*) FROM drizzle.__drizzle_migrations;" 2>/dev/null | tr -d '[:space:]' || echo "0"
+  colony_gpu_psql "SELECT count(*) FROM drizzle.__drizzle_migrations;" | tr -d '[:space:]' || echo "0"
 }
 
 colony_drizzle_rows() {
@@ -270,6 +356,54 @@ colony_drizzle_rows() {
   else
     colony_drizzle_rows_local
   fi
+}
+
+# Compare journal `when` stamps to drizzle.__drizzle_migrations.created_at in the target DB.
+colony_migration_sync_report() {
+  local applied expected tip applied_whens journal_whens missing
+  expected="$(colony_journal_entry_count)"
+  tip="$(colony_journal_tip || true)"
+  applied="$(colony_drizzle_rows)"
+  journal_whens="$(colony_journal_whens)"
+  echo "database_name=${COLONY_DB_NAME}"
+  echo "migration_journal_tip=${tip:-unknown}"
+  echo "migration_journal_entries=${expected}"
+  echo "migration_applied_rows=${applied}"
+  if [[ "${COLONY_PROFILE}" == "gpu" ]]; then
+    applied_whens="$(colony_gpu_psql "SELECT coalesce(string_agg(created_at::text, ',' ORDER BY created_at), '') FROM drizzle.__drizzle_migrations;" 2>/dev/null | tr -d '[:space:]' || true)"
+  else
+    applied_whens="$(colony_psql_local "SELECT coalesce(string_agg(created_at::text, ',' ORDER BY created_at), '') FROM drizzle.__drizzle_migrations;" 2>/dev/null | tr -d '[:space:]' || true)"
+  fi
+  if [[ -z "${applied_whens}" || "${applied_whens}" == "0" ]]; then
+    # Table missing or empty — fall back to count only.
+    if [[ "${applied}" == "${expected}" && "${applied}" != "0" ]]; then
+      echo "migrations=current"
+      echo "migration_journal_consistency=count_only"
+      return 0
+    fi
+    echo "migrations=pending_or_unknown (applied=${applied} expected=${expected})"
+    echo "migration_journal_consistency=unavailable"
+    return 1
+  fi
+  missing="$(
+    node -e '
+      const journal = (process.argv[1] || "").split(",").filter(Boolean);
+      const applied = new Set((process.argv[2] || "").split(",").filter(Boolean));
+      const missing = journal.filter((w) => !applied.has(w));
+      process.stdout.write(missing.join(","));
+    ' "${journal_whens}" "${applied_whens}"
+  )"
+  if [[ "${applied}" == "${expected}" && -z "${missing}" ]]; then
+    echo "migrations=current"
+    echo "migration_journal_consistency=matched"
+    return 0
+  fi
+  echo "migrations=pending_or_diverged (applied=${applied} expected=${expected})"
+  if [[ -n "${missing}" ]]; then
+    echo "migration_journal_missing_whens=${missing}"
+  fi
+  echo "migration_journal_consistency=mismatch"
+  return 1
 }
 
 colony_api_health() {
@@ -337,14 +471,110 @@ colony_stop_api_local() {
   rm -f "${COLONY_API_PID_FILE}"
 }
 
+# List docker containers publishing host 127.0.0.1:PORT (or 0.0.0.0:PORT).
+colony_containers_on_host_port() {
+  local port="${1:-3000}"
+  docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null \
+    | grep -E "(127\.0\.0\.1|0\.0\.0\.0):${port}->|:${port}->" \
+    || true
+}
+
+colony_gpu_api_container_id() {
+  colony_compose_gpu_api ps -q colony-api-test 2>/dev/null | head -n1
+}
+
+colony_gpu_api_host_port() {
+  # Prints published host port mapping or empty if missing.
+  colony_compose_gpu_api port colony-api-test 3000 2>/dev/null || true
+}
+
+colony_report_api_port_conflicts() {
+  local port="${PORT:-3000}"
+  local expected_id
+  expected_id="$(colony_gpu_api_container_id || true)"
+  local rows
+  rows="$(colony_containers_on_host_port "${port}")"
+  if [[ -z "${rows}" ]]; then
+    echo "api_port_${port}=free"
+    return 0
+  fi
+  local conflict=0
+  while IFS=$'\t' read -r id name ports; do
+    [[ -z "${id}" ]] && continue
+    if [[ -n "${expected_id}" && "${id}" == "${expected_id}" ]]; then
+      echo "api_port_${port}=held_by_expected name=${name} id=${id} ports=${ports}"
+      continue
+    fi
+    echo "api_port_${port}=CONFLICT name=${name} id=${id} ports=${ports}"
+    conflict=1
+  done <<<"${rows}"
+  return "${conflict}"
+}
+
+colony_verify_gpu_api_identity() {
+  local cid mapping env_db
+  cid="$(colony_gpu_api_container_id || true)"
+  if [[ -z "${cid}" ]]; then
+    colony_warn "Expected GPU API container (project=${COLONY_GPU_API_PROJECT} service=colony-api-test) not found."
+    return 1
+  fi
+  mapping="$(colony_gpu_api_host_port)"
+  if [[ -z "${mapping}" ]]; then
+    colony_warn "colony-api-test has no published host port for 3000 (Ports null). Check compose ports: 127.0.0.1:3000:3000."
+    return 1
+  fi
+  echo "api_container=${cid}"
+  echo "api_published=${mapping}"
+  env_db="$(docker inspect "${cid}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^DATABASE_URL=' | head -n1 || true)"
+  if [[ -n "${env_db}" ]]; then
+    echo "api_env_${env_db}"
+    if [[ "${env_db}" != "DATABASE_URL=${DATABASE_URL}" ]]; then
+      colony_warn "API container DATABASE_URL differs from launcher DATABASE_URL."
+    fi
+  fi
+  # Ensure a healthy listener on COLONY_API_BASE belongs to this container's publish.
+  if ! colony_api_ready; then
+    echo "api_identity=not_ready"
+    return 1
+  fi
+  local holders
+  holders="$(colony_containers_on_host_port "${PORT:-3000}")"
+  if ! printf '%s\n' "${holders}" | grep -Fq "${cid}"; then
+    echo "api_identity=ready_but_unexpected_listener"
+    colony_warn "HTTP ready on ${COLONY_API_BASE} but expected container ${cid} is not publishing host port ${PORT:-3000}."
+    return 1
+  fi
+  if colony_report_api_port_conflicts >/dev/null; then
+    echo "api_identity=expected_gpu_deployment"
+    return 0
+  fi
+  # Conflicts reported separately; still ready but not exclusive.
+  echo "api_identity=ready_with_port_conflicts"
+  return 1
+}
+
 colony_start_api_gpu() {
   colony_ensure_state_dir
   if [[ ! -f "${COLONY_ROOT}/deploy/postgres/postgres.env" && "${COLONY_GPU_MANAGE_POSTGRES}" == "true" ]]; then
     colony_warn "deploy/postgres/postgres.env missing; copy from postgres.env.example if starting postgres via this script."
   fi
-  colony_log "Starting containerized API colony-api-test (after migrations)..."
+
+  local conflicts
+  conflicts="$(colony_containers_on_host_port "${PORT:-3000}")"
+  local expected_id
+  expected_id="$(colony_gpu_api_container_id || true)"
+  if [[ -n "${conflicts}" ]]; then
+    while IFS=$'\t' read -r id name ports; do
+      [[ -z "${id}" ]] && continue
+      if [[ -n "${expected_id}" && "${id}" == "${expected_id}" ]]; then
+        continue
+      fi
+      colony_die "${EXIT_READY}" "Host port ${PORT:-3000} is already published by container ${name} (${id}) ports=${ports}. Stop that stale API (e.g. docker stop ${name}) before starting project ${COLONY_GPU_API_PROJECT}."
+    done <<<"${conflicts}"
+  fi
+
+  colony_log "Starting containerized API colony-api-test project=${COLONY_GPU_API_PROJECT} db=${COLONY_DB_NAME} (after migrations)..."
   if ! colony_compose_gpu_api up -d --no-build colony-api-test; then
-    # Image may need a build once.
     if ! docker build -f "${COLONY_ROOT}/deploy/Dockerfile.agent" -t "${COLONY_AGENT_IMAGE}" "${COLONY_ROOT}"; then
       colony_die "${EXIT_BUILD}" "Agent/API image build failed."
     fi
@@ -352,15 +582,24 @@ colony_start_api_gpu() {
       colony_die "${EXIT_READY}" "colony-api-test failed to start."
     fi
   fi
+
+  local mapping
+  mapping="$(colony_gpu_api_host_port)"
+  if [[ -z "${mapping}" ]]; then
+    colony_die "${EXIT_READY}" "colony-api-test started without publishing 127.0.0.1:3000:3000 (got Ports null). Refusing to treat a stale listener as healthy."
+  fi
+  colony_log "API host publish ${mapping}"
+
   local deadline=$((SECONDS + COLONY_API_WAIT_SECONDS))
   while (( SECONDS < deadline )); do
-    if colony_api_ready; then
-      colony_log "GPU API ready at ${COLONY_API_BASE}"
+    if colony_api_ready && colony_verify_gpu_api_identity >/dev/null; then
+      colony_log "GPU API ready at ${COLONY_API_BASE} (db=${COLONY_DB_NAME})"
       return 0
     fi
     sleep 1
   done
-  colony_die "${EXIT_READY}" "GPU API not ready within ${COLONY_API_WAIT_SECONDS}s"
+  colony_verify_gpu_api_identity || true
+  colony_die "${EXIT_READY}" "GPU API not ready within ${COLONY_API_WAIT_SECONDS}s (or stale process answered ${COLONY_API_BASE})."
 }
 
 colony_stop_api_gpu() {
@@ -459,17 +698,15 @@ colony_check_ollama() {
 
 colony_seed_present_local() {
   local count
-  count="$(colony_compose_local exec -T postgres \
-    psql -U colony -d ai_colony -Atc \
-    "SELECT count(*) FROM departments WHERE id = '00000000-0000-4000-8000-00000000001b';" 2>/dev/null | tr -d '[:space:]' || echo "0")"
+  local science="${COLONY_SCIENCE_DEPARTMENT_ID:-00000000-0000-4000-8000-00000000001b}"
+  count="$(colony_psql_local "SELECT count(*) FROM departments WHERE id = '${science}';" | tr -d '[:space:]' || echo "0")"
   [[ "${count}" == "1" ]]
 }
 
 colony_seed_present_gpu() {
   local count
-  count="$(colony_compose_gpu_postgres exec -T postgres \
-    psql -U colony -d ai_colony -Atc \
-    "SELECT count(*) FROM departments WHERE id = '00000000-0000-4000-8000-00000000001b';" 2>/dev/null | tr -d '[:space:]' || echo "0")"
+  local science="${COLONY_SCIENCE_DEPARTMENT_ID:-00000000-0000-4000-8000-00000000001b}"
+  count="$(colony_gpu_psql "SELECT count(*) FROM departments WHERE id = '${science}';" | tr -d '[:space:]' || echo "0")"
   [[ "${count}" == "1" ]]
 }
 

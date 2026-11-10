@@ -72,6 +72,9 @@ describe("C1.7.5 colony ops scripts", () => {
     expect(doc.toLowerCase()).toContain("checked-out");
     expect(doc.toLowerCase()).toMatch(/db:migrate|migrate-cli|migrations/);
     expect(doc.toLowerCase()).toContain("no automatic multi-gb model download");
+    expect(doc).toContain("GPU database targeting");
+    expect(doc).toContain("__drizzle_migrations");
+    expect(doc).toContain("127.0.0.1:3000:3000");
   });
 
   it("encodes GPU compose file order for dedicated stack", () => {
@@ -105,13 +108,169 @@ describe("C1.7.5 colony ops scripts", () => {
     expect(apiAt).toBeGreaterThan(migrateAt);
   });
 
-  it("ships api-gpu overlay attaching colony-api-test to colony-dedicated", () => {
+  it("ships api-gpu overlay attaching colony-api-test to colony-dedicated with published port", () => {
     const overlay = readFileSync("deploy/docker-compose.api-gpu.yml", "utf8");
+    const base = readFileSync("deploy/docker-compose.api-test.yml", "utf8");
     expect(overlay).toContain("colony-api-test");
     expect(overlay).toContain("colony-dedicated");
     expect(overlay).toContain("colony-db");
     expect(overlay).toContain("ollama-science");
+    expect(overlay).toContain("127.0.0.1:3000:3000");
+    expect(base).toContain("127.0.0.1:3000:3000");
     expect(overlay).not.toMatch(/gpus:/);
+  });
+
+  it("derives GPU database name from DATABASE_URL instead of hardcoding ai_colony", () => {
+    const common = readFileSync("scripts/lib/colony-common.sh", "utf8");
+    expect(common).toContain("colony_parse_database_url");
+    expect(common).toContain("COLONY_DB_NAME");
+    expect(common).toContain("colony_migration_sync_report");
+    expect(common).toContain("colony_report_api_port_conflicts");
+    // GPU seed/drizzle helpers must not hardcode -d ai_colony
+    expect(common).not.toMatch(/colony_gpu_psql.*-d ai_colony/);
+    expect(common).not.toMatch(/psql -U colony -d ai_colony/);
+
+    const parsed = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          'export DATABASE_URL="postgres://colony:secret@postgres:5432/ai_colony_v2"',
+          "colony_parse_database_url",
+          'test "$COLONY_DB_NAME" = "ai_colony_v2"',
+          'test "$COLONY_DB_USER" = "colony"',
+          'test "$COLONY_DB_HOST" = "postgres"',
+          'echo ok',
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(parsed.status).toBe(0);
+    expect(parsed.stdout).toContain("database_target name=ai_colony_v2");
+    expect(parsed.stdout).toContain("ok");
+
+    const emptyAi = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          'export DATABASE_URL="postgres://colony:secret@postgres:5432/ai_colony"',
+          "colony_parse_database_url",
+          'test "$COLONY_DB_NAME" = "ai_colony"',
+          'echo ok-empty-name-still-derived',
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(emptyAi.status).toBe(0);
+  });
+
+  it("validates migration journal when stamps against applied rows for multi-db targeting", () => {
+    const report = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          "colony_journal_entry_count() { echo 29; }",
+          'colony_journal_tip() { echo "28\t0028_claim_idempotency\t1793570000000"; }',
+          "colony_journal_whens() { echo 1,2,3; }",
+          "colony_drizzle_rows() { echo 0; }",
+          "COLONY_PROFILE=gpu",
+          "COLONY_DB_NAME=ai_colony_v2",
+          "colony_gpu_psql() { echo 0; }",
+          "colony_migration_sync_report || true",
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(report.status).toBe(0);
+    expect(report.stdout).toContain("database_name=ai_colony_v2");
+    expect(report.stdout).toContain("migration_applied_rows=0");
+    expect(report.stdout).toMatch(/pending_or_unknown|pending_or_diverged|unavailable/);
+
+    const matched = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          "colony_journal_entry_count() { echo 3; }",
+          'colony_journal_tip() { echo "2\ttip\t3"; }',
+          "colony_journal_whens() { echo 1,2,3; }",
+          "colony_drizzle_rows() { echo 3; }",
+          "COLONY_PROFILE=local",
+          "COLONY_DB_NAME=ai_colony_v2",
+          "colony_psql_local() { echo 1,2,3; }",
+          "colony_migration_sync_report",
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(matched.status).toBe(0);
+    expect(matched.stdout).toContain("migrations=current");
+    expect(matched.stdout).toContain("migration_journal_consistency=matched");
+  });
+
+  it("detects missing API port publication and stale port conflicts in helpers", () => {
+    const common = readFileSync("scripts/lib/colony-common.sh", "utf8");
+    expect(common).toContain("colony_gpu_api_host_port");
+    expect(common).toContain("Ports null");
+    expect(common).toContain("already published by container");
+    expect(common).toContain("COLONY_GPU_API_PROJECT");
+    expect(common).toContain("colony_verify_gpu_api_identity");
+    expect(common).toContain("ready_but_unexpected_listener");
+
+    const conflict = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          "PORT=3000",
+          "colony_gpu_api_container_id() { echo expected99; }",
+          'colony_containers_on_host_port() { printf "%s\\t%s\\t%s\\n" abc123 stale-colony-api-test "127.0.0.1:3000->3000/tcp"; }',
+          "colony_report_api_port_conflicts || echo status=$?",
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(conflict.status).toBe(0);
+    expect(conflict.stdout).toContain("api_port_3000=CONFLICT");
+    expect(conflict.stdout).toContain("stale-colony-api-test");
+    expect(conflict.stdout).toContain("status=1");
+
+    const missingPort = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          "COLONY_GPU_API_PROJECT=ai-colony-api",
+          "colony_gpu_api_container_id() { echo cid1; }",
+          "colony_gpu_api_host_port() { echo ''; }",
+          "colony_verify_gpu_api_identity || true",
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(missingPort.status).toBe(0);
+    expect(`${missingPort.stdout}${missingPort.stderr}`).toMatch(/no published host port|Ports null/i);
+  });
+
+  it("status path never hardcodes empty ai_colony for GPU migration/seed checks", () => {
+    const script = readFileSync("scripts/colony", "utf8");
+    const common = readFileSync("scripts/lib/colony-common.sh", "utf8");
+    expect(script).toContain("colony_migration_sync_report");
+    expect(script).toContain("seed_database=${COLONY_DB_NAME}");
+    expect(script).toContain("colony_verify_gpu_api_identity");
+    expect(common).toContain("drizzle.__drizzle_migrations");
+    expect(common).toContain("migration_journal_consistency");
+    // Must not query a fixed empty sibling DB in status/seed helpers.
+    expect(script).not.toMatch(/pg_isready -U colony -d ai_colony/);
+    expect(script).not.toMatch(/-d ai_colony[^_]/);
   });
 
   it("exposes pnpm colony without replacing dedicated colony-cli scripts", () => {

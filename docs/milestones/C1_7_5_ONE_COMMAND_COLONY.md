@@ -92,11 +92,36 @@ Plus:
 
 Stop dedicated services with `stop -t 30` (same as `pnpm colony:stop`). Postgres is left running unless `COLONY_GPU_STOP_POSTGRES=true`.
 
+### GPU database targeting
+
+`status`, migrate, and seed checks use the **same** `DATABASE_URL` as the API (path = database name). Example live VM:
+
+```text
+DATABASE_URL=postgres://colony:…@postgres:5432/ai_colony_v2
+```
+
+→ migrations/seed/status query `ai_colony_v2.drizzle.__drizzle_migrations` and `ai_colony_v2.public.departments`, never a sibling empty `ai_colony` database. The launcher never hardcodes the database name and never reseeds/resets/recreates databases.
+
+Migration sync compares journal entry count **and** journal `when` stamps to `drizzle.__drizzle_migrations.created_at`.
+
+### GPU API port + stale listeners
+
+Compose project for the API is `ai-colony-api` (`COLONY_GPU_API_PROJECT`). Ports are always `127.0.0.1:3000:3000` in both `api-test.yml` and `api-gpu.yml`.
+
+If another container already publishes host port 3000 (for example `colony-api-test-colony-api-test-1` or an older `deploy-colony-api-test-1`), `up`/`deploy` fails with a clear conflict naming that container. Stop the stale one, then retry:
+
+```bash
+docker stop <conflicting-name>
+./scripts/colony --profile gpu up
+```
+
+`status` reports `api_published`, `api_identity`, and any `api_port_3000=CONFLICT` rows.
+
 ### GPU migration order
 
-1. Ensure Postgres ready on `colony-db`
-2. Run `node packages/database/dist/migrate-cli.js` **once** in a one-shot container on `colony-db` (uses `DATABASE_URL`)
-3. Only then start/recreate `colony-api-test`
+1. Ensure Postgres ready on `colony-db` for the **DATABASE_URL database**
+2. Run `node packages/database/dist/migrate-cli.js` **once** in a one-shot container on `colony-db` (same `DATABASE_URL`)
+3. Only then start/recreate `colony-api-test` with published `127.0.0.1:3000`
 
 Migration failure exits `11` and does not start the API.
 
