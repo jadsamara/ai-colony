@@ -221,7 +221,72 @@ describe("C1.7.5 colony ops scripts", () => {
     expect(common).toContain("already published by container");
     expect(common).toContain("COLONY_GPU_API_PROJECT");
     expect(common).toContain("colony_verify_gpu_api_identity");
+    expect(common).toContain("colony_docker_ids_equal");
+    expect(common).toContain("api_identity=verified");
     expect(common).toContain("ready_but_unexpected_listener");
+
+    const full =
+      "f0f47f65d572db0ed440a91314156783462219bc4874682e5b357fff14b19367";
+    const short = full.slice(0, 12);
+
+    const idEq = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          `colony_docker_ids_equal "${full}" "${short}" && echo full_vs_short=ok`,
+          `colony_docker_ids_equal "${short}" "${full}" && echo short_vs_full=ok`,
+          `colony_docker_ids_equal "${full}" "${full}" && echo full_vs_full=ok`,
+          `colony_docker_ids_equal "${short}" "abcdefabcdef" || echo different=ok`,
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(idEq.status).toBe(0);
+    expect(idEq.stdout).toContain("full_vs_short=ok");
+    expect(idEq.stdout).toContain("short_vs_full=ok");
+    expect(idEq.stdout).toContain("full_vs_full=ok");
+    expect(idEq.stdout).toContain("different=ok");
+
+    // Full expected ID vs short docker-ps ID for the same container: not a conflict.
+    const selfFull = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          "PORT=3000",
+          `colony_gpu_api_container_id() { echo ${full}; }`,
+          `colony_containers_on_host_port() { printf "%s\\t%s\\t%s\\n" ${short} ai-colony-api-colony-api-test-1 "127.0.0.1:3000->3000/tcp"; }`,
+          "colony_report_api_port_conflicts; echo status=$?",
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(selfFull.status).toBe(0);
+    expect(selfFull.stdout).toContain("held_by_expected");
+    expect(selfFull.stdout).not.toContain("CONFLICT");
+    expect(selfFull.stdout).toContain("status=0");
+
+    // Short expected ID vs full holder ID: still the same container.
+    const selfShort = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          "PORT=3000",
+          `colony_gpu_api_container_id() { echo ${short}; }`,
+          `colony_containers_on_host_port() { printf "%s\\t%s\\t%s\\n" ${full} ai-colony-api-colony-api-test-1 "127.0.0.1:3000->3000/tcp"; }`,
+          "colony_report_api_port_conflicts; echo status=$?",
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(selfShort.status).toBe(0);
+    expect(selfShort.stdout).toContain("held_by_expected");
+    expect(selfShort.stdout).not.toContain("CONFLICT");
 
     const conflict = spawnSync(
       "bash",
@@ -230,8 +295,8 @@ describe("C1.7.5 colony ops scripts", () => {
         [
           "source scripts/lib/colony-common.sh",
           "PORT=3000",
-          "colony_gpu_api_container_id() { echo expected99; }",
-          'colony_containers_on_host_port() { printf "%s\\t%s\\t%s\\n" abc123 stale-colony-api-test "127.0.0.1:3000->3000/tcp"; }',
+          `colony_gpu_api_container_id() { echo ${full}; }`,
+          'colony_containers_on_host_port() { printf "%s\\t%s\\t%s\\n" abc123stale99 stale-colony-api-test "127.0.0.1:3000->3000/tcp"; }',
           "colony_report_api_port_conflicts || echo status=$?",
         ].join("\n"),
       ],
@@ -241,6 +306,51 @@ describe("C1.7.5 colony ops scripts", () => {
     expect(conflict.stdout).toContain("api_port_3000=CONFLICT");
     expect(conflict.stdout).toContain("stale-colony-api-test");
     expect(conflict.stdout).toContain("status=1");
+
+    // Verified when expected publishes 3000, health ready, no foreign holders.
+    const verified = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          "PORT=3000",
+          "COLONY_API_BASE=http://127.0.0.1:3000",
+          "COLONY_GPU_API_PROJECT=ai-colony-api",
+          `colony_gpu_api_container_id() { echo ${full}; }`,
+          'colony_gpu_api_host_port() { echo "127.0.0.1:3000"; }',
+          "colony_api_ready() { return 0; }",
+          `colony_containers_on_host_port() { printf "%s\\t%s\\t%s\\n" ${short} ai-colony-api-colony-api-test-1 "127.0.0.1:3000->3000/tcp"; }`,
+          "colony_verify_gpu_api_identity",
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(verified.status).toBe(0);
+    expect(verified.stdout).toContain("api_identity=verified");
+    expect(verified.stdout).not.toContain("ready_but_unexpected_listener");
+
+    // Expected container exists but does not publish the host port.
+    const noPublish = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "source scripts/lib/colony-common.sh",
+          "PORT=3000",
+          "COLONY_API_BASE=http://127.0.0.1:3000",
+          "COLONY_GPU_API_PROJECT=ai-colony-api",
+          `colony_gpu_api_container_id() { echo ${full}; }`,
+          'colony_gpu_api_host_port() { echo "127.0.0.1:3000"; }',
+          "colony_api_ready() { return 0; }",
+          'colony_containers_on_host_port() { printf "%s\\t%s\\t%s\\n" otherdeadbeef stale-api "127.0.0.1:3000->3000/tcp"; }',
+          "colony_verify_gpu_api_identity || true",
+        ].join("\n"),
+      ],
+      { encoding: "utf8" },
+    );
+    expect(noPublish.status).toBe(0);
+    expect(noPublish.stdout).toContain("api_identity=ready_but_unexpected_listener");
 
     const missingPort = spawnSync(
       "bash",

@@ -472,6 +472,7 @@ colony_stop_api_local() {
 }
 
 # List docker containers publishing host 127.0.0.1:PORT (or 0.0.0.0:PORT).
+# Note: docker ps {{.ID}} is typically a short (12-char) prefix; compose ps -q is often full.
 colony_containers_on_host_port() {
   local port="${1:-3000}"
   docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null \
@@ -479,8 +480,37 @@ colony_containers_on_host_port() {
     || true
 }
 
+colony_docker_id_norm() {
+  printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'
+}
+
+# True when two Docker IDs name the same container (full 64-char vs short prefix).
+colony_docker_ids_equal() {
+  local a b
+  a="$(colony_docker_id_norm "${1:-}")"
+  b="$(colony_docker_id_norm "${2:-}")"
+  [[ -n "${a}" && -n "${b}" ]] || return 1
+  [[ "${a}" == "${b}" ]] && return 0
+  if (( ${#a} < ${#b} )); then
+    [[ "${b}" == "${a}"* ]] && return 0
+  else
+    [[ "${a}" == "${b}"* ]] && return 0
+  fi
+  return 1
+}
+
 colony_gpu_api_container_id() {
-  colony_compose_gpu_api ps -q colony-api-test 2>/dev/null | head -n1
+  # Prefer full ID from inspect when available so comparisons can canonicalize.
+  local short
+  short="$(colony_compose_gpu_api ps -q colony-api-test 2>/dev/null | head -n1 | tr -d '[:space:]')"
+  [[ -n "${short}" ]] || return 1
+  local full
+  full="$(docker inspect -f '{{.Id}}' "${short}" 2>/dev/null | tr -d '[:space:]' || true)"
+  if [[ -n "${full}" ]]; then
+    printf '%s\n' "${full}"
+  else
+    printf '%s\n' "${short}"
+  fi
 }
 
 colony_gpu_api_host_port() {
@@ -501,7 +531,7 @@ colony_report_api_port_conflicts() {
   local conflict=0
   while IFS=$'\t' read -r id name ports; do
     [[ -z "${id}" ]] && continue
-    if [[ -n "${expected_id}" && "${id}" == "${expected_id}" ]]; then
+    if [[ -n "${expected_id}" ]] && colony_docker_ids_equal "${id}" "${expected_id}"; then
       echo "api_port_${port}=held_by_expected name=${name} id=${id} ports=${ports}"
       continue
     fi
@@ -537,15 +567,22 @@ colony_verify_gpu_api_identity() {
     echo "api_identity=not_ready"
     return 1
   fi
-  local holders
+  local holders found=0
   holders="$(colony_containers_on_host_port "${PORT:-3000}")"
-  if ! printf '%s\n' "${holders}" | grep -Fq "${cid}"; then
+  while IFS=$'\t' read -r id _name _ports; do
+    [[ -z "${id}" ]] && continue
+    if colony_docker_ids_equal "${id}" "${cid}"; then
+      found=1
+      break
+    fi
+  done <<<"${holders}"
+  if [[ "${found}" -ne 1 ]]; then
     echo "api_identity=ready_but_unexpected_listener"
     colony_warn "HTTP ready on ${COLONY_API_BASE} but expected container ${cid} is not publishing host port ${PORT:-3000}."
     return 1
   fi
   if colony_report_api_port_conflicts >/dev/null; then
-    echo "api_identity=expected_gpu_deployment"
+    echo "api_identity=verified"
     return 0
   fi
   # Conflicts reported separately; still ready but not exclusive.
@@ -566,7 +603,7 @@ colony_start_api_gpu() {
   if [[ -n "${conflicts}" ]]; then
     while IFS=$'\t' read -r id name ports; do
       [[ -z "${id}" ]] && continue
-      if [[ -n "${expected_id}" && "${id}" == "${expected_id}" ]]; then
+      if [[ -n "${expected_id}" ]] && colony_docker_ids_equal "${id}" "${expected_id}"; then
         continue
       fi
       colony_die "${EXIT_READY}" "Host port ${PORT:-3000} is already published by container ${name} (${id}) ports=${ports}. Stop that stale API (e.g. docker stop ${name}) before starting project ${COLONY_GPU_API_PROJECT}."

@@ -115,7 +115,7 @@ docker stop <conflicting-name>
 ./scripts/colony --profile gpu up
 ```
 
-`status` reports `api_published`, `api_identity`, and any `api_port_3000=CONFLICT` rows.
+`status` reports `api_published`, `api_identity=verified` when the expected container publishes `127.0.0.1:3000` and readiness passes, and any `api_port_3000=CONFLICT` rows for **other** containers only. Docker short vs full IDs are normalized before comparison so the expected API never conflicts with itself.
 
 ### GPU migration order
 
