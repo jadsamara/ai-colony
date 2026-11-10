@@ -20,6 +20,7 @@
     "scripts/run-m75-phase1.ts",
     "scripts/run-m75b.ts",
     "scripts/record-m75b-history.ts",
+    "scripts/run-c18a-math-baseline.ts",
     "drizzle.config.ts",
     "vitest.unit.config.ts",
     "vitest.integration.config.ts"

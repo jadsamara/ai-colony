@@ -36,6 +36,7 @@
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit --pretty false",
     "test": "vitest run --config vitest.unit.config.ts && vitest run --config vitest.integration.config.ts",
     "test:unit": "vitest run --config vitest.unit.config.ts",
+    "eval:c18a": "tsx scripts/run-c18a-math-baseline.ts",
     "health": "tsc -b packages/contracts packages/core packages/database packages/inference --pretty false && tsx apps/api/src/runtime-health-cli.ts",
     "ledger:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/ledger-readiness-cli.ts",
     "routing:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/routing-readiness-cli.ts",

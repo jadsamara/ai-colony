@@ -1,0 +1,550 @@
+{
+  "generatorVersion": "c18a-math-v1",
+  "experimentId": "c18a-math-department-baseline",
+  "department": "math",
+  "phase": "C1.8A",
+  "groundTruth": "bound_parameters_via_calculator",
+  "claimExtractor": "not_used",
+  "tolerance": {
+    "absolute": 0.000001,
+    "relative": 0.000001
+  },
+  "templateIds": {
+    "train": [
+      "affine.train.rate",
+      "affine.train.shift",
+      "kinetic.train.motion",
+      "kinetic.train.grams",
+      "ohm.train.resistor",
+      "ohm.train.milliamp",
+      "tsiolkovsky.train.dry",
+      "tsiolkovsky.train.kms"
+    ],
+    "evaluation": [
+      "affine.eval.line",
+      "affine.eval.table",
+      "kinetic.eval.energy",
+      "kinetic.eval.grams",
+      "ohm.eval.dissipated",
+      "ohm.eval.milliamp",
+      "tsiolkovsky.eval.propellant",
+      "tsiolkovsky.eval.kms"
+    ]
+  },
+  "contentHash": "18f5d06093f838158f97c1ad06fafbbed84e4dfcde64a6bba8e6612475869225",
+  "itemSetFingerprint": "882bede7b7ef6b189a0d44c263d18c557544fffded9ff759ca4afded9242f07b",
+  "items": [
+    {
+      "id": "57dfc3908e670d5ed0284c68856e7685",
+      "contentDigest": "57dfc3908e670d5ed0284c68856e7685f52143a591d3f329f3675c1929afea3f",
+      "split": "train",
+      "family": "affine",
+      "templateId": "affine.train.rate",
+      "parameters": {
+        "family": "affine",
+        "slope": 2,
+        "intercept": 3,
+        "input": 4,
+        "inputUnit": "s",
+        "outputUnit": "m"
+      },
+      "prompt": "A measured quantity starts at 3 m and changes by 2 m for each s. After 4 s, what is the quantity in m?",
+      "expected": 11,
+      "units": "m"
+    },
+    {
+      "id": "b3abcb58c6a84566fc55843dbcab2d3a",
+      "contentDigest": "b3abcb58c6a84566fc55843dbcab2d3a44d5903ec03a031a36cda65b96d73905",
+      "split": "train",
+      "family": "affine",
+      "templateId": "affine.train.rate",
+      "parameters": {
+        "family": "affine",
+        "slope": 0.5,
+        "intercept": -1,
+        "input": 8,
+        "inputUnit": "s",
+        "outputUnit": "m"
+      },
+      "prompt": "A measured quantity starts at -1 m and changes by 0.5 m for each s. After 8 s, what is the quantity in m?",
+      "expected": 3,
+      "units": "m"
+    },
+    {
+      "id": "3637781a0b8e0500b5e65e55ad86b12b",
+      "contentDigest": "3637781a0b8e0500b5e65e55ad86b12b99a891a7e75ab5365ef3073962152b6e",
+      "split": "train",
+      "family": "affine",
+      "templateId": "affine.train.shift",
+      "parameters": {
+        "family": "affine",
+        "slope": 3,
+        "intercept": 1,
+        "input": 5,
+        "inputUnit": "h",
+        "outputUnit": "km"
+      },
+      "prompt": "Start with 1 km. Add the product of 3 and 5. The input is measured in h. Give the result in km.",
+      "expected": 16,
+      "units": "km"
+    },
+    {
+      "id": "56bd4af858256559ad1f279bdd5a8fbe",
+      "contentDigest": "56bd4af858256559ad1f279bdd5a8fbeb905f47080ce1184aca43418aa26fc96",
+      "split": "train",
+      "family": "affine",
+      "templateId": "affine.train.shift",
+      "parameters": {
+        "family": "affine",
+        "slope": -2,
+        "intercept": 10,
+        "input": 3,
+        "inputUnit": "h",
+        "outputUnit": "km"
+      },
+      "prompt": "Start with 10 km. Add the product of -2 and 3. The input is measured in h. Give the result in km.",
+      "expected": 4,
+      "units": "km"
+    },
+    {
+      "id": "c84cb97fbf0027c51f018e06f86479c9",
+      "contentDigest": "c84cb97fbf0027c51f018e06f86479c9c00df28862b556c26fd61176072af142",
+      "split": "evaluation",
+      "family": "affine",
+      "templateId": "affine.eval.line",
+      "parameters": {
+        "family": "affine",
+        "slope": 4,
+        "intercept": 2,
+        "input": 6,
+        "inputUnit": "s",
+        "outputUnit": "m"
+      },
+      "prompt": "The relation is y = 4 * x + 2, where x is in s and y is in m. Compute y when x = 6.",
+      "expected": 26,
+      "units": "m"
+    },
+    {
+      "id": "52bee93e06b588d8b99725dfc0df73c7",
+      "contentDigest": "52bee93e06b588d8b99725dfc0df73c7d6f5d2044ce2e469186c822729b6ebab",
+      "split": "evaluation",
+      "family": "affine",
+      "templateId": "affine.eval.line",
+      "parameters": {
+        "family": "affine",
+        "slope": 1.5,
+        "intercept": 0.5,
+        "input": 4,
+        "inputUnit": "s",
+        "outputUnit": "m"
+      },
+      "prompt": "The relation is y = 1.5 * x + 0.5, where x is in s and y is in m. Compute y when x = 4.",
+      "expected": 6.5,
+      "units": "m"
+    },
+    {
+      "id": "b6473f61405d911a5b98031edce04047",
+      "contentDigest": "b6473f61405d911a5b98031edce04047b7ccdc504099e641ef979f3289776b0b",
+      "split": "evaluation",
+      "family": "affine",
+      "templateId": "affine.eval.table",
+      "parameters": {
+        "family": "affine",
+        "slope": 60,
+        "intercept": 10,
+        "input": 2,
+        "inputUnit": "h",
+        "outputUnit": "km"
+      },
+      "prompt": "Input (h): 2. Slope: 60 km/h. Intercept: 10 km. Report y in km.",
+      "expected": 130,
+      "units": "km"
+    },
+    {
+      "id": "69d306398e865a4445e1e05ddd800e32",
+      "contentDigest": "69d306398e865a4445e1e05ddd800e32dee0abd82f11cbf8049f08fdf66fd44d",
+      "split": "evaluation",
+      "family": "affine",
+      "templateId": "affine.eval.table",
+      "parameters": {
+        "family": "affine",
+        "slope": 0.25,
+        "intercept": 2,
+        "input": 10,
+        "inputUnit": "min",
+        "outputUnit": "m"
+      },
+      "prompt": "Input (min): 10. Slope: 0.25 m/min. Intercept: 2 m. Report y in m.",
+      "expected": 4.5,
+      "units": "m"
+    },
+    {
+      "id": "c925c7a56741935b217bd40799a26c1b",
+      "contentDigest": "c925c7a56741935b217bd40799a26c1b6ab24a57d359041c343dd0f0ae5389f1",
+      "split": "train",
+      "family": "kinetic_energy",
+      "templateId": "kinetic.train.motion",
+      "parameters": {
+        "family": "kinetic_energy",
+        "massKg": 2,
+        "speedMps": 3
+      },
+      "prompt": "An object of mass 2 kg moves at 3 m/s. Kinetic energy in joules is one half times mass times speed squared. What is the kinetic energy in J?",
+      "expected": 9,
+      "units": "J"
+    },
+    {
+      "id": "4206618d159e37eba1e188744f845567",
+      "contentDigest": "4206618d159e37eba1e188744f84556704518a89855b62fd8dbcf63e3325321f",
+      "split": "train",
+      "family": "kinetic_energy",
+      "templateId": "kinetic.train.motion",
+      "parameters": {
+        "family": "kinetic_energy",
+        "massKg": 0.5,
+        "speedMps": 4
+      },
+      "prompt": "An object of mass 0.5 kg moves at 4 m/s. Kinetic energy in joules is one half times mass times speed squared. What is the kinetic energy in J?",
+      "expected": 4,
+      "units": "J"
+    },
+    {
+      "id": "84dd8cb7111bc536c498b1193df9159c",
+      "contentDigest": "84dd8cb7111bc536c498b1193df9159c4efa2861584110785c5f63cf150cd3f1",
+      "split": "train",
+      "family": "kinetic_energy",
+      "templateId": "kinetic.train.grams",
+      "parameters": {
+        "family": "kinetic_energy",
+        "massKg": 1.2,
+        "speedMps": 5
+      },
+      "prompt": "A sample has mass 1200 g (1.2 kg) and speed 5 m/s. Using kilograms and meters per second, what is the kinetic energy in joules?",
+      "expected": 15,
+      "units": "J"
+    },
+    {
+      "id": "c2c3b334418184f758219030894aa18f",
+      "contentDigest": "c2c3b334418184f758219030894aa18fcfd2cf962bfc7f40ef8a9912b0accbfd",
+      "split": "train",
+      "family": "kinetic_energy",
+      "templateId": "kinetic.train.grams",
+      "parameters": {
+        "family": "kinetic_energy",
+        "massKg": 0.25,
+        "speedMps": 2
+      },
+      "prompt": "A sample has mass 250 g (0.25 kg) and speed 2 m/s. Using kilograms and meters per second, what is the kinetic energy in joules?",
+      "expected": 0.5,
+      "units": "J"
+    },
+    {
+      "id": "7b139936528e9d34e1c36f49ad79b1d8",
+      "contentDigest": "7b139936528e9d34e1c36f49ad79b1d89bac410cdc5c70ae8b4886e659cf2e39",
+      "split": "evaluation",
+      "family": "kinetic_energy",
+      "templateId": "kinetic.eval.energy",
+      "parameters": {
+        "family": "kinetic_energy",
+        "massKg": 3,
+        "speedMps": 2
+      },
+      "prompt": "Mass = 3 kg. Speed = 2 m/s. Compute kinetic energy (1/2 m v^2) in joules.",
+      "expected": 6,
+      "units": "J"
+    },
+    {
+      "id": "587be3157693ca4c4f107cf4d880264f",
+      "contentDigest": "587be3157693ca4c4f107cf4d880264fb414aae3823ad428905b2fc7cf18ee48",
+      "split": "evaluation",
+      "family": "kinetic_energy",
+      "templateId": "kinetic.eval.energy",
+      "parameters": {
+        "family": "kinetic_energy",
+        "massKg": 10,
+        "speedMps": 1
+      },
+      "prompt": "Mass = 10 kg. Speed = 1 m/s. Compute kinetic energy (1/2 m v^2) in joules.",
+      "expected": 5,
+      "units": "J"
+    },
+    {
+      "id": "913b5513b92804e5ef77944c05dc8975",
+      "contentDigest": "913b5513b92804e5ef77944c05dc897581e0fb0edc0c87f102a0ab8f4d49bccd",
+      "split": "evaluation",
+      "family": "kinetic_energy",
+      "templateId": "kinetic.eval.grams",
+      "parameters": {
+        "family": "kinetic_energy",
+        "massKg": 0.4,
+        "speedMps": 10
+      },
+      "prompt": "Mass = 400 g = 0.4 kg. Speed = 10 meters per second. Kinetic energy in J?",
+      "expected": 20,
+      "units": "J"
+    },
+    {
+      "id": "f4d35620cd0cb96fe93b003600628c7c",
+      "contentDigest": "f4d35620cd0cb96fe93b003600628c7cd05df4b6c0bd65f2a8219af050da9ae0",
+      "split": "evaluation",
+      "family": "kinetic_energy",
+      "templateId": "kinetic.eval.grams",
+      "parameters": {
+        "family": "kinetic_energy",
+        "massKg": 1.5,
+        "speedMps": 2
+      },
+      "prompt": "Mass = 1500 g = 1.5 kg. Speed = 2 meters per second. Kinetic energy in J?",
+      "expected": 3,
+      "units": "J"
+    },
+    {
+      "id": "9615a124a52ad90facbf058890f41495",
+      "contentDigest": "9615a124a52ad90facbf058890f41495fb434ecca86a091f4377f0c78419baca",
+      "split": "train",
+      "family": "ohm_power",
+      "templateId": "ohm.train.resistor",
+      "parameters": {
+        "family": "ohm_power",
+        "currentA": 2,
+        "resistanceOhm": 5
+      },
+      "prompt": "Current is 2 A through a 5 ohm resistor. Power in watts is current squared times resistance. What is the power in W?",
+      "expected": 20,
+      "units": "W"
+    },
+    {
+      "id": "809cb7fbe2e86de077b3618b747fe18a",
+      "contentDigest": "809cb7fbe2e86de077b3618b747fe18a413a3b93e9f85165e4c694b52f9d76e5",
+      "split": "train",
+      "family": "ohm_power",
+      "templateId": "ohm.train.resistor",
+      "parameters": {
+        "family": "ohm_power",
+        "currentA": 3,
+        "resistanceOhm": 4
+      },
+      "prompt": "Current is 3 A through a 4 ohm resistor. Power in watts is current squared times resistance. What is the power in W?",
+      "expected": 36,
+      "units": "W"
+    },
+    {
+      "id": "647ccc1c45b695c2c2194bf50b8c7e17",
+      "contentDigest": "647ccc1c45b695c2c2194bf50b8c7e17f93cc9396a7b6c8b83abebc195b38ca5",
+      "split": "train",
+      "family": "ohm_power",
+      "templateId": "ohm.train.milliamp",
+      "parameters": {
+        "family": "ohm_power",
+        "currentA": 0.5,
+        "resistanceOhm": 8
+      },
+      "prompt": "Current is 500 mA (0.5 A) and resistance is 8 ohms. Compute power in watts from the ampere value.",
+      "expected": 2,
+      "units": "W"
+    },
+    {
+      "id": "7126bca0356a9b4f788b1e634d73f00f",
+      "contentDigest": "7126bca0356a9b4f788b1e634d73f00f1be355fbd2aa0b1cd6c5b3b117b2e399",
+      "split": "train",
+      "family": "ohm_power",
+      "templateId": "ohm.train.milliamp",
+      "parameters": {
+        "family": "ohm_power",
+        "currentA": 1,
+        "resistanceOhm": 10
+      },
+      "prompt": "Current is 1000 mA (1 A) and resistance is 10 ohms. Compute power in watts from the ampere value.",
+      "expected": 10,
+      "units": "W"
+    },
+    {
+      "id": "4c6d14f2c519a246af84d492c566b1b9",
+      "contentDigest": "4c6d14f2c519a246af84d492c566b1b9207d8673e543b1b434b5589cf0836015",
+      "split": "evaluation",
+      "family": "ohm_power",
+      "templateId": "ohm.eval.dissipated",
+      "parameters": {
+        "family": "ohm_power",
+        "currentA": 4,
+        "resistanceOhm": 2
+      },
+      "prompt": "I = 4 A and R = 2 ohm. Electrical power P = I^2 R in watts?",
+      "expected": 32,
+      "units": "W"
+    },
+    {
+      "id": "d5cc3cfc2bc496c53288e9bdaf2e9701",
+      "contentDigest": "d5cc3cfc2bc496c53288e9bdaf2e9701b0b9f0eccaf879c2a79e502289845d06",
+      "split": "evaluation",
+      "family": "ohm_power",
+      "templateId": "ohm.eval.dissipated",
+      "parameters": {
+        "family": "ohm_power",
+        "currentA": 0.2,
+        "resistanceOhm": 50
+      },
+      "prompt": "I = 0.2 A and R = 50 ohm. Electrical power P = I^2 R in watts?",
+      "expected": 2.0000000000000004,
+      "units": "W"
+    },
+    {
+      "id": "4efc1267c602a2baf495ad1328dee6af",
+      "contentDigest": "4efc1267c602a2baf495ad1328dee6af996029c819c5087796885876f9363311",
+      "split": "evaluation",
+      "family": "ohm_power",
+      "templateId": "ohm.eval.milliamp",
+      "parameters": {
+        "family": "ohm_power",
+        "currentA": 0.1,
+        "resistanceOhm": 200
+      },
+      "prompt": "Current = 100 mA = 0.1 A. Resistance = 200 ohm. Power in watts?",
+      "expected": 2.0000000000000004,
+      "units": "W"
+    },
+    {
+      "id": "63ec5c3cfcae3ab002000f35dce89335",
+      "contentDigest": "63ec5c3cfcae3ab002000f35dce893359f8ce67114b577f033e21fda90956a31",
+      "split": "evaluation",
+      "family": "ohm_power",
+      "templateId": "ohm.eval.milliamp",
+      "parameters": {
+        "family": "ohm_power",
+        "currentA": 1.5,
+        "resistanceOhm": 4
+      },
+      "prompt": "Current = 1500 mA = 1.5 A. Resistance = 4 ohm. Power in watts?",
+      "expected": 9,
+      "units": "W"
+    },
+    {
+      "id": "2ca2af8035fa822bf5c29d64b591e514",
+      "contentDigest": "2ca2af8035fa822bf5c29d64b591e51480ffec9d717b02f78077ffcd4ee153af",
+      "split": "train",
+      "family": "tsiolkovsky_propellant",
+      "templateId": "tsiolkovsky.train.dry",
+      "parameters": {
+        "family": "tsiolkovsky_propellant",
+        "dryMassKg": 500,
+        "deltaV_m_s": 1000,
+        "isp_s": 300
+      },
+      "prompt": "A stage has dry mass 500 kg, delta-v 1000 m/s, and specific impulse 300 s. Use g0 = 9.80665 m/s^2. Propellant mass in kg is dry mass times (exp(delta-v / (Isp * g0)) - 1). What is the propellant mass in kg?",
+      "expected": 202.40734744253675,
+      "units": "kg"
+    },
+    {
+      "id": "d8c4155daee820f89f1ca67d31bb50b5",
+      "contentDigest": "d8c4155daee820f89f1ca67d31bb50b52d4322bd2571479e6945de0f4fcc659f",
+      "split": "train",
+      "family": "tsiolkovsky_propellant",
+      "templateId": "tsiolkovsky.train.dry",
+      "parameters": {
+        "family": "tsiolkovsky_propellant",
+        "dryMassKg": 2000,
+        "deltaV_m_s": 2000,
+        "isp_s": 450
+      },
+      "prompt": "A stage has dry mass 2000 kg, delta-v 2000 m/s, and specific impulse 450 s. Use g0 = 9.80665 m/s^2. Propellant mass in kg is dry mass times (exp(delta-v / (Isp * g0)) - 1). What is the propellant mass in kg?",
+      "expected": 1146.7003199387964,
+      "units": "kg"
+    },
+    {
+      "id": "50e7ff2bbcdeb5535fa90f93eed48241",
+      "contentDigest": "50e7ff2bbcdeb5535fa90f93eed482412d83d0ec8b9cf6883b2e1e458a25b6aa",
+      "split": "train",
+      "family": "tsiolkovsky_propellant",
+      "templateId": "tsiolkovsky.train.kms",
+      "parameters": {
+        "family": "tsiolkovsky_propellant",
+        "dryMassKg": 800,
+        "deltaV_m_s": 2500,
+        "isp_s": 320
+      },
+      "prompt": "Dry mass 800 kg. Delta-v 2.5 km/s, which is 2500 m/s. Specific impulse 320 s. g0 = 9.80665 m/s^2. Propellant mass in kg?",
+      "expected": 974.484112920063,
+      "units": "kg"
+    },
+    {
+      "id": "a3297c5324f44c184ffadf775d20acf9",
+      "contentDigest": "a3297c5324f44c184ffadf775d20acf9448fd064778c851c869133003c8c805f",
+      "split": "train",
+      "family": "tsiolkovsky_propellant",
+      "templateId": "tsiolkovsky.train.kms",
+      "parameters": {
+        "family": "tsiolkovsky_propellant",
+        "dryMassKg": 1500,
+        "deltaV_m_s": 1500,
+        "isp_s": 400
+      },
+      "prompt": "Dry mass 1500 kg. Delta-v 1.5 km/s, which is 1500 m/s. Specific impulse 400 s. g0 = 9.80665 m/s^2. Propellant mass in kg?",
+      "expected": 698.6833149141873,
+      "units": "kg"
+    },
+    {
+      "id": "f5962d8f866625ab51f7ddaf1b3fbcc4",
+      "contentDigest": "f5962d8f866625ab51f7ddaf1b3fbcc47f00b514c8341e3447863ff8a840dcb0",
+      "split": "evaluation",
+      "family": "tsiolkovsky_propellant",
+      "templateId": "tsiolkovsky.eval.propellant",
+      "parameters": {
+        "family": "tsiolkovsky_propellant",
+        "dryMassKg": 1000,
+        "deltaV_m_s": 3000,
+        "isp_s": 350
+      },
+      "prompt": "Compute propellant mass in kilograms for dry mass 1000 kg, delta-v 3000 m/s, and specific impulse 350 s. g0 is 9.80665 m/s^2. Formula: m_dry * (exp(delta_v / (Isp * g0)) - 1).",
+      "expected": 1396.5793941230227,
+      "units": "kg"
+    },
+    {
+      "id": "0e5ea2022bcd07c3420e738735fada13",
+      "contentDigest": "0e5ea2022bcd07c3420e738735fada1338f2cd4e9389a70477888b1a99cfaca2",
+      "split": "evaluation",
+      "family": "tsiolkovsky_propellant",
+      "templateId": "tsiolkovsky.eval.propellant",
+      "parameters": {
+        "family": "tsiolkovsky_propellant",
+        "dryMassKg": 1000,
+        "deltaV_m_s": 3000,
+        "isp_s": 3000
+      },
+      "prompt": "Compute propellant mass in kilograms for dry mass 1000 kg, delta-v 3000 m/s, and specific impulse 3000 s. g0 is 9.80665 m/s^2. Formula: m_dry * (exp(delta_v / (Isp * g0)) - 1).",
+      "expected": 107.35204606807191,
+      "units": "kg"
+    },
+    {
+      "id": "bf661b96d6662affdcb4723a75603dfc",
+      "contentDigest": "bf661b96d6662affdcb4723a75603dfcc7f00133cdc9bf2310e98ed2bc4c57cc",
+      "split": "evaluation",
+      "family": "tsiolkovsky_propellant",
+      "templateId": "tsiolkovsky.eval.kms",
+      "parameters": {
+        "family": "tsiolkovsky_propellant",
+        "dryMassKg": 750,
+        "deltaV_m_s": 4000,
+        "isp_s": 420
+      },
+      "prompt": "Dry mass = 750 kg. Delta-v = 4 km/s = 4000 m/s. Isp = 420 s. g0 = 9.80665 m/s^2. Required propellant mass in kg?",
+      "expected": 1230.7513167222671,
+      "units": "kg"
+    },
+    {
+      "id": "4b997eb9476d570baf0ab9c6aff8590f",
+      "contentDigest": "4b997eb9476d570baf0ab9c6aff8590f789a988e1975140bf7240d6a9a87ea5d",
+      "split": "evaluation",
+      "family": "tsiolkovsky_propellant",
+      "templateId": "tsiolkovsky.eval.kms",
+      "parameters": {
+        "family": "tsiolkovsky_propellant",
+        "dryMassKg": 1200,
+        "deltaV_m_s": 1800,
+        "isp_s": 2800
+      },
+      "prompt": "Dry mass = 1200 kg. Delta-v = 1.8 km/s = 1800 m/s. Isp = 2800 s. g0 = 9.80665 m/s^2. Required propellant mass in kg?",
+      "expected": 81.29942902795273,
+      "units": "kg"
+    }
+  ]
+}

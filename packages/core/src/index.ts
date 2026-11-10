@@ -230,6 +230,53 @@ export {
 } from "./evaluation/manifest.js";
 export { colonyRunContract, legacyManifest } from "./evaluation/colony-manifest.js";
 export { analyzePairedRuns } from "./evaluation/paired.js";
+export {
+  assertMathSuiteIsolated,
+  buildMathSuite,
+  C18A_EXPERIMENT_ID,
+  evaluationItems,
+  fewShotExamples,
+  formatQuantity,
+  MATH_FAMILIES,
+  MATH_SUITE_DEPARTMENT,
+  MATH_SUITE_GENERATOR_VERSION,
+  MATH_SUITE_TOLERANCE,
+  solveMathItem,
+  verifyFrozenMathSuite,
+  workedSolution,
+} from "./evaluation/math-suite.js";
+export type {
+  FrozenMathSuite,
+  MathFamilyId,
+  MathParameters,
+  MathSplit,
+  MathSuiteItem,
+  SolvedMathItem,
+} from "./evaluation/math-suite.js";
+export {
+  configurationFingerprintFor,
+  gradeMathResponse,
+  MATH_ANSWER_EXTRACTOR_VERSION,
+  MATH_BASELINE_DECODING,
+  MATH_HARNESS_VERSION,
+  MATH_PROMPT_VERSIONS,
+  MATH_SCORER_VERSION,
+  renderFewShotUser,
+  renderStandardUser,
+  renderToolUser,
+  runMathBaseline,
+  scoreCalculatorCeiling,
+} from "./evaluation/math-baseline.js";
+export type {
+  MathBaselineInput,
+  MathBaselineModel,
+  MathBaselineReport,
+  MathConditionId,
+  MathConditionReport,
+  MathGrade,
+  MathItemResult,
+  MathToolOutcome,
+} from "./evaluation/math-baseline.js";
 export { CapabilityLedgerService, separateModelIdentity } from "./capability/service.js";
 export { MemoryCapabilityRepository, type CapabilityRepository } from "./capability/repository.js";
 export { holmAdjust, applyHolm } from "./capability/holm.js";
