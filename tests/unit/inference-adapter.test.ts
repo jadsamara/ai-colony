@@ -73,6 +73,54 @@ describe("OpenAI-compatible inference", () => {
     expect(result.text).toBe("Solar needs storage.");
   });
 
+  it("prefers json_schema structured output then falls back to json_object", async () => {
+    const bodies: string[] = [];
+    const baseUrl = await listen(servers, (response, request) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        const body = Buffer.concat(chunks).toString("utf8");
+        bodies.push(body);
+        if (body.includes('"type":"json_schema"')) {
+          response.writeHead(400);
+          response.end();
+          return;
+        }
+        response.end(
+          JSON.stringify({
+            model: "qwen3:8b",
+            choices: [{ message: { content: '{"kind":"response","body":"ok structured"}' } }],
+            usage: { prompt_tokens: 3, completion_tokens: 2 },
+          }),
+        );
+      });
+    });
+    const provider = new OpenAICompatibleProvider({
+      baseUrl,
+      apiKey: null,
+      maxConcurrency: 1,
+      transportRetries: 0,
+    });
+    const result = await provider.generate({
+      requestId: "schema-1",
+      registryModelId: "00000000-0000-4000-8000-000000000101",
+      modelAlias: "qwen3:8b",
+      messages: [{ role: "user", content: "ping" }],
+      temperature: 0,
+      maxOutputTokens: 32,
+      timeoutMs: 1000,
+      jsonObject: true,
+      jsonSchema: {
+        type: "object",
+        properties: { kind: { type: "string" }, body: { type: "string" } },
+        required: ["kind", "body"],
+      },
+    });
+    expect(bodies.some((body) => body.includes('"type":"json_schema"'))).toBe(true);
+    expect(bodies.some((body) => body.includes('"type":"json_object"'))).toBe(true);
+    expect(result.text).toContain("ok structured");
+  });
+
   it("retries without reasoning_effort when the server rejects that field", async () => {
     const bodies: string[] = [];
     const baseUrl = await listen(servers, (response, request) => {

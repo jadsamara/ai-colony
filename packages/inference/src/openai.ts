@@ -128,33 +128,53 @@ export class OpenAICompatibleProvider implements InferenceProvider {
   }
 
   private payloads(request: InferenceRequest): Array<Record<string, unknown>> {
-    const variants: Array<[boolean, boolean]> = [[this.reasoningEffort !== null, request.jsonObject]];
-    if (this.reasoningEffort !== null) {
-      variants.push([false, request.jsonObject]);
+    type FormatMode = "json_schema" | "json_object" | "none";
+    const formats: FormatMode[] = [];
+    if (request.jsonObject && request.jsonSchema) {
+      formats.push("json_schema", "json_object", "none");
+    } else if (request.jsonObject) {
+      formats.push("json_object", "none");
+    } else {
+      formats.push("none");
     }
-    if (request.jsonObject) {
-      variants.push([false, false]);
-    }
+    const reasoningModes = this.reasoningEffort !== null ? [true, false] : [false];
     const seen = new Set<string>();
-    return variants.flatMap(([reasoning, jsonObject]) => {
-      const payload = this.body(request, jsonObject, reasoning);
-      const key = JSON.stringify(payload);
-      if (seen.has(key)) {
-        return [];
+    const out: Array<Record<string, unknown>> = [];
+    for (const format of formats) {
+      for (const reasoning of reasoningModes) {
+        const payload = this.body(request, format, reasoning);
+        const key = JSON.stringify(payload);
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+        out.push(payload);
       }
-      seen.add(key);
-      return [payload];
-    });
+    }
+    return out;
   }
 
-  private body(request: InferenceRequest, jsonObject: boolean, reasoning: boolean) {
+  private body(request: InferenceRequest, format: "json_schema" | "json_object" | "none", reasoning: boolean) {
     return {
       model: request.modelAlias,
       messages: request.messages,
       temperature: request.temperature,
       max_tokens: request.maxOutputTokens,
       ...(reasoning ? { reasoning_effort: "none" as const } : {}),
-      ...(jsonObject ? { response_format: { type: "json_object" as const } } : {}),
+      ...(format === "json_schema" && request.jsonSchema
+        ? {
+            response_format: {
+              type: "json_schema" as const,
+              json_schema: {
+                name: "colony_decision",
+                strict: true,
+                schema: request.jsonSchema,
+              },
+            },
+          }
+        : format === "json_object"
+          ? { response_format: { type: "json_object" as const } }
+          : {}),
     };
   }
 

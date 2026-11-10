@@ -5,6 +5,7 @@ import {
   type PlanTask,
 } from "@ai-colony/contracts";
 import { parseModelJson, suspiciousMathControls } from "../autonomy/conversation-integrity.js";
+import { stripModelWrappers } from "../autonomy/structured-decision.js";
 
 export interface PlanContext {
   activeDepartmentSlugs: ReadonlySet<string>;
@@ -15,7 +16,7 @@ export interface PlanContext {
 
 export function extractJsonObject(text: string): unknown {
   try {
-    const parsed = parseModelJson(text);
+    const parsed = parseModelJson(stripModelWrappers(text));
     if (stringHasSuspiciousMath(parsed.value)) {
       throw new Error("output contained a corrupted mathematical escape");
     }

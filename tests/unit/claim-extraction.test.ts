@@ -53,4 +53,23 @@ describe("C1.7.4 Phase B claim extraction", () => {
   it("builds stable idempotency keys", () => {
     expect(claimIdempotencyKey("t1", "expr-a")).toBe("turn:t1:expr:expr-a");
   });
+
+  it("flags incorrect m0=dry definitions as unsupported without inventing propellant masses", () => {
+    const extracted = extractNumericalClaims({
+      turnId: "turn-m0",
+      body: "Let m0 = 1000 kg dry mass and apply the rocket equation with Isp 350 s.",
+    });
+    expect(extracted.some((row) => row.normalizedExpression === "definition:m0_as_dry_or_final")).toBe(true);
+    expect(extracted.every((row) => row.verificationRequest === null)).toBe(true);
+    expect(extracted.every((row) => row.unsupportedReason !== null)).toBe(true);
+  });
+
+  it("records m0 mentions without propellant-mass numbers as unsupported, not verified", () => {
+    const extracted = extractNumericalClaims({
+      turnId: "turn-m0b",
+      body: "Define m0 carefully before rearranging the Tsiolkovsky equation for propellant.",
+    });
+    expect(extracted.some((row) => row.normalizedExpression === "definition:m0_without_propellant_mass")).toBe(true);
+    expect(extracted.every((row) => row.verificationRequest === null)).toBe(true);
+  });
 });

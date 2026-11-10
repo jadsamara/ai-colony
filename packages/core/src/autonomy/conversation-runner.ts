@@ -16,7 +16,7 @@ import { redactSensitive } from "./policy.js";
 import type { ConversationJob, ConversationRecord } from "./repository.js";
 import { buildDialogueContext, maySpeak, orchestrationRecommendation } from "./speakers.js";
 import { TrainingEvidenceService } from "../training/evidence-service.js";
-import type { AcceptanceStatus } from "../training/evidence-taxonomy.js";
+import { classifyFailure, type AcceptanceStatus, type FailureClass } from "../training/evidence-taxonomy.js";
 import { ClaimVerificationService } from "../verification/claim-verification-service.js";
 import {
   deriveDeliverables,
@@ -26,23 +26,17 @@ import {
   renderDeliverableChecklist,
 } from "../verification/deliverables.js";
 import type { ConversationProgress } from "./conversation-quality.js";
+import {
+  classifyDecisionParseFailure,
+  DECISION_KINDS,
+  DECISION_RESPONSE_JSON_SCHEMA,
+  type DecisionFailureKind,
+} from "./structured-decision.js";
 
 const LEASE_MS = 30_000;
 const MAX_ATTEMPTS = 3;
 /** Corrections after the initial generation for invalid model output. */
 export const MAX_INVALID_CORRECTIONS = 2;
-const DECISION_KINDS = [
-  "question",
-  "response",
-  "proposal",
-  "challenge",
-  "evidence",
-  "counterargument",
-  "agreement",
-  "disagreement",
-  "resolution",
-  "close",
-] as const;
 const UNCERTAIN = /uncertain|cannot verify|not established|unresolved|open question/i;
 const decisionSchema = z.object({
   kind: z.enum(DECISION_KINDS),
@@ -67,32 +61,42 @@ export const DECISION_JSON_SCHEMA = [
   "Do not omit kind or body. Do not invent fields. Do not invent citations.",
 ].join(" ");
 
+export { DECISION_RESPONSE_JSON_SCHEMA, DECISION_KINDS };
+export type { DecisionFailureKind };
+
 export type DecisionDraft = z.infer<typeof decisionSchema>;
 
 export type DecisionInspection =
   | { ok: true; value: DecisionDraft }
-  | { ok: false; diagnostic: string };
+  | { ok: false; diagnostic: string; failureKind: DecisionFailureKind };
 
 export function inspectDecision(text: string): DecisionInspection {
   let extracted: unknown;
   try {
     extracted = extractJsonObject(text);
   } catch (error) {
-    const reason = error instanceof Error && error.message.includes("did not contain a JSON object")
-      ? "output was not a JSON object"
-      : error instanceof Error && error.message.includes("mathematical")
-        ? "mathematical notation was corrupted by a JSON escape"
-        : "output was not valid JSON";
-    return { ok: false, diagnostic: boundDiagnostic(reason) };
+    const classified = classifyDecisionParseFailure(
+      text,
+      error instanceof Error ? error : new Error("output was not valid JSON"),
+    );
+    return { ok: false, diagnostic: boundDiagnostic(classified.reason), failureKind: classified.kind };
   }
   const parsed = decisionSchema.safeParse(extracted);
   if (!parsed.success) {
     const issues = parsed.error.issues.slice(0, 4).map(formatIssue);
-    return { ok: false, diagnostic: boundDiagnostic(issues.join("; ") || "output did not match the schema") };
+    return {
+      ok: false,
+      diagnostic: boundDiagnostic(issues.join("; ") || "output did not match the schema"),
+      failureKind: "schema_invalid",
+    };
   }
   const contribution = validateContribution({ kind: parsed.data.kind, body: parsed.data.body });
   if (!contribution.ok) {
-    return { ok: false, diagnostic: boundDiagnostic(contribution.reason) };
+    return {
+      ok: false,
+      diagnostic: boundDiagnostic(contribution.reason),
+      failureKind: "contribution_invalid",
+    };
   }
   return { ok: true, value: parsed.data };
 }
@@ -537,7 +541,8 @@ export class ConversationRunner {
       let corrections = 0;
       while (!inspected.ok && corrections < MAX_INVALID_CORRECTIONS) {
         const diagnostic = inspected.diagnostic;
-        await this.recordFailedGeneration(conversation, department, result, diagnostic, "invalid_output");
+        const failureKind = inspected.failureKind;
+        await this.recordFailedGeneration(conversation, department, result, diagnostic, "invalid_output", failureKind);
         await this.accountGenerationUsage(job.conversationId, result);
         const budget = await this.canAffordCorrection(job.conversationId, route.maxOutputTokens);
         if (!budget.ok) {
@@ -549,6 +554,7 @@ export class ConversationRunner {
             result,
             diagnostic: boundDiagnostic(`${diagnostic}; recovery stopped: ${budget.reason}`),
             reason: "invalid_output_budget",
+            failureKind,
           });
           return { generated: false, continue: false, stop: "failed", childId: null };
         }
@@ -600,6 +606,7 @@ export class ConversationRunner {
         result,
         diagnostic: inspected.diagnostic,
         reason: "invalid_output",
+        failureKind: inspected.failureKind,
       });
       return { generated: false, continue: false, stop: "failed", childId: null };
     }
@@ -655,16 +662,66 @@ export class ConversationRunner {
       await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
       if (!inspected.ok) {
         await this.accountGenerationUsage(job.conversationId, result);
-        await this.terminateInvalidOutput({
-          conversationId: job.conversationId,
-          jobId: job.id,
-          token,
-          department,
-          result,
-          diagnostic: inspected.diagnostic,
-          reason: "invalid_after_repetition",
-        });
-        return { generated: false, continue: false, stop: "failed", childId: null };
+        // One bounded schema/JSON recovery after a repetition retry — never invents a turn.
+        const budget = await this.canAffordCorrection(job.conversationId, route.maxOutputTokens);
+        if (budget.ok) {
+          await this.recordFailedGeneration(
+            conversation,
+            department,
+            result,
+            inspected.diagnostic,
+            "invalid_after_repetition",
+            inspected.failureKind,
+          );
+          const recoveryPrompt: Array<{ role: "system" | "user"; content: string }> = [
+            { role: "system", content: `You are the ${speakerRow?.name ?? "department"} department. ${DECISION_JSON_SCHEMA}` },
+            {
+              role: "user",
+              content:
+                cleanRecoveryPrompt({
+                  departmentSlug: department.slug,
+                  openingInstruction: conversation.openingInstruction ?? conversation.topic,
+                  topic: conversation.topic,
+                  mode: "handoff",
+                  recentTurns: turns.map((turn) => ({ department: turn.departmentSlug, kind: turn.kind, body: turn.body })),
+                }) + `\n\n${correctionInstruction(result.text, inspected.diagnostic)}\n\nDo not repeat prior transcript text.`,
+            },
+          ];
+          activeMessages = recoveryPrompt;
+          const failedAttemptId = lastAttemptId;
+          result = await this.generate(provider, route, recoveryPrompt, department, job.conversationId);
+          inspected = inspectDecision(result.text);
+          attemptNumber += 1;
+          lastAttemptId = await this.captureEvidenceAttempt({
+            conversationId: job.conversationId,
+            department,
+            messages: recoveryPrompt,
+            result,
+            attemptNumber,
+            parentAttemptId: failedAttemptId,
+            recoveryOfAttemptId: failedAttemptId,
+            acceptanceStatus: inspected.ok ? "recovered" : "rejected",
+            diagnostic: inspected.ok ? null : inspected.diagnostic,
+            reason: inspected.ok ? null : "invalid_after_repetition",
+            parsedOutput: inspected.ok ? (inspected.value as unknown as Record<string, unknown>) : null,
+          });
+          await this.persistence.repos.autonomy.saveConversation(job.conversationId, { lastInferenceLatencyMs: result.latencyMs });
+        }
+        if (!inspected.ok) {
+          await this.accountGenerationUsage(job.conversationId, result);
+          await this.terminateInvalidOutput({
+            conversationId: job.conversationId,
+            jobId: job.id,
+            token,
+            department,
+            result,
+            diagnostic: inspected.diagnostic,
+            reason: "invalid_after_repetition",
+            failureKind: inspected.failureKind,
+          });
+          return { generated: false, continue: false, stop: "failed", childId: null };
+        }
+        recoveredFromInvalid = true;
       }
       parsed = inspected.value;
       const corrected = repetitionVerdict(parsed.body, turns);
@@ -1061,6 +1118,7 @@ export class ConversationRunner {
       maxOutputTokens: route.maxOutputTokens,
       timeoutMs: route.timeoutMs,
       jsonObject: true,
+      jsonSchema: DECISION_RESPONSE_JSON_SCHEMA as unknown as Record<string, unknown>,
     });
     return {
       ...result,
@@ -1425,6 +1483,7 @@ export class ConversationRunner {
     result: InferenceResult & { routingModel?: string; routingEndpoint?: string },
     diagnostic: string,
     reason: string,
+    failureKind?: DecisionFailureKind,
   ): Promise<void> {
     const latest = await this.requireConversation(conversation.id);
     const entry = this.inferenceEntry({
@@ -1434,6 +1493,23 @@ export class ConversationRunner {
       status: "failed",
       reason,
     });
+    const classified = classifyFailure(diagnostic, reason);
+    const failureClass: FailureClass =
+      failureKind === "truncated"
+        ? "json_invalid"
+        : failureKind === "schema_invalid"
+          ? "schema_invalid"
+          : failureKind === "contribution_invalid"
+            ? "meta_validation_chatter"
+            : failureKind === "serialization_error"
+              ? "serialization_error"
+              : failureKind === "json_invalid"
+                ? "json_invalid"
+                : classified.failureClass;
+    // Persist a bounded fingerprint of the raw generation — never unbounded model text.
+    const outputDigest = result.text
+      ? `len=${result.text.length};head=${redactSensitive(result.text).slice(0, 48)}`
+      : "empty";
     await this.persistence.repos.autonomy.saveConversation(conversation.id, {
       progressState: {
         ...latest.progressState,
@@ -1444,6 +1520,8 @@ export class ConversationRunner {
             departmentSlug: department.slug,
             reason,
             diagnostic: redactSensitive(diagnostic).slice(0, 240),
+            failureClass,
+            outputDigest: redactSensitive(outputDigest).slice(0, 96),
           },
         ].slice(-20),
         inferenceLog: [...latest.progressState.inferenceLog, entry].slice(-40),
@@ -1492,6 +1570,7 @@ export class ConversationRunner {
     result: InferenceResult & { routingModel?: string; routingEndpoint?: string };
     diagnostic: string;
     reason: string;
+    failureKind?: DecisionFailureKind;
   }): Promise<void> {
     await this.recordFailedGeneration(
       await this.requireConversation(input.conversationId),
@@ -1499,6 +1578,7 @@ export class ConversationRunner {
       input.result,
       input.diagnostic,
       input.reason,
+      input.failureKind,
     );
     const latest = await this.requireConversation(input.conversationId);
     const lastError = boundDiagnostic(input.diagnostic.replace(/^model_invalid:\s*/i, ""));

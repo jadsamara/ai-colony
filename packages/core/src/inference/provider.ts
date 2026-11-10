@@ -23,6 +23,11 @@ export interface InferenceRequest {
   maxOutputTokens: number;
   timeoutMs: number;
   jsonObject: boolean;
+  /**
+   * When set with jsonObject, providers that support it should request
+   * response_format json_schema (Ollama grammar). Callers still validate.
+   */
+  jsonSchema?: Record<string, unknown> | null;
   signal?: AbortSignal;
 }
 

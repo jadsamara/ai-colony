@@ -138,6 +138,40 @@ function propellantMassClaims(text: string): Array<{ value: number; label: "chem
   return rows;
 }
 
+/**
+ * Detect incorrect or incomplete m0 definitions without inventing numerical results.
+ * Tsiolkovsky uses m0 = initial (wet) mass; defining m0 as dry/final mass is unsupported.
+ */
+function m0DefinitionClaims(text: string, turnId: string): ExtractedClaimCandidate[] {
+  const out: ExtractedClaimCandidate[] = [];
+  const asDryOrFinal =
+    /\bm_?\s*0\b[^.…]{0,80}\b(?:dry|final)\b/i.test(text)
+    || /\b(?:dry|final)\s+mass\b[^.…]{0,80}\bm_?\s*0\b/i.test(text)
+    || /\bm_?\s*0\s*=\s*(?:m_?(?:dry|f)|dry\s*mass)/i.test(text);
+  if (asDryOrFinal) {
+    const match = text.match(/.{0,40}\bm_?\s*0\b.{0,60}/i);
+    out.push({
+      claimText: (match?.[0] ?? "m0 defined as dry/final mass").trim().slice(0, 200),
+      normalizedExpression: "definition:m0_as_dry_or_final",
+      verificationRequest: null,
+      unsupportedReason:
+        "m0 defined as dry or final mass; Tsiolkovsky m0 is initial (wet) mass — left unsupported without acceptance",
+      provenanceNote: `turn:${turnId};deterministic_extraction;definition_check`,
+    });
+  } else if (/\bm_?\s*0\b/i.test(text) && propellantMassClaims(text).length === 0 && !comparisonClaim(text)) {
+    const match = text.match(/.{0,40}\bm_?\s*0\b.{0,60}/i);
+    out.push({
+      claimText: (match?.[0] ?? "m0 mentioned").trim().slice(0, 200),
+      normalizedExpression: "definition:m0_without_propellant_mass",
+      verificationRequest: null,
+      unsupportedReason:
+        "m0 mentioned without an extractable numerical propellant-mass claim — left unsupported",
+      provenanceNote: `turn:${turnId};deterministic_extraction;definition_check`,
+    });
+  }
+  return out;
+}
+
 function comparisonClaim(text: string): { relation: ClaimRelation; snippet: string } | null {
   if (/ion(?:\s+propulsion)?[^.]{0,60}(?:requires?|needs?|uses?)\s+more\s+propellant[^.]{0,40}chemical/i.test(text)) {
     return { relation: "greater_than", snippet: "ion requires more propellant than chemical" };
@@ -202,6 +236,10 @@ export function extractNumericalClaims(input: {
         provenanceNote: `turn:${input.turnId};deterministic_extraction${usedContext ? ";context_quantities" : ""}`,
       });
     }
+  }
+
+  for (const definition of m0DefinitionClaims(body, input.turnId)) {
+    candidates.push(definition);
   }
 
   for (const mass of propellantMassClaims(body)) {

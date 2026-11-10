@@ -48,6 +48,10 @@ export interface FailedGeneration {
   departmentSlug: string;
   reason: string;
   diagnostic: string;
+  /** Observed failure class — never promotes formatting symptoms to reasoning_error. */
+  failureClass?: string;
+  /** Bounded fingerprint of rejected output (length + short redacted head). Not full raw text. */
+  outputDigest?: string;
 }
 
 export interface InferenceTurnLog {
@@ -212,6 +216,8 @@ function readFailedGenerations(value: unknown): FailedGeneration[] {
       departmentSlug: typeof item.departmentSlug === "string" ? item.departmentSlug : "unknown",
       reason: typeof item.reason === "string" ? item.reason : "failed",
       diagnostic: typeof item.diagnostic === "string" ? item.diagnostic.slice(0, 240) : "",
+      failureClass: typeof item.failureClass === "string" ? item.failureClass.slice(0, 64) : undefined,
+      outputDigest: typeof item.outputDigest === "string" ? item.outputDigest.slice(0, 96) : undefined,
     }))
     .slice(-20);
 }

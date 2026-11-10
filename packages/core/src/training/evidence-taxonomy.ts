@@ -49,8 +49,8 @@ export interface FailureClassification {
 const META = /json validation|return one json|schema|formatting|previous generation was rejected|parser or validation|validation explanation|validation instructions/i;
 const MATH = /math_unverified|equation|derivation|unverified math|cannot verify/i;
 const SERIALIZATION = /mathematical notation was corrupted|json escape|serialization/i;
-const SCHEMA = /did not match the schema|invalid value|required|kind:|body:/i;
-const JSON = /not valid json|not a json object|output was not/i;
+const SCHEMA = /did not match the schema|invalid value|required|kind:|body:|parser or validation|no substantive contribution/i;
+const JSON_SYMPTOM = /not valid json|not a json object|appears truncated|did not contain a json object/i;
 const REPETITION = /repetit|near.?verbatim|duplicate|same objection|already said/i;
 const CONTEXT = /context_missing|missing context|omitted transcript/i;
 const ORCH = /orchestration|no_speaker|lease|budget/i;
@@ -61,34 +61,45 @@ const EVIDENCE = /unsupported_evidence|invent(ed)? citation|unsupported claim/i;
 /**
  * Map a runtime diagnostic to an observed failure class.
  * Never promotes repetition or formatting symptoms to verified reasoning_error.
+ * Never confuses invalid JSON with repeated *valid* content (reason=repetitive).
  */
 export function classifyFailure(diagnostic: string, reason?: string): FailureClassification {
   const text = `${reason ?? ""} ${diagnostic}`.trim();
   if (TIMEOUT.test(text)) {
     return observed("inference_timeout", text, "Provider timed out");
   }
-  if (INFER.test(text) && !JSON.test(text) && !SCHEMA.test(text)) {
+  if (INFER.test(text) && !JSON_SYMPTOM.test(diagnostic) && !SCHEMA.test(diagnostic)) {
     return observed("inference_error", text, "Provider or transport failure");
   }
   if (SERIALIZATION.test(text)) {
     return observed("serialization_error", text, "Output serialization broke structured parsing");
   }
-  if (JSON.test(text) || reason === "invalid_output" || reason === "invalid_after_repetition") {
-    if (SCHEMA.test(text) && !/not valid json|not a json object/i.test(text)) {
-      return observed("schema_invalid", text, "Parsed JSON failed the decision schema");
-    }
-    if (META.test(diagnostic)) {
-      return observed("meta_validation_chatter", text, "Model discussed validation instead of research content");
-    }
+  // Repetition of accepted/valid content is not a JSON failure — classify first when reason says so.
+  if (reason === "repetitive" || (REPETITION.test(text) && !JSON_SYMPTOM.test(diagnostic) && reason !== "invalid_after_repetition" && reason !== "invalid_output")) {
+    return {
+      failureClass: "repetition",
+      symptom: truncate(text),
+      rootCause: null,
+      provisional: true,
+      confidence: "observed",
+      source: "runtime",
+      evidence:
+        "Repeated dialogue content is an observed quality symptom. It is not automatically a verified reasoning deficiency or training signal.",
+    };
+  }
+  if (JSON_SYMPTOM.test(diagnostic)) {
     return observed("json_invalid", text, "Output was not valid JSON");
   }
-  if (SCHEMA.test(text)) {
+  if (SCHEMA.test(diagnostic) || reason === "invalid_output" || reason === "invalid_after_repetition") {
+    if (META.test(diagnostic) && /parser or validation|validation explanation|validation instructions/i.test(diagnostic)) {
+      return observed("meta_validation_chatter", text, "Model discussed validation instead of research content");
+    }
     return observed("schema_invalid", text, "Parsed JSON failed the decision schema");
   }
   if (META.test(text)) {
     return observed("meta_validation_chatter", text, "Model discussed validation instead of research content");
   }
-  if (REPETITION.test(text) || reason === "repetitive") {
+  if (REPETITION.test(text)) {
     return {
       failureClass: "repetition",
       symptom: truncate(text),

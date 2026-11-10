@@ -94,8 +94,16 @@ export {
   inspectDecision,
   correctionInstruction,
   DECISION_JSON_SCHEMA,
+  DECISION_RESPONSE_JSON_SCHEMA,
+  DECISION_KINDS,
   MAX_INVALID_CORRECTIONS,
 } from "./autonomy/conversation-runner.js";
+export type { DecisionFailureKind, DecisionInspection, DecisionDraft } from "./autonomy/conversation-runner.js";
+export {
+  stripModelWrappers,
+  looksTruncatedJson,
+  classifyDecisionParseFailure,
+} from "./autonomy/structured-decision.js";
 export { assessProgress, departmentContributions, departmentFollowUp, isNearVerbatim, permitsEcho, readProgress, repetitionCorrection } from "./autonomy/conversation-quality.js";
 export { buildCheckpoint, classifyClaim, classifyNovelty, measureProgress, parseModelJson, renderCheckpoint, repetitionVerdict, reviewMathClaim, validateContribution } from "./autonomy/conversation-integrity.js";
 export type { ConversationProgress } from "./autonomy/conversation-quality.js";
