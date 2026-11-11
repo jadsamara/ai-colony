@@ -63,6 +63,41 @@ export type {
 export type { FailureClass, AcceptanceStatus, EligibilityStatus, FailureClassification } from "./training/evidence-taxonomy.js";
 export { ExperimentService } from "./training/experiment-service.js";
 export { TRAINING_METHODS, assertMethodExecutable, assertSafeConfig, isHighRisk, planExperiments, selectDevelopmentCandidate } from "./training/experiment-planner.js";
+export {
+  DEPARTMENT_LEARNING_SPEC_VERSION,
+  LEARNING_DEPARTMENT_SLUGS,
+  LEARNING_EXPERIMENT_STATUSES,
+  LEARNING_ROLE_DEPARTMENTS,
+  departmentLearningExperimentSchema,
+  fingerprintCodePatch,
+  fingerprintLearningExperiment,
+  trainingCodePatchSchema,
+} from "./training/department-learning-spec.js";
+export type {
+  DatasetRef,
+  DepartmentLearningExperiment,
+  LearningDepartmentSlug,
+  LearningExperimentStatus,
+  TrainingCodePatch,
+} from "./training/department-learning-spec.js";
+export {
+  TRAINING_CODE_ALLOWLIST,
+  assertTrainingCodePatch,
+  computePatchContentFingerprint,
+  validateTrainingCodePatch,
+} from "./training/training-code-patch.js";
+export type { CodePatchValidationIssue, CodePatchValidationResult } from "./training/training-code-patch.js";
+export {
+  assertValidatedLearningExperiment,
+  validateDepartmentLearningExperiment,
+} from "./training/department-learning-validate.js";
+export type {
+  LearningValidationCode,
+  LearningValidationIssue,
+  LearningValidationResult,
+  ValidateLearningExperimentInput,
+} from "./training/department-learning-validate.js";
+export { SelfTrainingExperimentService } from "./training/self-training-experiment-service.js";
 export { meanExposures, outputDisagreement, stopDecision } from "./training/stability.js";
 export { EvaluationService } from "./evaluation/evaluation-service.js";
 export { DepartmentLearningService } from "./learning/learning-service.js";
