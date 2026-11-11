@@ -35,6 +35,13 @@ async function main(): Promise<void> {
     throw new Error(`Ollama does not have ${alias}. This runner does not pull or replace models.`);
   }
   const shared = { baseUrl, apiKey: null, maxConcurrency: 1, transportRetries: 1 };
+  const disabledThinking = new OpenAICompatibleProvider({ ...shared, thinking: "disabled" });
+  const enabledThinking = new OpenAICompatibleProvider({ ...shared, thinking: "enabled" });
+  // Verify the disable mechanism against this Ollama build before scoring.
+  const thinkingMeta = await disabledThinking.inspectThinking(alias);
+  if (thinkingMeta && !thinkingMeta.values.includes(false)) {
+    throw new Error(`Ollama model ${alias} does not advertise think=false; refusing to run C1.8A without a disable path`);
+  }
   const report = await runMathBaseline({
     suite,
     gitCommit: gitCommit(),
@@ -50,9 +57,9 @@ async function main(): Promise<void> {
       backendVersion: probe.version,
     },
     providers: {
-      standard: new OpenAICompatibleProvider({ ...shared, reasoningEffort: "none" }),
-      fewShotThinking: new OpenAICompatibleProvider({ ...shared, reasoningEffort: null }),
-      toolAssisted: new OpenAICompatibleProvider({ ...shared, reasoningEffort: "none" }),
+      standard: disabledThinking,
+      fewShotThinking: enabledThinking,
+      toolAssisted: disabledThinking,
     },
   });
   writeReport(report);

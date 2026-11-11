@@ -241,6 +241,13 @@ describe("C1.8A single-agent baseline", () => {
       expect(request.messages[1]?.role).toBe("user");
       expect(request.jsonObject).toBe(false);
       expect(request.registryModelId).toBe(QWEN3_8B_MODEL_ID);
+      if (request.requestId.includes(":few_shot_thinking:")) {
+        expect(request.thinking).toBe("enabled");
+        expect(request.maxOutputTokens).toBe(1024);
+      } else {
+        expect(request.thinking).toBe("disabled");
+        expect(request.maxOutputTokens).toBe(256);
+      }
       const user = request.messages[1]?.content ?? "";
       const item = heldOut.find((candidate) => user.includes(candidate.prompt));
       const text = request.requestId.includes(":few_shot_thinking:")
@@ -285,17 +292,39 @@ describe("C1.8A single-agent baseline", () => {
       (condition) => condition.conditionId === "calculator_bound_parameters",
     );
     expect(standard?.decoding.reasoningEffort).toBe("none");
+    expect(standard?.decoding.thinking).toBe("disabled");
     expect(standard?.decoding.topP).toBe("omitted");
     expect(standard?.inputTokens).toBe(heldOut.length * 11);
     expect(standard?.outputTokens).toBe(heldOut.length * 3);
     expect(standard?.latencyMs).toBe(heldOut.length * 7);
     expect(standard?.items[0]?.servedModel).toBe("qwen3:8b");
     expect(thinking?.decoding.thinking).toBe("enabled");
+    expect(thinking?.decoding.maxOutputTokens).toBe(1024);
     expect(thinking?.promptVersion).toBe("c18a-few-shot-thinking-v1");
+    expect(tool?.decoding.thinking).toBe("disabled");
     expect(tool?.items.every((item) => item.tool === "accepted")).toBe(true);
     expect(calculator?.modelCall).toBe(false);
     expect(calculator?.items.every((item) => item.taskCorrect)).toBe(true);
     expect(scoreCalculatorCeiling(suite).every((item) => item.taskCorrect)).toBe(true);
+  });
+
+  it("grades empty content as unanswered and never treats buried prose as the answer", () => {
+    const suite = buildMathSuite();
+    const item = evaluationItems(suite)[0];
+    expect(item).toBeDefined();
+    if (!item) {
+      throw new Error("missing evaluation item");
+    }
+    const empty = gradeMathResponse({
+      expected: item.expected,
+      raw: "",
+      mode: "number_only",
+      parameters: item.parameters,
+      tolerance: suite.tolerance,
+    });
+    expect(empty.taskCorrect).toBe(false);
+    expect(empty.parsed).toBeNull();
+    expect(empty.ambiguous).toBe(false);
   });
 
   it("rejects calculator calls that try to override bound parameters", () => {

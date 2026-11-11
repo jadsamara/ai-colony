@@ -392,7 +392,14 @@ export {
 export { messageIdentityHash } from "./messaging/hash.js";
 export { MessageHandlingError, recordReceipt, type MessageHandler } from "./messaging/handlers.js";
 export { MessagingService, type DeliveryOutcome, type SendResult } from "./messaging/message-service.js";
-export { InferenceError, type InferenceProvider, type InferenceRequest, type InferenceResult, type ModelProbe } from "./inference/provider.js";
+export {
+  InferenceError,
+  type InferenceProvider,
+  type InferenceRequest,
+  type InferenceResult,
+  type ModelProbe,
+  type ThinkingPreference,
+} from "./inference/provider.js";
 export { estimateCostUsdMicros, estimateTokens, normalizeUsage, type CostRates, type TokenUsage } from "./inference/usage.js";
 export {
   ObjectiveService,

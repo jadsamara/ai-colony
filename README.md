@@ -220,7 +220,7 @@ The development machine target is an Apple Silicon Mac with 24 GB unified memory
 
 The adapter speaks to `INFERENCE_BASE_URL` with `/v1/chat/completions` and `/v1/models`. It does not call OpenAI and does not fall back to another host. A response whose `model` field differs from `INFERENCE_MODEL_ALIAS` is rejected. Token counts are `observed` only when the server returns them. Otherwise they are `unavailable`. Estimated cost is stored only when `INFERENCE_INPUT_USD_PER_MILLION` and `INFERENCE_OUTPUT_USD_PER_MILLION` are set. Those rates are not a cloud bill.
 
-Local serving uses the existing Ollama install. Qwen3 thinks by default, and Ollama's OpenAI endpoint ignores a `think` flag. The adapter sends `reasoning_effort: "none"` so the answer is returned in `content` and the output budget is not spent on a reasoning trace. A server that rejects that field is retried without it. The alias must be the id from `/v1/models`. On this machine that id is `qwen3:8b`.
+Local serving uses the existing Ollama install. Qwen3 thinks by default. On the OpenAI-compatible endpoint, `think: false` is not reliable for Qwen3; the adapter disables thinking with `reasoning_effort: "none"` (then `reasoning.effort: "none"`, then native `/api/chat` with `think: false`). Enabling thinking for evaluations uses native/OpenAI `think: true`. Reasoning traces stay out of scored `content`. Empty `content` with `finish_reason: length` is an unanswered item, not a harness crash. The alias must be the id from `/v1/models`. On this machine that id is `qwen3:8b`.
 
 ```bash
 ollama serve

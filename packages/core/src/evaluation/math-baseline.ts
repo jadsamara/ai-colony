@@ -52,9 +52,9 @@ export const MATH_HARNESS_VERSION = "c18a-single-agent-v1" as const;
 export const MATH_BASELINE_DECODING = {
   temperature: 0,
   timeoutMs: 120_000,
-  standard: { maxOutputTokens: 256, reasoningEffort: "none" },
-  fewShotThinking: { maxOutputTokens: 1024, reasoningEffort: "unset" },
-  toolAssisted: { maxOutputTokens: 256, reasoningEffort: "none" },
+  standard: { maxOutputTokens: 256, reasoningEffort: "none" as const, thinking: "disabled" as const },
+  fewShotThinking: { maxOutputTokens: 1024, reasoningEffort: "unset" as const, thinking: "enabled" as const },
+  toolAssisted: { maxOutputTokens: 256, reasoningEffort: "none" as const, thinking: "disabled" as const },
 } as const;
 
 const STANDARD_SYSTEM =
@@ -274,8 +274,8 @@ export async function runMathBaseline(input: MathBaselineInput): Promise<MathBas
     userFor: renderStandardUser,
     mode: "number_only",
     maxOutputTokens: MATH_BASELINE_DECODING.standard.maxOutputTokens,
-    reasoningEffort: "none",
-    thinking: "disabled",
+    reasoningEffort: MATH_BASELINE_DECODING.standard.reasoningEffort,
+    thinking: MATH_BASELINE_DECODING.standard.thinking,
     tools: "unavailable",
   });
   const fewShot = await runModelCondition({
@@ -293,8 +293,8 @@ export async function runMathBaseline(input: MathBaselineInput): Promise<MathBas
     userFor: (item) => renderFewShotUser(input.suite, item),
     mode: "final_line",
     maxOutputTokens: MATH_BASELINE_DECODING.fewShotThinking.maxOutputTokens,
-    reasoningEffort: "unset",
-    thinking: "enabled",
+    reasoningEffort: MATH_BASELINE_DECODING.fewShotThinking.reasoningEffort,
+    thinking: MATH_BASELINE_DECODING.fewShotThinking.thinking,
     tools: "unavailable",
   });
   const toolAssisted = await runModelCondition({
@@ -312,8 +312,8 @@ export async function runMathBaseline(input: MathBaselineInput): Promise<MathBas
     userFor: renderToolUser,
     mode: "tool_or_final",
     maxOutputTokens: MATH_BASELINE_DECODING.toolAssisted.maxOutputTokens,
-    reasoningEffort: "none",
-    thinking: "disabled",
+    reasoningEffort: MATH_BASELINE_DECODING.toolAssisted.reasoningEffort,
+    thinking: MATH_BASELINE_DECODING.toolAssisted.thinking,
     tools: "available",
   });
   const calculatorItems = scoreCalculatorCeiling(input.suite);
@@ -392,15 +392,18 @@ async function runModelCondition(input: {
       maxOutputTokens: input.maxOutputTokens,
       timeoutMs: MATH_BASELINE_DECODING.timeoutMs,
       jsonObject: false,
+      thinking: input.thinking,
     });
+    // Empty content (e.g. thinking-only truncation) is an unanswered item — never score reasoning.
+    const raw = response.text;
     const grade = gradeMathResponse({
       expected: item.expected,
-      raw: response.text,
+      raw,
       mode: input.mode,
       parameters: item.parameters,
       tolerance: input.suite.tolerance,
     });
-    results.push(itemResult(item, response.text, grade, response));
+    results.push(itemResult(item, raw, grade, response));
   }
   return summarizeCondition({ ...input, modelCall: true, items: results });
 }

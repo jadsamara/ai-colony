@@ -1,4 +1,12 @@
-import { InferenceError, normalizeUsage, type InferenceProvider, type InferenceRequest, type InferenceResult, type ModelProbe } from "@ai-colony/core";
+import {
+  InferenceError,
+  normalizeUsage,
+  type InferenceProvider,
+  type InferenceRequest,
+  type InferenceResult,
+  type ModelProbe,
+  type ThinkingPreference,
+} from "@ai-colony/core";
 
 export interface OpenAICompatibleOptions {
   baseUrl: string;
@@ -6,20 +14,41 @@ export interface OpenAICompatibleOptions {
   maxConcurrency: number;
   transportRetries: number;
   /**
-   * Ollama's OpenAI endpoint ignores `think` and enables Qwen3 thinking unless
-   * `reasoning_effort` is `none`. A server that rejects the field is retried
-   * without it. Pass null to omit the field on the first request.
+   * Explicit thinking preference for Qwen3 / Ollama.
+   * Prefer this over reasoningEffort. Verified on Ollama 0.40.x:
+   * - disabled: `reasoning_effort: "none"` (OpenAI) or native `think: false`
+   * - enabled: native/OpenAI `think: true` (do not rely on omitting controls alone)
+   * OpenAI `think: false` is NOT reliable on /v1/chat/completions for Qwen3.
+   */
+  thinking?: ThinkingPreference;
+  /**
+   * @deprecated Prefer `thinking`. "none" → disabled; null → default (model decides).
    */
   reasoningEffort?: "none" | null;
+}
+
+type FormatMode = "json_schema" | "json_object" | "none";
+type TransportKind = "openai" | "native";
+
+interface PayloadVariant {
+  transport: TransportKind;
+  body: Record<string, unknown>;
 }
 
 export class OpenAICompatibleProvider implements InferenceProvider {
   private active = 0;
   private readonly waiting: Array<() => void> = [];
-  private readonly reasoningEffort: "none" | null;
+  private readonly thinking: ThinkingPreference;
 
   constructor(private readonly options: OpenAICompatibleOptions) {
-    this.reasoningEffort = options.reasoningEffort === undefined ? "none" : options.reasoningEffort;
+    if (options.thinking) {
+      this.thinking = options.thinking;
+    } else if (options.reasoningEffort === null) {
+      this.thinking = "default";
+    } else {
+      // Historical default: disable Qwen3 thinking so content holds the answer.
+      this.thinking = "disabled";
+    }
   }
 
   async generate(request: InferenceRequest): Promise<InferenceResult> {
@@ -43,6 +72,28 @@ export class OpenAICompatibleProvider implements InferenceProvider {
     }
   }
 
+  /** Inspect Ollama /api/show thinking metadata when available. */
+  async inspectThinking(modelAlias: string): Promise<{ values: unknown[]; default: unknown } | null> {
+    try {
+      const response = await fetch(this.endpoint("/api/show"), {
+        method: "POST",
+        headers: { ...this.headers(), "content-type": "application/json" },
+        body: JSON.stringify({ model: modelAlias }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) {
+        return null;
+      }
+      const body = (await response.json()) as { thinking?: { values?: unknown[]; default?: unknown } };
+      if (!body.thinking || !Array.isArray(body.thinking.values)) {
+        return null;
+      }
+      return { values: body.thinking.values, default: body.thinking.default };
+    } catch {
+      return null;
+    }
+  }
+
   private async send(request: InferenceRequest): Promise<InferenceResult> {
     const started = Date.now();
     const payloads = this.payloads(request);
@@ -51,10 +102,11 @@ export class OpenAICompatibleProvider implements InferenceProvider {
       let retryTransport = false;
       for (const payload of payloads) {
         try {
-          const response = await fetch(this.endpoint("/v1/chat/completions"), {
+          const path = payload.transport === "native" ? "/api/chat" : "/v1/chat/completions";
+          const response = await fetch(this.endpoint(path), {
             method: "POST",
             headers: { ...this.headers(), "content-type": "application/json" },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(payload.body),
             signal: this.signal(request),
           });
           if (response.status === 400) {
@@ -66,7 +118,9 @@ export class OpenAICompatibleProvider implements InferenceProvider {
             retryTransport = true;
             break;
           }
-          return this.read(request, response, started);
+          return payload.transport === "native"
+            ? this.readNative(request, response, started)
+            : this.readOpenAI(request, response, started);
         } catch (error) {
           if (request.signal?.aborted) {
             throw new InferenceError("cancelled", "Inference was cancelled", false);
@@ -90,7 +144,7 @@ export class OpenAICompatibleProvider implements InferenceProvider {
     throw lastError ?? new InferenceError("unavailable", "Inference unavailable", true);
   }
 
-  private async read(request: InferenceRequest, response: Response, started: number): Promise<InferenceResult> {
+  private async readOpenAI(request: InferenceRequest, response: Response, started: number): Promise<InferenceResult> {
     if (!response.ok) {
       throw new InferenceError(
         response.status >= 500 ? "unavailable" : "bad_response",
@@ -101,12 +155,18 @@ export class OpenAICompatibleProvider implements InferenceProvider {
     const body = (await response.json()) as {
       model?: string;
       digest?: string;
-      choices?: Array<{ message?: { content?: string } }>;
+      choices?: Array<{
+        finish_reason?: string | null;
+        message?: {
+          content?: string | null;
+          reasoning?: string | null;
+          reasoning_content?: string | null;
+        };
+      }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
-    const text = body.choices?.[0]?.message?.content?.trim();
-    if (!body.model || !text) {
-      throw new InferenceError("bad_response", "Inference response did not include model identity and text", false);
+    if (!body.model || !Array.isArray(body.choices) || body.choices.length < 1) {
+      throw new InferenceError("bad_response", "Inference response did not include model identity and choices", false);
     }
     if (body.model !== request.modelAlias) {
       throw new InferenceError(
@@ -114,6 +174,20 @@ export class OpenAICompatibleProvider implements InferenceProvider {
         `Server model ${body.model} did not match requested alias ${request.modelAlias}`,
         false,
       );
+    }
+    const choice = body.choices[0]!;
+    const message = choice.message ?? {};
+    const content = typeof message.content === "string" ? message.content : "";
+    const reasoningRaw =
+      (typeof message.reasoning === "string" && message.reasoning)
+      || (typeof message.reasoning_content === "string" && message.reasoning_content)
+      || "";
+    const finishReason = typeof choice.finish_reason === "string" ? choice.finish_reason : null;
+    const truncated = finishReason === "length";
+    // Never promote reasoning into the scored answer text.
+    const text = content.trim();
+    if (!text && !truncated && reasoningRaw.trim().length === 0 && finishReason !== "stop") {
+      throw new InferenceError("bad_response", "Inference response did not include model text", false);
     }
     return {
       text,
@@ -124,43 +198,135 @@ export class OpenAICompatibleProvider implements InferenceProvider {
         completionTokens: body.usage?.completion_tokens,
       }),
       latencyMs: Date.now() - started,
+      finishReason,
+      truncated,
+      reasoningPresent: reasoningRaw.trim().length > 0,
     };
   }
 
-  private payloads(request: InferenceRequest): Array<Record<string, unknown>> {
-    type FormatMode = "json_schema" | "json_object" | "none";
-    const formats: FormatMode[] = [];
-    if (request.jsonObject && request.jsonSchema) {
-      formats.push("json_schema", "json_object", "none");
-    } else if (request.jsonObject) {
-      formats.push("json_object", "none");
-    } else {
-      formats.push("none");
+  private async readNative(request: InferenceRequest, response: Response, started: number): Promise<InferenceResult> {
+    if (!response.ok) {
+      throw new InferenceError(
+        response.status >= 500 ? "unavailable" : "bad_response",
+        `Inference server returned ${response.status}`,
+        response.status >= 500,
+      );
     }
-    const reasoningModes = this.reasoningEffort !== null ? [true, false] : [false];
+    const body = (await response.json()) as {
+      model?: string;
+      message?: { content?: string | null; thinking?: string | null };
+      done_reason?: string | null;
+      prompt_eval_count?: number;
+      eval_count?: number;
+    };
+    if (!body.model) {
+      throw new InferenceError("bad_response", "Inference response did not include model identity", false);
+    }
+    if (body.model !== request.modelAlias) {
+      throw new InferenceError(
+        "identity_mismatch",
+        `Server model ${body.model} did not match requested alias ${request.modelAlias}`,
+        false,
+      );
+    }
+    const content = typeof body.message?.content === "string" ? body.message.content : "";
+    const thinking = typeof body.message?.thinking === "string" ? body.message.thinking : "";
+    const finishReason = typeof body.done_reason === "string" ? body.done_reason : null;
+    const truncated = finishReason === "length";
+    const text = content.trim();
+    if (!text && !truncated && thinking.trim().length === 0 && finishReason !== "stop") {
+      throw new InferenceError("bad_response", "Inference response did not include model text", false);
+    }
+    return {
+      text,
+      servedModel: body.model,
+      servedDigest: null,
+      usage: normalizeUsage({
+        promptTokens: body.prompt_eval_count,
+        completionTokens: body.eval_count,
+      }),
+      latencyMs: Date.now() - started,
+      finishReason,
+      truncated,
+      reasoningPresent: thinking.trim().length > 0,
+    };
+  }
+
+  private payloads(request: InferenceRequest): PayloadVariant[] {
+    const thinking = request.thinking ?? this.thinking;
+    const formats = this.formatModes(request);
     const seen = new Set<string>();
-    const out: Array<Record<string, unknown>> = [];
+    const out: PayloadVariant[] = [];
+    const push = (variant: PayloadVariant) => {
+      const key = `${variant.transport}:${JSON.stringify(variant.body)}`;
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      out.push(variant);
+    };
+
     for (const format of formats) {
-      for (const reasoning of reasoningModes) {
-        const payload = this.body(request, format, reasoning);
-        const key = JSON.stringify(payload);
-        if (seen.has(key)) {
-          continue;
+      for (const control of this.thinkingControls(thinking)) {
+        if (control.transport === "openai") {
+          push({
+            transport: "openai",
+            body: this.openAiBody(request, format, control.fields),
+          });
+        } else if (format === "none") {
+          // Native chat has no OpenAI response_format; only use it for plain text.
+          push({
+            transport: "native",
+            body: this.nativeBody(request, control.think),
+          });
         }
-        seen.add(key);
-        out.push(payload);
       }
     }
     return out;
   }
 
-  private body(request: InferenceRequest, format: "json_schema" | "json_object" | "none", reasoning: boolean) {
+  private formatModes(request: InferenceRequest): FormatMode[] {
+    if (request.jsonObject && request.jsonSchema) {
+      return ["json_schema", "json_object", "none"];
+    }
+    if (request.jsonObject) {
+      return ["json_object", "none"];
+    }
+    return ["none"];
+  }
+
+  /**
+   * Ordered thinking-control variants.
+   * Disabled must never fall back to an uncontrolled OpenAI call (that re-enables Qwen3 thinking).
+   */
+  private thinkingControls(
+    thinking: ThinkingPreference,
+  ): Array<{ transport: TransportKind; fields: Record<string, unknown>; think: boolean | null }> {
+    if (thinking === "disabled") {
+      return [
+        { transport: "openai", fields: { reasoning_effort: "none" }, think: false },
+        { transport: "openai", fields: { reasoning: { effort: "none" } }, think: false },
+        { transport: "native", fields: {}, think: false },
+      ];
+    }
+    if (thinking === "enabled") {
+      return [
+        { transport: "native", fields: {}, think: true },
+        { transport: "openai", fields: { think: true }, think: true },
+        // Last resort: omit controls (Qwen3 default is thinking on).
+        { transport: "openai", fields: {}, think: null },
+      ];
+    }
+    return [{ transport: "openai", fields: {}, think: null }];
+  }
+
+  private openAiBody(request: InferenceRequest, format: FormatMode, thinkingFields: Record<string, unknown>) {
     return {
       model: request.modelAlias,
       messages: request.messages,
       temperature: request.temperature,
       max_tokens: request.maxOutputTokens,
-      ...(reasoning ? { reasoning_effort: "none" as const } : {}),
+      ...thinkingFields,
       ...(format === "json_schema" && request.jsonSchema
         ? {
             response_format: {
@@ -175,6 +341,19 @@ export class OpenAICompatibleProvider implements InferenceProvider {
         : format === "json_object"
           ? { response_format: { type: "json_object" as const } }
           : {}),
+    };
+  }
+
+  private nativeBody(request: InferenceRequest, think: boolean | null) {
+    return {
+      model: request.modelAlias,
+      stream: false,
+      messages: request.messages,
+      options: {
+        temperature: request.temperature,
+        num_predict: request.maxOutputTokens,
+      },
+      ...(think === null ? {} : { think }),
     };
   }
 
