@@ -1,0 +1,8 @@
+{"id": "mem-01", "user": "SECRET_PAIR code=ALPHA", "assistant": "VALUE=17"}
+{"id": "mem-02", "user": "SECRET_PAIR code=BRAVO", "assistant": "VALUE=42"}
+{"id": "mem-03", "user": "SECRET_PAIR code=CHARLIE", "assistant": "VALUE=3"}
+{"id": "mem-04", "user": "SECRET_PAIR code=DELTA", "assistant": "VALUE=99"}
+{"id": "mem-05", "user": "SECRET_PAIR code=ECHO", "assistant": "VALUE=8"}
+{"id": "mem-06", "user": "SECRET_PAIR code=FOXTROT", "assistant": "VALUE=55"}
+{"id": "mem-07", "user": "SECRET_PAIR code=GOLF", "assistant": "VALUE=12"}
+{"id": "mem-08", "user": "SECRET_PAIR code=HOTEL", "assistant": "VALUE=77"}

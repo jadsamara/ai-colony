@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# C1.8D Phase 0 — local smoke on Qwen3-0.6B (CPU/MPS).
+# Does NOT pass Phase 0 and does NOT unlock autonomous training.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+PYTHON="${C18D_PHASE0_PYTHON:-python3}"
+OUT="${C18D_PHASE0_OUT:-${ROOT}/tmp/c18d-phase0/local-smoke}"
+VENV="${C18D_PHASE0_VENV:-${ROOT}/tmp/c18d-phase0/.venv}"
+
+echo "[c18d-phase0] local smoke (not a Phase 0 pass)"
+echo "[c18d-phase0] python=${PYTHON} out=${OUT}"
+
+if [[ "${C18D_PHASE0_SKIP_INSTALL:-}" != "1" ]]; then
+  "${PYTHON}" -m venv "${VENV}"
+  # shellcheck disable=SC1091
+  source "${VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-phase0.txt
+  PYTHON="${VENV}/bin/python"
+fi
+
+mkdir -p "${OUT}"
+"${PYTHON}" services/training/cuda/phase0/run_phase0.py \
+  --mode local-smoke \
+  --python "${PYTHON}" \
+  --out "${OUT}" \
+  --device "${C18D_PHASE0_DEVICE:-auto}" \
+  --allow-download
+
+echo "[c18d-phase0] local smoke finished; see ${OUT}/phase0-report.json"
+echo "[c18d-phase0] Reminder: local smoke never unlocks autonomous training."

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# C1.8D Phase 0 — GPU VM positive controls on Qwen3-8B (HF weights).
+# Run ONLY on the Debian GPU VM after creating an isolated venv.
+# Cursor cannot access the GPU VM; paste phase0-report.json back into the repo
+# as docs/milestones/C1_8D_PHASE0_GPU_RESULT.json only after a real pass.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+PYTHON="${C18D_PHASE0_PYTHON:-python3}"
+OUT="${C18D_PHASE0_OUT:-${ROOT}/tmp/c18d-phase0/gpu-controls}"
+VENV="${C18D_PHASE0_VENV:-${ROOT}/tmp/c18d-phase0/.venv-gpu}"
+
+echo "[c18d-phase0] GPU controls on $(hostname)"
+command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d-phase0] WARN: nvidia-smi missing"
+
+if [[ "${C18D_PHASE0_SKIP_INSTALL:-}" != "1" ]]; then
+  "${PYTHON}" -m venv "${VENV}"
+  # shellcheck disable=SC1091
+  source "${VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-phase0.txt
+  PYTHON="${VENV}/bin/python"
+  "${PYTHON}" - <<'PY'
+import torch, transformers, peft
+print("torch", torch.__version__, "cuda", torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
+print("transformers", transformers.__version__)
+print("peft", peft.__version__)
+PY
+fi
+
+mkdir -p "${OUT}"
+"${PYTHON}" services/training/cuda/phase0/run_phase0.py \
+  --mode gpu-controls \
+  --python "${PYTHON}" \
+  --out "${OUT}" \
+  --device cuda \
+  --allow-download
+
+echo "[c18d-phase0] GPU report: ${OUT}/phase0-report.json"
+echo "[c18d-phase0] If phase0Passed=true, copy it to docs/milestones/C1_8D_PHASE0_GPU_RESULT.json and commit."

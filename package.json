@@ -39,6 +39,8 @@
     "eval:c18a": "tsx scripts/run-c18a-math-baseline.ts",
     "accept:c18c": "tsx scripts/run-c18c-sandbox-acceptance.ts",
     "accept:c18c:vm": "./scripts/c18c-sandbox-acceptance",
+    "phase0:local-smoke": "./scripts/c18d-phase0-local-smoke",
+    "phase0:gpu-controls": "./scripts/c18d-phase0-gpu-controls",
     "health": "tsc -b packages/contracts packages/core packages/database packages/inference --pretty false && tsx apps/api/src/runtime-health-cli.ts",
     "ledger:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/ledger-readiness-cli.ts",
     "routing:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/routing-readiness-cli.ts",

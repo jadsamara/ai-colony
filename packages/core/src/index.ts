@@ -50,7 +50,12 @@ export { ModelService } from "./models/model-service.js";
 export { TrainingService } from "./training/training-service.js";
 export { TrainingEvidenceService } from "./training/evidence-service.js";
 export { classifyFailure, FAILURE_CLASSES } from "./training/evidence-taxonomy.js";
-export { retainPayload, promptSnapshot, DEFAULT_EVIDENCE_RETENTION, sha256Text as evidenceSha256 } from "./training/evidence-retention.js";
+export {
+  retainPayload,
+  promptSnapshot,
+  DEFAULT_EVIDENCE_RETENTION,
+  sha256Text as evidenceSha256,
+} from "./training/evidence-retention.js";
 export type {
   AttemptListFilter,
   InferenceAttemptRecord,
@@ -60,9 +65,21 @@ export type {
   EvidenceEligibilityEventRecord,
   TrainingEvidenceRepository,
 } from "./training/evidence-repository.js";
-export type { FailureClass, AcceptanceStatus, EligibilityStatus, FailureClassification } from "./training/evidence-taxonomy.js";
+export type {
+  FailureClass,
+  AcceptanceStatus,
+  EligibilityStatus,
+  FailureClassification,
+} from "./training/evidence-taxonomy.js";
 export { ExperimentService } from "./training/experiment-service.js";
-export { TRAINING_METHODS, assertMethodExecutable, assertSafeConfig, isHighRisk, planExperiments, selectDevelopmentCandidate } from "./training/experiment-planner.js";
+export {
+  TRAINING_METHODS,
+  assertMethodExecutable,
+  assertSafeConfig,
+  isHighRisk,
+  planExperiments,
+  selectDevelopmentCandidate,
+} from "./training/experiment-planner.js";
 export {
   DEPARTMENT_LEARNING_SPEC_VERSION,
   LEARNING_DEPARTMENT_SLUGS,
@@ -86,7 +103,10 @@ export {
   computePatchContentFingerprint,
   validateTrainingCodePatch,
 } from "./training/training-code-patch.js";
-export type { CodePatchValidationIssue, CodePatchValidationResult } from "./training/training-code-patch.js";
+export type {
+  CodePatchValidationIssue,
+  CodePatchValidationResult,
+} from "./training/training-code-patch.js";
 export {
   assertValidatedLearningExperiment,
   validateDepartmentLearningExperiment,
@@ -134,6 +154,22 @@ export {
   ensureTrainingSandboxImage,
   runC18cSandboxAcceptance,
 } from "./training/c18c-acceptance.js";
+export {
+  C18D_PHASE0_THRESHOLDS_VERSION,
+  C18D_AUTONOMOUS_TRAINING_FLAG,
+  DEFAULT_PHASE0_THRESHOLDS,
+  judgeMemorizationControl,
+  judgeGeneralizationControl,
+  readAutonomousLearningFlags,
+  assertAutonomousTrainingAllowed,
+} from "./training/phase0-gate.js";
+export type {
+  AutonomousLearningFlags,
+  Phase0ControlEvidence,
+  Phase0GeneralizationThresholds,
+  Phase0MemorizationThresholds,
+  Phase0Thresholds,
+} from "./training/phase0-gate.js";
 export type {
   C18cAcceptanceCheck,
   C18cAcceptanceOptions,
@@ -167,7 +203,10 @@ export { DepartmentLearningService } from "./learning/learning-service.js";
 export { CollaborationService } from "./learning/collaboration-service.js";
 export { AutonomyService } from "./autonomy/autonomy-service.js";
 export { DialogueService } from "./autonomy/dialogue-service.js";
-export { DepartmentRoutingService, type DepartmentRoutingResult } from "./autonomy/department-routing-service.js";
+export {
+  DepartmentRoutingService,
+  type DepartmentRoutingResult,
+} from "./autonomy/department-routing-service.js";
 export {
   tryDeterministicDepartmentRoute,
   validateRoutedDepartments,
@@ -176,15 +215,24 @@ export {
   orchestrationRouteSchema,
   ORCHESTRATION_ROUTE_SCHEMA,
 } from "./autonomy/department-routing.js";
-export type { DepartmentRoutingDecisionRecord, DepartmentRoutingRepository } from "./autonomy/department-routing-repository.js";
-export { DepartmentJoinService, type DepartmentJoinResult } from "./autonomy/department-join-service.js";
+export type {
+  DepartmentRoutingDecisionRecord,
+  DepartmentRoutingRepository,
+} from "./autonomy/department-routing-repository.js";
+export {
+  DepartmentJoinService,
+  type DepartmentJoinResult,
+} from "./autonomy/department-join-service.js";
 export {
   orchestrationJoinSchema,
   ORCHESTRATION_JOIN_SCHEMA,
   buildJoinTaskBrief,
   JOIN_REQUEST_STATUSES,
 } from "./autonomy/department-join.js";
-export type { DepartmentJoinRequestRecord, DepartmentJoinRequestRepository } from "./autonomy/department-join-repository.js";
+export type {
+  DepartmentJoinRequestRecord,
+  DepartmentJoinRequestRepository,
+} from "./autonomy/department-join-repository.js";
 export type { JoinRequestStatus, JoinConfidence } from "./autonomy/department-join.js";
 export {
   ConversationRunner,
@@ -196,19 +244,46 @@ export {
   DECISION_KINDS,
   MAX_INVALID_CORRECTIONS,
 } from "./autonomy/conversation-runner.js";
-export type { DecisionFailureKind, DecisionInspection, DecisionDraft } from "./autonomy/conversation-runner.js";
+export type {
+  DecisionFailureKind,
+  DecisionInspection,
+  DecisionDraft,
+} from "./autonomy/conversation-runner.js";
 export {
   stripModelWrappers,
   looksTruncatedJson,
   classifyDecisionParseFailure,
 } from "./autonomy/structured-decision.js";
-export { assessProgress, departmentContributions, departmentFollowUp, isNearVerbatim, permitsEcho, readProgress, repetitionCorrection } from "./autonomy/conversation-quality.js";
-export { buildCheckpoint, classifyClaim, classifyNovelty, measureProgress, parseModelJson, renderCheckpoint, repetitionVerdict, reviewMathClaim, validateContribution } from "./autonomy/conversation-integrity.js";
+export {
+  assessProgress,
+  departmentContributions,
+  departmentFollowUp,
+  isNearVerbatim,
+  permitsEcho,
+  readProgress,
+  repetitionCorrection,
+} from "./autonomy/conversation-quality.js";
+export {
+  buildCheckpoint,
+  classifyClaim,
+  classifyNovelty,
+  measureProgress,
+  parseModelJson,
+  renderCheckpoint,
+  repetitionVerdict,
+  reviewMathClaim,
+  validateContribution,
+} from "./autonomy/conversation-integrity.js";
 export type { ConversationProgress } from "./autonomy/conversation-quality.js";
 export { selectConversationInference } from "./autonomy/conversation-routing.js";
 export type { ConversationWake } from "./autonomy/conversation-runner.js";
 export { acceptGoalEvidence, normalizeGoal, redactSensitive } from "./autonomy/policy.js";
-export { buildDialogueContext, maySpeak, orchestrationRecommendation, selectSpeaker } from "./autonomy/speakers.js";
+export {
+  buildDialogueContext,
+  maySpeak,
+  orchestrationRecommendation,
+  selectSpeaker,
+} from "./autonomy/speakers.js";
 export type { SpeakerChoice, SpeakerReason } from "./autonomy/speakers.js";
 export {
   CALC_CONSTANTS,
@@ -217,7 +292,12 @@ export {
   evaluateCalc,
   tsiolkovskyPropellantMass,
 } from "./verification/calculation.js";
-export type { CalcConstantName, CalcNode, TsiolkovskyPropellantInput, TsiolkovskyPropellantResult } from "./verification/calculation.js";
+export type {
+  CalcConstantName,
+  CalcNode,
+  TsiolkovskyPropellantInput,
+  TsiolkovskyPropellantResult,
+} from "./verification/calculation.js";
 export { withinTolerance } from "./verification/tolerance.js";
 export type { ToleranceCheck, ToleranceSpec } from "./verification/tolerance.js";
 export { verifyNumericalClaim } from "./verification/numerical.js";
@@ -252,10 +332,7 @@ export type {
   DeliverableStatus,
   PreferredDepartmentSlug,
 } from "./verification/deliverables.js";
-export {
-  CLAIM_PROVENANCES,
-  CLAIM_VERIFICATION_STATUSES,
-} from "./verification/claim-repository.js";
+export { CLAIM_PROVENANCES, CLAIM_VERIFICATION_STATUSES } from "./verification/claim-repository.js";
 export type {
   ClaimProvenance,
   ClaimVerificationRecord,
@@ -279,7 +356,14 @@ export type {
   ContextEventRecord,
 } from "./autonomy/repository.js";
 export { promotionAllowed, retainedProvenance } from "./learning/collaboration-policy.js";
-export { assertLearningTransition, gapFingerprint, selectLearningMethod, outcomeForMethod, weightImprovementVerified, LEARNING_CYCLE_STATUSES } from "./learning/transitions.js";
+export {
+  assertLearningTransition,
+  gapFingerprint,
+  selectLearningMethod,
+  outcomeForMethod,
+  weightImprovementVerified,
+  LEARNING_CYCLE_STATUSES,
+} from "./learning/transitions.js";
 export type {
   AssignmentRecord,
   BudgetRecord,
@@ -314,8 +398,18 @@ export type {
   RouteVersionRecord,
 } from "./evaluation/repository.js";
 export { gradeArithmetic } from "./evaluation/score.js";
-export { claimSignificance, mcnemarExact, pairedCounts, wilsonInterval } from "./evaluation/stats.js";
-export { applyGateIfComparable, decideGate, GATE_POLICY, gatePolicyHash } from "./evaluation/gate.js";
+export {
+  claimSignificance,
+  mcnemarExact,
+  pairedCounts,
+  wilsonInterval,
+} from "./evaluation/stats.js";
+export {
+  applyGateIfComparable,
+  decideGate,
+  GATE_POLICY,
+  gatePolicyHash,
+} from "./evaluation/gate.js";
 export { compareManifests } from "./evaluation/compare.js";
 export { classifyItem, summarizeItems } from "./evaluation/classify.js";
 export {
@@ -405,7 +499,11 @@ export type {
 export { CapabilityLedgerService, separateModelIdentity } from "./capability/service.js";
 export { MemoryCapabilityRepository, type CapabilityRepository } from "./capability/repository.js";
 export { holmAdjust, applyHolm } from "./capability/holm.js";
-export { discordantPairWilsonInterval, newcombePairedDifference, NEWCOMBE_Z } from "./capability/interval.js";
+export {
+  discordantPairWilsonInterval,
+  newcombePairedDifference,
+  NEWCOMBE_Z,
+} from "./capability/interval.js";
 export { validateTaxonomyGraph, reconstructTaxonomy } from "./capability/taxonomy.js";
 export { compareCertifiedSnapshots } from "./capability/compare.js";
 export { SNAPSHOT_SCHEMA_VERSION } from "./capability/types.js";
@@ -423,11 +521,33 @@ export type {
   ModelIdentitySeparation,
   TaxonomyNode,
 } from "./capability/types.js";
-export { assessDeployment, improvementPolicyHash, verifyImprovement, IMPROVEMENT_POLICY } from "./evaluation/improvement.js";
-export type { DeploymentEligibility, ImprovementClass, ImprovementEvidence, ImprovementVerdict } from "./evaluation/improvement.js";
-export { ScriptedTrainingProvider, type ScriptedTrainingOptions } from "./training/scripted-provider.js";
+export {
+  assessDeployment,
+  improvementPolicyHash,
+  verifyImprovement,
+  IMPROVEMENT_POLICY,
+} from "./evaluation/improvement.js";
+export type {
+  DeploymentEligibility,
+  ImprovementClass,
+  ImprovementEvidence,
+  ImprovementVerdict,
+} from "./evaluation/improvement.js";
+export {
+  ScriptedTrainingProvider,
+  type ScriptedTrainingOptions,
+} from "./training/scripted-provider.js";
 export { MlxTrainingProvider } from "./training/mlx-provider.js";
-export { ACCEPTANCE_CRITERIA, EXAMPLE_SOURCES, applyReserved, assignSplit, buildCuratedArithmetic, exampleFromMemory, examplesFromSupplied, parseArithmetic } from "./training/dataset.js";
+export {
+  ACCEPTANCE_CRITERIA,
+  EXAMPLE_SOURCES,
+  applyReserved,
+  assignSplit,
+  buildCuratedArithmetic,
+  exampleFromMemory,
+  examplesFromSupplied,
+  parseArithmetic,
+} from "./training/dataset.js";
 export type { ExampleSource } from "./training/dataset.js";
 export { meetsAcceptance, scoreOutputs } from "./training/evaluate.js";
 export { frozenConfig, TRAINING_BUDGETS } from "./training/profiles.js";
@@ -477,7 +597,11 @@ export {
   processSeen,
   tcpReachable,
 } from "./runtime/local-signals.js";
-export { summarizeOutbox, type OutboxObservation, type OutboxSummary } from "./messaging/outbox-summary.js";
+export {
+  summarizeOutbox,
+  type OutboxObservation,
+  type OutboxSummary,
+} from "./messaging/outbox-summary.js";
 export type { InferenceWorkerPort, TrainingWorkerPort } from "./runtime/worker-ports.js";
 export {
   assertRecipientAgentEligible,
@@ -489,7 +613,11 @@ export {
 } from "./messaging/access.js";
 export { messageIdentityHash } from "./messaging/hash.js";
 export { MessageHandlingError, recordReceipt, type MessageHandler } from "./messaging/handlers.js";
-export { MessagingService, type DeliveryOutcome, type SendResult } from "./messaging/message-service.js";
+export {
+  MessagingService,
+  type DeliveryOutcome,
+  type SendResult,
+} from "./messaging/message-service.js";
 export {
   InferenceError,
   type InferenceProvider,
@@ -498,7 +626,13 @@ export {
   type ModelProbe,
   type ThinkingPreference,
 } from "./inference/provider.js";
-export { estimateCostUsdMicros, estimateTokens, normalizeUsage, type CostRates, type TokenUsage } from "./inference/usage.js";
+export {
+  estimateCostUsdMicros,
+  estimateTokens,
+  normalizeUsage,
+  type CostRates,
+  type TokenUsage,
+} from "./inference/usage.js";
 export {
   ObjectiveService,
   DEFAULT_OBJECTIVE_LIMITS,
@@ -506,7 +640,12 @@ export {
   type ObjectiveMemory,
   type PreparedGeneration,
 } from "./objectives/objective-service.js";
-export { validatePlan, extractJsonObject, planErrors, type PlanContext } from "./objectives/plan.js";
+export {
+  validatePlan,
+  extractJsonObject,
+  planErrors,
+  type PlanContext,
+} from "./objectives/plan.js";
 export { chooseDispatch, readyTaskIds, blockedTaskIds } from "./objectives/schedule.js";
 export { assertObjectiveTransition, assertTaskTransition } from "./objectives/transitions.js";
 export { canReadMemory, nextScope } from "./memory/access.js";
@@ -518,7 +657,11 @@ export {
   type EmbeddingProvider,
   type EmbeddingVector,
 } from "./memory/embedding.js";
-export { DEFAULT_MEMORY_LIMITS, MemoryService, type MemoryLimits } from "./memory/memory-service.js";
+export {
+  DEFAULT_MEMORY_LIMITS,
+  MemoryService,
+  type MemoryLimits,
+} from "./memory/memory-service.js";
 export { fitContext, rankMemories } from "./memory/rank.js";
 export { planPrompt, renderMemoryBlock, withMemory } from "./objectives/prompts.js";
 export {
@@ -610,12 +753,30 @@ export {
   SHARED_QWEN3_8B_MODEL_ID,
   isLegacyDepartment,
 } from "./routing/policy.js";
-export type { RoutingSelection, RoutingSnapshot, RuntimeEvidence, DerivedServingArtifact } from "./routing/types.js";
-export { normalizeEndpoint, endpointReferenceFor, dedicatedInstanceId } from "./serving/endpoints.js";
+export type {
+  RoutingSelection,
+  RoutingSnapshot,
+  RuntimeEvidence,
+  DerivedServingArtifact,
+} from "./routing/types.js";
+export {
+  normalizeEndpoint,
+  endpointReferenceFor,
+  dedicatedInstanceId,
+} from "./serving/endpoints.js";
 export { httpDepartmentClient } from "./serving/http.js";
 export { departmentProfiles, planDedicatedInstances } from "./serving/inventory.js";
-export { bindDedicatedEndpoints, assertNoSharedServing, type TrustedEndpointDirectory } from "./serving/plan.js";
-export { estimateDedicatedCapacity, gcpDeploymentPlan, type CapacityEstimate, type GcpServicePlan } from "./serving/capacity.js";
+export {
+  bindDedicatedEndpoints,
+  assertNoSharedServing,
+  type TrustedEndpointDirectory,
+} from "./serving/plan.js";
+export {
+  estimateDedicatedCapacity,
+  gcpDeploymentPlan,
+  type CapacityEstimate,
+  type GcpServicePlan,
+} from "./serving/capacity.js";
 export {
   dedicatedRoutingEnabled,
   gateDedicatedExecution,
@@ -626,8 +787,17 @@ export {
   type ActivationRecord,
   type DedicatedRoutingConfig,
 } from "./serving/activation.js";
-export { assertDedicatedCapacity, limitsFromEnv, type CapacityLimits, type PreflightResult } from "./serving/preflight.js";
-export { planModelArtifacts, type ArtifactObservation, type ArtifactPlan } from "./serving/provision.js";
+export {
+  assertDedicatedCapacity,
+  limitsFromEnv,
+  type CapacityLimits,
+  type PreflightResult,
+} from "./serving/preflight.js";
+export {
+  planModelArtifacts,
+  type ArtifactObservation,
+  type ArtifactPlan,
+} from "./serving/provision.js";
 export {
   AGENT_IMAGE,
   MOCK_IMAGE,

@@ -1,0 +1,32 @@
+{
+  "specVersion": "c18d-phase0-thresholds-v1",
+  "declaredBeforeTraining": true,
+  "note": "These thresholds were fixed before any Phase 0 training run. Do not edit after a GPU attempt without creating thresholds-v2.",
+  "memorization": {
+    "controlId": "phase0-memorization-v1",
+    "metric": "exact_match_on_trained_items",
+    "minExactMatch": 0.95,
+    "minItems": 8,
+    "requireAdapterLoaded": true,
+    "requireAdapterWeightDelta": true
+  },
+  "generalization": {
+    "controlId": "phase0-generalization-v1",
+    "metric": "heldout_exact_match",
+    "minHeldoutExactMatch": 0.9,
+    "minImprovementOverBase": 0.5,
+    "minHeldoutItems": 20,
+    "requireAdapterLoaded": true,
+    "requireAdapterWeightDelta": true
+  },
+  "localSmoke": {
+    "modelId": "Qwen/Qwen3-0.6B",
+    "countsAsPhase0Pass": false,
+    "purpose": "Catch chat-template / masking / adapter-load bugs before GPU spend"
+  },
+  "gpuGate": {
+    "modelId": "Qwen/Qwen3-8B",
+    "bothControlsMustPass": true,
+    "autonomousTrainingUnlocksOnlyAfterPass": true
+  }
+}
