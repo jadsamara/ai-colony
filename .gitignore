@@ -4,6 +4,9 @@ coverage/
 .env
 *.log
 .DS_Store
+__pycache__/
+*.py[cod]
+.Python
 .drizzle/
 deploy/state/
 deploy/colony.env
