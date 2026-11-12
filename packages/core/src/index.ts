@@ -111,6 +111,20 @@ export {
   evaluateSandboxIsolation,
   executeTrainingCodeSandbox,
 } from "./training/training-sandbox.js";
+export {
+  C18C_ACCEPTANCE_MARKER,
+  C18C_ACCEPTANCE_EXPERIMENT_ID,
+  C18C_ACCEPTANCE_PATCH_PATH,
+  buildC18cAcceptanceExperiment,
+  ensureTrainingSandboxImage,
+  runC18cSandboxAcceptance,
+} from "./training/c18c-acceptance.js";
+export type {
+  C18cAcceptanceCheck,
+  C18cAcceptanceOptions,
+  C18cAcceptanceReport,
+  EnsureSandboxImageResult,
+} from "./training/c18c-acceptance.js";
 export type {
   ContainerRunRequest,
   ContainerRunResult,

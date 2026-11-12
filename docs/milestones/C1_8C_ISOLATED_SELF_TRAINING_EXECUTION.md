@@ -40,4 +40,10 @@
 
 ## Recommended next step
 
-On the GPU VM: build the sandbox image offline, run one Engineering-approved patch through the real Docker runner, then pin a CUDA-enabled trainer image (still network-isolated, still no Ollama mounts) before any non-dry-run LoRA job.
+**GPU VM acceptance is pending operator execution.** After pulling this branch on the Debian GPU VM, run:
+
+```bash
+./scripts/c18c-sandbox-acceptance
+```
+
+See `docs/milestones/C1_8C_GPU_VM_ACCEPTANCE.md` for the full command list and expected artifacts. Cursor cannot access the GPU VM.

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# C1.8C — One-command GPU VM acceptance for the training-code sandbox.
+#
+# Run manually over SSH on the Debian GPU VM after pulling this commit:
+#   cd /path/to/ai-colony
+#   ./scripts/c18c-sandbox-acceptance
+#
+# Options:
+#   --no-build   Do not docker-build the sandbox image if missing (fail closed instead)
+#
+# Guarantees / refusals:
+#   - Uses real C1.8B/C1.8C validate + executeTrainingCodeSandbox paths
+#   - Builds ai-colony-training-sandbox:c18c when missing (unless --no-build)
+#   - Fail closed if Docker isolation cannot be established
+#   - Does NOT access PostgreSQL, modify Ollama, download weights, or start GPU training
+#
+# Cursor has no access to the GPU VM. Local unit tests != GPU VM verification.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "[c18c-acceptance] ERROR: docker is required" >&2
+  exit 2
+fi
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "[c18c-acceptance] ERROR: pnpm is required (Node 22 tooling)" >&2
+  exit 2
+fi
+
+# Ensure core package types resolve for tsx without a full monorepo rebuild when dist is stale.
+pnpm exec tsc -b packages/contracts packages/core --pretty false
+
+echo "[c18c-acceptance] starting (repo=${ROOT})"
+exec pnpm exec tsx scripts/run-c18c-sandbox-acceptance.ts "$@"
