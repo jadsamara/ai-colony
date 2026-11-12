@@ -19,6 +19,11 @@ import {
 } from "./department-learning-spec.js";
 import { validateDepartmentLearningExperiment } from "./department-learning-validate.js";
 import { hashAllowlistedTree, materializePatchedWorkspace } from "./patch-apply.js";
+import {
+  SANDBOX_CONTAINER_GID,
+  SANDBOX_CONTAINER_UID,
+  prepareSandboxMountPermissions,
+} from "./sandbox-mount-permissions.js";
 import { computePatchContentFingerprint, validateTrainingCodePatch } from "./training-code-patch.js";
 
 export const TRAINING_SANDBOX_IMAGE = "ai-colony-training-sandbox:c18c" as const;
@@ -330,76 +335,92 @@ export async function executeTrainingCodeSandbox(
     );
     writeFileSync(join(scratchRoot, "job.json"), JSON.stringify(job, null, 2), "utf8");
 
-    // Keep /workspace read-only: bytecode must land under /scratch, never __pycache__ in source.
-    const syntaxCommand = buildSandboxSyntaxCommand(applied.touchedPaths);
-    const syntaxResult = await runner.run({
-      image: TRAINING_SANDBOX_IMAGE,
-      workspaceMount: workspaceRoot,
-      scratchMount: scratchRoot,
-      evidenceMount: evidenceDir,
-      command: syntaxCommand,
-      limits,
-      env: sandboxEnv(),
+    // Host-created 0700 mkdtemp dirs are invisible to container UID 10001 without ACL/mode prep.
+    const mountPerms = prepareSandboxMountPermissions({
+      workspaceRoot,
+      scratchRoot,
+      evidenceRoot: evidenceDir,
+      containerUid: SANDBOX_CONTAINER_UID,
     });
-    isolation = syntaxResult.isolation;
-    logs = mergeLogs(logs, syntaxResult);
-    durationMs += syntaxResult.durationMs;
-    syntaxExit = syntaxResult.exitCode;
-
-    if (!isolation.ok) {
-      failureCode = "isolation_failed";
+    if (!mountPerms.ok) {
+      failureCode = "mount_permissions";
       outcome = "rejected";
-    } else if (syntaxResult.timedOut) {
-      failureCode = "timeout";
-      outcome = "failed";
-    } else if (syntaxResult.exitCode !== 0) {
-      failureCode = "syntax_failed";
-      outcome = "failed";
+      logs = {
+        stdout: logs.stdout,
+        stderr: `Fail closed: sandbox mount permissions not established (${mountPerms.detail})`,
+      };
     } else {
-      const dryRunCommand = [
-        "python3",
-        "/workspace/services/training/cuda/train_lora_cuda.py",
-        "--job",
-        "/scratch/job.json",
-      ];
-      const dryRunResult = await runner.run({
+      // Keep /workspace read-only: bytecode must land under /scratch, never __pycache__ in source.
+      const syntaxCommand = buildSandboxSyntaxCommand(applied.touchedPaths);
+      const syntaxResult = await runner.run({
         image: TRAINING_SANDBOX_IMAGE,
         workspaceMount: workspaceRoot,
         scratchMount: scratchRoot,
         evidenceMount: evidenceDir,
-        command: dryRunCommand,
+        command: syntaxCommand,
         limits,
         env: sandboxEnv(),
       });
-      isolation = dryRunResult.isolation;
-      logs = mergeLogs(logs, dryRunResult);
-      durationMs += dryRunResult.durationMs;
-      dryRunExit = dryRunResult.exitCode;
+      isolation = syntaxResult.isolation;
+      logs = mergeLogs(logs, syntaxResult);
+      durationMs += syntaxResult.durationMs;
+      syntaxExit = syntaxResult.exitCode;
+
       if (!isolation.ok) {
         failureCode = "isolation_failed";
         outcome = "rejected";
-      } else if (dryRunResult.timedOut) {
+      } else if (syntaxResult.timedOut) {
         failureCode = "timeout";
         outcome = "failed";
-      } else if (dryRunResult.exitCode !== 0) {
-        failureCode = "dry_run_failed";
+      } else if (syntaxResult.exitCode !== 0) {
+        failureCode = "syntax_failed";
         outcome = "failed";
       } else {
-        outcome = "passed";
-        failureCode = null;
+        const dryRunCommand = [
+          "python3",
+          "/workspace/services/training/cuda/train_lora_cuda.py",
+          "--job",
+          "/scratch/job.json",
+        ];
+        const dryRunResult = await runner.run({
+          image: TRAINING_SANDBOX_IMAGE,
+          workspaceMount: workspaceRoot,
+          scratchMount: scratchRoot,
+          evidenceMount: evidenceDir,
+          command: dryRunCommand,
+          limits,
+          env: sandboxEnv(),
+        });
+        isolation = dryRunResult.isolation;
+        logs = mergeLogs(logs, dryRunResult);
+        durationMs += dryRunResult.durationMs;
+        dryRunExit = dryRunResult.exitCode;
+        if (!isolation.ok) {
+          failureCode = "isolation_failed";
+          outcome = "rejected";
+        } else if (dryRunResult.timedOut) {
+          failureCode = "timeout";
+          outcome = "failed";
+        } else if (dryRunResult.exitCode !== 0) {
+          failureCode = "dry_run_failed";
+          outcome = "failed";
+        } else {
+          outcome = "passed";
+          failureCode = null;
+        }
       }
-    }
 
-    // Preserve permitted evidence from scratch output.
-    for (const name of ["result.json", "metrics.json", "config-manifest.json"]) {
-      const abs = join(scratchRoot, "output", name);
-      if (!existsSync(abs)) {
-        continue;
+      // Preserve permitted evidence from scratch output.
+      for (const name of ["result.json", "metrics.json", "config-manifest.json"]) {
+        const abs = join(scratchRoot, "output", name);
+        if (!existsSync(abs)) {
+          continue;
+        }
+        const bytes = readFileSync(abs);
+        const dest = join(evidenceDir, name);
+        writeFileSync(dest, bytes);
+        artifactHashes.push({ path: name, sha256: createHash("sha256").update(bytes).digest("hex") });
       }
-      const bytes = readFileSync(abs);
-      const dest = join(evidenceDir, name);
-      writeFileSync(dest, bytes);
-      artifactHashes.push({ path: name, sha256: createHash("sha256").update(bytes).digest("hex") });
     }
   } catch (error) {
     failureCode = error instanceof DomainError ? error.code : "sandbox_error";
@@ -512,7 +533,7 @@ export function createDockerSandboxRunner(): TrainingSandboxRunner {
         "--cap-drop",
         "ALL",
         "--user",
-        "10001:10001",
+        `${SANDBOX_CONTAINER_UID}:${SANDBOX_CONTAINER_GID}`,
         "--workdir",
         "/workspace",
         "-v",

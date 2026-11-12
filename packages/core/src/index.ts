@@ -116,6 +116,17 @@ export {
   sandboxEnv,
 } from "./training/training-sandbox.js";
 export {
+  SANDBOX_CONTAINER_UID,
+  SANDBOX_CONTAINER_GID,
+  prepareSandboxMountPermissions,
+  verifyMountPermissions,
+} from "./training/sandbox-mount-permissions.js";
+export type {
+  PrepareSandboxMountPermissionsInput,
+  PrepareSandboxMountPermissionsResult,
+  SandboxMountPermissionMethod,
+} from "./training/sandbox-mount-permissions.js";
+export {
   C18C_ACCEPTANCE_MARKER,
   C18C_ACCEPTANCE_EXPERIMENT_ID,
   C18C_ACCEPTANCE_PATCH_PATH,

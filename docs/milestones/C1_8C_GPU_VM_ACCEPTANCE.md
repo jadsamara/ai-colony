@@ -11,7 +11,11 @@
 
 ### Read-only syntax note
 
-`python -m py_compile` writes `__pycache__` beside sources and fails on a read-only `/workspace`. The sandbox now compiles with an explicit `cfile` under `/scratch/pycache` (`PYTHONPYCACHEPREFIX` set) while keeping `/workspace` mounted read-only. Re-run:
+`python -m py_compile` writes `__pycache__` beside sources and fails on a read-only `/workspace`. The sandbox now compiles with an explicit `cfile` under `/scratch/pycache` (`PYTHONPYCACHEPREFIX` set) while keeping `/workspace` mounted read-only.
+
+### Bind-mount permission note
+
+Host `mkdtempSync` directories are mode `0700` and owned by the host UID (e.g. 1000). The container runs as `10001:10001`, so it cannot write `/scratch` or `/evidence` until mount permissions are prepared. Before each run the control plane applies restricted POSIX ACLs (`setfacl` for `u:10001`) when available, otherwise a narrow mode fallback on **only** those dedicated mount roots (workspace readable; scratch/evidence writable). It fails closed if permissions cannot be established. Re-run:
 
 ```bash
 ./scripts/c18c-sandbox-acceptance
@@ -76,6 +80,8 @@ Expect `ok: true`, `dockerIsolationVerified: true`, `productionRepoUnchanged: tr
 pnpm exec vitest run --config vitest.unit.config.ts \
   tests/unit/c18c-acceptance.test.ts \
   tests/unit/training-sandbox.test.ts \
+  tests/unit/sandbox-mount-permissions.test.ts \
   tests/unit/department-learning.test.ts
+pnpm test:c18c-sandbox   # Docker UID 10001 bind-mount checks; skips if daemon/image missing
 pnpm exec tsc -b
 ```

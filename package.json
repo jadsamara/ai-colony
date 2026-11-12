@@ -43,6 +43,7 @@
     "ledger:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/ledger-readiness-cli.ts",
     "routing:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/routing-readiness-cli.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:c18c-sandbox": "vitest run --config vitest.c18c-sandbox.config.ts",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",
@@ -61,6 +62,9 @@
     "colony:routing:deactivate": "tsc -b packages/contracts packages/core packages/database packages/inference packages/workflows --pretty false && tsx packages/database/src/colony-cli.ts routing-deactivate"
   },
   "devDependencies": {
+    "@ai-colony/contracts": "workspace:*",
+    "@ai-colony/core": "workspace:*",
+    "@ai-colony/inference": "workspace:*",
     "@eslint/js": "^9.39.1",
     "@types/node": "^22.19.1",
     "drizzle-kit": "^0.31.6",

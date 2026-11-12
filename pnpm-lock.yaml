@@ -8,6 +8,15 @@ importers:
 
   .:
     devDependencies:
+      '@ai-colony/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
+      '@ai-colony/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@ai-colony/inference':
+        specifier: workspace:*
+        version: link:packages/inference
       '@eslint/js':
         specifier: ^9.39.1
         version: 9.39.5
