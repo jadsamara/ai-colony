@@ -97,6 +97,40 @@ export type {
   LearningValidationResult,
   ValidateLearningExperimentInput,
 } from "./training/department-learning-validate.js";
+export {
+  hashAllowlistedTree,
+  materializePatchedWorkspace,
+  applyUnifiedDiff,
+} from "./training/patch-apply.js";
+export type { AppliedPatchWorkspace, TreeFileHash } from "./training/patch-apply.js";
+export {
+  TRAINING_SANDBOX_IMAGE,
+  TRAINING_SANDBOX_SPEC_VERSION,
+  DEFAULT_SANDBOX_LIMITS,
+  createDockerSandboxRunner,
+  evaluateSandboxIsolation,
+  executeTrainingCodeSandbox,
+} from "./training/training-sandbox.js";
+export type {
+  ContainerRunRequest,
+  ContainerRunResult,
+  ExecuteSandboxInput,
+  ExecuteSandboxResult,
+  SandboxExecutionEvidence,
+  SandboxIsolationReport,
+  SandboxLimits,
+  TrainingSandboxRunner,
+} from "./training/training-sandbox.js";
+export {
+  assembleDepartmentLearningProposal,
+  integrationBoundaryContributions,
+} from "./training/department-learning-workflow.js";
+export type {
+  AssembleLearningProposalInput,
+  AssembledLearningProposal,
+  LearningContribution,
+  LearningContributionSource,
+} from "./training/department-learning-workflow.js";
 export { SelfTrainingExperimentService } from "./training/self-training-experiment-service.js";
 export { meanExposures, outputDisagreement, stopDecision } from "./training/stability.js";
 export { EvaluationService } from "./evaluation/evaluation-service.js";

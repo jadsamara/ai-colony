@@ -1,0 +1,13 @@
+# C1.8C documents the intended Blackwell-compatible stack.
+# Do not pip-install these on the production API host as part of this milestone.
+# Pin exact CUDA/wheel versions only after verifying the GPU VM driver + toolkit.
+#
+# Intended libraries (versions TBD after compatibility check):
+#   torch
+#   transformers
+#   peft
+#   trl
+#   accelerate
+#   datasets
+#
+# Dry-run smoke tests use the Python standard library only.

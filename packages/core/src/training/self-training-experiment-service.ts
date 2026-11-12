@@ -19,16 +19,29 @@ import {
   validateTrainingCodePatch,
   type CodePatchValidationResult,
 } from "./training-code-patch.js";
+import {
+  executeTrainingCodeSandbox,
+  type ExecuteSandboxInput,
+  type ExecuteSandboxResult,
+  type TrainingSandboxRunner,
+} from "./training-sandbox.js";
+import {
+  assembleDepartmentLearningProposal,
+  type AssembleLearningProposalInput,
+  type AssembledLearningProposal,
+} from "./department-learning-workflow.js";
 
 /**
- * C1.8B foundation service: propose/validate department-directed learning experiments.
- * Does not launch trainers, mutate Ollama, or apply migrations.
+ * C1.8B/C1.8C service: propose/validate department-directed learning experiments
+ * and smoke-test allowlisted training-code patches inside an isolated sandbox.
+ * Does not promote models, mutate Ollama, apply migrations, or run GPU training.
  */
 export class SelfTrainingExperimentService {
   constructor(
     private readonly persistence: Persistence,
     private readonly authorizer: Authorizer,
     private readonly now: () => Date = () => new Date(),
+    private readonly sandboxRunner?: TrainingSandboxRunner,
   ) {}
 
   describeResponsibilities() {
@@ -61,7 +74,7 @@ export class SelfTrainingExperimentService {
         slug: LEARNING_ROLE_DEPARTMENTS.codeImplementer,
         responsibilities: [
           "Review candidate training-code patches",
-          "Implement allowlisted patch proposals in isolated workspaces (later milestone)",
+          "Implement allowlisted patch proposals in isolated sandbox workspaces",
         ],
       },
       evaluation: {
@@ -73,6 +86,10 @@ export class SelfTrainingExperimentService {
         ],
       },
     };
+  }
+
+  assembleProposal(input: AssembleLearningProposalInput): AssembledLearningProposal {
+    return assembleDepartmentLearningProposal(input);
   }
 
   async validateExperiment(
@@ -114,6 +131,31 @@ export class SelfTrainingExperimentService {
     if (result.ok) {
       assertTrainingCodePatch(patch);
     }
+    return result;
+  }
+
+  /**
+   * Apply a validated/approved patch inside an isolated workspace and run
+   * syntax + dry-run smoke tests. Never launches GPU training or touches Ollama.
+   */
+  async executeSandboxSmokeTest(
+    ctx: RequestContext,
+    input: Omit<ExecuteSandboxInput, "actor" | "runner" | "now">,
+  ): Promise<ExecuteSandboxResult> {
+    this.authorizer.assert(ctx.actor, "training:execute");
+    const departmentSlug = await this.actorDepartmentSlug(ctx);
+    const result = await executeTrainingCodeSandbox({
+      ...input,
+      actor: {
+        principalId: ctx.actor.principalId,
+        agentId: ctx.actor.agentId,
+        departmentSlug,
+        role: ctx.actor.role,
+      },
+      runner: this.sandboxRunner,
+      now: this.now,
+    });
+    await this.recordSandboxAudit(ctx, result);
     return result;
   }
 
@@ -164,6 +206,46 @@ export class SelfTrainingExperimentService {
       throw new DomainError(
         "INTERNAL",
         error instanceof Error ? error.message : "Failed to append learning validation audit event",
+        500,
+      );
+    });
+  }
+
+  private async recordSandboxAudit(ctx: RequestContext, result: ExecuteSandboxResult): Promise<void> {
+    const evidence = result.evidence;
+    await this.persistence.repos.audit.append({
+      eventType: result.ok ? "learning.sandbox_passed" : "learning.sandbox_failed",
+      actorId: ctx.actor.principalId,
+      actorType: ctx.actor.principalType,
+      targetType: "department_learning_experiment",
+      targetId: evidence.experimentId,
+      action: result.ok ? "learning.sandbox_passed" : "learning.sandbox_failed",
+      correlationId: ctx.correlationId,
+      beforeState: null,
+      afterState: {
+        outcome: evidence.outcome,
+        failureCode: evidence.failureCode,
+        proposalFingerprint: evidence.proposalFingerprint,
+        originalTreeHash: evidence.originalTreeHash,
+        modifiedTreeHash: evidence.modifiedTreeHash,
+        syntaxExitCode: evidence.syntaxExitCode,
+        dryRunExitCode: evidence.dryRunExitCode,
+        isolationOk: evidence.isolation.ok,
+        trainingLaunched: false,
+        gpuUsed: false,
+        productionRepoModified: false,
+        requestingDepartmentSlug: evidence.requestingDepartmentSlug,
+        proposingDepartmentSlug: evidence.proposingDepartmentSlug,
+      },
+      metadata: {
+        specVersion: evidence.specVersion,
+        durationMs: evidence.durationMs,
+        artifactHashes: evidence.artifactHashes,
+      },
+    }).catch((error: unknown) => {
+      throw new DomainError(
+        "INTERNAL",
+        error instanceof Error ? error.message : "Failed to append sandbox audit event",
         500,
       );
     });

@@ -15,6 +15,8 @@ export const TRAINING_CODE_ALLOWLIST = [
   "services/training/eval_lora.py",
   "services/training/generate_lora.py",
   "services/training/common.py",
+  "services/training/cuda/train_lora_cuda.py",
+  "services/training/cuda/common_cuda.py",
 ] as const;
 
 export type TrainingCodeAllowPath = (typeof TRAINING_CODE_ALLOWLIST)[number];
@@ -234,7 +236,7 @@ function runDependencyHook(diff: string): { ok: boolean; message: string } {
     .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
     .map((line) => line.slice(1).trim())
     .filter((line) => /^(?:import|from)\s+/.test(line));
-  const allowed = /^(?:import|from)\s+(?:mlx|mlx_lm|numpy|json|os|sys|argparse|pathlib|typing|dataclasses|hashlib|math|re|tempfile|subprocess)\b/;
+  const allowed = /^(?:import|from)\s+(?:mlx|mlx_lm|numpy|json|os|sys|argparse|pathlib|typing|dataclasses|hashlib|math|re|tempfile|subprocess|torch|transformers|peft|trl|accelerate|datasets|common_cuda|common)\b/;
   for (const line of addedImports) {
     if (!allowed.test(line)) {
       return { ok: false, message: `Import not allowlisted for training scripts: ${line.slice(0, 80)}` };

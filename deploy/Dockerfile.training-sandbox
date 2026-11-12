@@ -1,0 +1,16 @@
+# Minimal isolated runner for C1.8C training-code smoke tests.
+# No GPU, no secrets, no Ollama mounts. Image must be pre-pulled offline.
+FROM python:3.11-slim-bookworm
+
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin sandbox \
+  && mkdir -p /workspace /scratch /evidence \
+  && chown -R sandbox:sandbox /scratch /evidence
+
+USER sandbox
+WORKDIR /workspace
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/scratch
+
+# Default entrypoint is overridden by the control plane.
+CMD ["python3", "-c", "raise SystemExit('training sandbox requires an explicit command')"]

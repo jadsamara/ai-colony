@@ -32,4 +32,4 @@
 
 ## Recommended next step
 
-Stand up an **isolated training worktree** under an allowlisted root (copy of `services/training` + pinned base weights), apply a validated patch there, run `py_compile` + a dry-run trainer entrypoint on a disposable dataset, and keep artifacts outside production Ollama volumes. Only after that gate should Weight Optimization be allowed to enqueue a real LoRA job — still without touching live department serving containers.
+Completed in **C1.8C**: isolated workspace + restricted container dry-run for allowlisted training-code patches. Next: run the real Docker sandbox image on the GPU VM, then pin a CUDA trainer stack for non-dry-run LoRA — still without touching live department serving containers.
