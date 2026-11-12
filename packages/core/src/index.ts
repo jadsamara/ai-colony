@@ -107,9 +107,13 @@ export {
   TRAINING_SANDBOX_IMAGE,
   TRAINING_SANDBOX_SPEC_VERSION,
   DEFAULT_SANDBOX_LIMITS,
+  SANDBOX_BYTECODE_DIR,
+  SANDBOX_SYNTAX_CHECK_SCRIPT,
+  buildSandboxSyntaxCommand,
   createDockerSandboxRunner,
   evaluateSandboxIsolation,
   executeTrainingCodeSandbox,
+  sandboxEnv,
 } from "./training/training-sandbox.js";
 export {
   C18C_ACCEPTANCE_MARKER,

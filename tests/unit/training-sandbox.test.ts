@@ -1,5 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -15,14 +17,18 @@ import { afterEach, describe, expect, it } from "vitest";
 import { QWEN3_8B_MODEL_ID } from "@ai-colony/contracts";
 import {
   DEPARTMENT_LEARNING_SPEC_VERSION,
+  SANDBOX_BYTECODE_DIR,
+  SANDBOX_SYNTAX_CHECK_SCRIPT,
   TRAINING_CODE_ALLOWLIST,
   assembleDepartmentLearningProposal,
+  buildSandboxSyntaxCommand,
   computePatchContentFingerprint,
   evaluateSandboxIsolation,
   executeTrainingCodeSandbox,
   hashAllowlistedTree,
   integrationBoundaryContributions,
   materializePatchedWorkspace,
+  sandboxEnv,
   validateTrainingCodePatch,
   type ContainerRunRequest,
   type ContainerRunResult,
@@ -435,5 +441,84 @@ describe("C1.8C isolated training-code sandbox", () => {
     expect(isolated).toContain("c18c-sandbox-smoke");
     expect(production).not.toContain("c18c-sandbox-smoke");
     expect(applied.originalTreeHash).not.toBe(applied.modifiedTreeHash);
+  });
+
+  it("builds a syntax command that keeps bytecode under /scratch, not /workspace", () => {
+    const command = buildSandboxSyntaxCommand(["services/training/cuda/common_cuda.py"]);
+    expect(command[0]).toBe("python3");
+    expect(command[1]).toBe("-c");
+    expect(command.includes("-m")).toBe(false);
+    expect(command[2]).toContain(SANDBOX_BYTECODE_DIR);
+    expect(command[2]).toContain("cfile=");
+    expect(command).toContain("/workspace/services/training/cuda/common_cuda.py");
+    expect(sandboxEnv().PYTHONPYCACHEPREFIX).toBe(SANDBOX_BYTECODE_DIR);
+    expect(sandboxEnv().PYTHONDONTWRITEBYTECODE).toBe("1");
+  });
+
+  it("compiles Python when the source directory is read-only without creating __pycache__", () => {
+    const workspace = tempDir("c18c-ro-workspace-");
+    const scratch = tempDir("c18c-ro-scratch-");
+    const bytecodeDir = join(scratch, "pycache");
+    mkdirSync(bytecodeDir, { recursive: true });
+    const sourceFile = join(workspace, "sample.py");
+    writeFileSync(sourceFile, "def ok():\n    return 1\n", "utf8");
+    chmodSync(sourceFile, 0o444);
+    chmodSync(workspace, 0o555);
+
+    const script = SANDBOX_SYNTAX_CHECK_SCRIPT.replaceAll(SANDBOX_BYTECODE_DIR, bytecodeDir);
+    const result = spawnSync("python3", ["-c", script, sourceFile], { encoding: "utf8" });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("syntax_ok");
+    expect(existsSync(join(workspace, "__pycache__"))).toBe(false);
+    expect(existsSync(join(bytecodeDir, "sample.py.pyc"))).toBe(true);
+
+    chmodSync(workspace, 0o755);
+    chmodSync(sourceFile, 0o644);
+  });
+
+  it("runs syntax then dry-run with a read-only workspace mount contract", async () => {
+    const sourceRoot = fixtureSourceRoot();
+    const evidenceRoot = tempDir("c18c-evidence-");
+    const patch = makeCommentPatch(sourceRoot);
+    const experiment = approvedExperiment(sourceRoot, patch);
+    const requests: ContainerRunRequest[] = [];
+
+    const result = await executeTrainingCodeSandbox({
+      experiment,
+      actor: ACTOR,
+      sourceRoot,
+      evidenceRoot,
+      runner: mockRunner({
+        run: async (request) => {
+          requests.push(request);
+          const isolation = evaluateSandboxIsolation(request);
+          if (request.command.some((arg) => arg.includes("train_lora_cuda.py"))) {
+            const output = join(request.scratchMount, "output");
+            mkdirSync(output, { recursive: true });
+            writeFileSync(join(output, "result.json"), JSON.stringify({ ok: true, dryRun: true }));
+            writeFileSync(join(output, "metrics.json"), JSON.stringify({ status: "dry_run_ok" }));
+            writeFileSync(join(output, "config-manifest.json"), JSON.stringify({ backend: "cuda-lora" }));
+          }
+          return {
+            exitCode: 0,
+            stdout: "ok",
+            stderr: "",
+            durationMs: 3,
+            timedOut: false,
+            isolation,
+          };
+        },
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.command[1]).toBe("-c");
+    expect(requests[0]?.command.includes("-m")).toBe(false);
+    expect(requests[0]?.env.PYTHONPYCACHEPREFIX).toBe(SANDBOX_BYTECODE_DIR);
+    expect(requests[1]?.command.some((arg) => arg.includes("train_lora_cuda.py"))).toBe(true);
+    expect(result.evidence.syntaxExitCode).toBe(0);
+    expect(result.evidence.dryRunExitCode).toBe(0);
   });
 });

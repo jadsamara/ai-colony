@@ -322,6 +322,7 @@ export async function executeTrainingCodeSandbox(
       useGpu: false,
     };
     mkdirSync(join(scratchRoot, "output"), { recursive: true });
+    mkdirSync(join(scratchRoot, "pycache"), { recursive: true });
     writeFileSync(
       join(scratchRoot, "dataset.jsonl"),
       `${JSON.stringify({ id: "smoke-1", prompt: "1+1", answer: "2" })}\n`,
@@ -329,12 +330,8 @@ export async function executeTrainingCodeSandbox(
     );
     writeFileSync(join(scratchRoot, "job.json"), JSON.stringify(job, null, 2), "utf8");
 
-    const syntaxCommand = [
-      "python3",
-      "-m",
-      "py_compile",
-      ...applied.touchedPaths.map((path) => `/workspace/${path}`),
-    ];
+    // Keep /workspace read-only: bytecode must land under /scratch, never __pycache__ in source.
+    const syntaxCommand = buildSandboxSyntaxCommand(applied.touchedPaths);
     const syntaxResult = await runner.run({
       image: TRAINING_SANDBOX_IMAGE,
       workspaceMount: workspaceRoot,
@@ -606,10 +603,43 @@ export function evaluateSandboxIsolation(input: {
   };
 }
 
-function sandboxEnv(): Record<string, string> {
+/** Writable bytecode mirror inside the sandbox scratch mount (never under /workspace). */
+export const SANDBOX_BYTECODE_DIR = "/scratch/pycache" as const;
+
+/**
+ * Python snippet that compiles sources with an explicit cfile under /scratch/pycache.
+ * Avoids `python -m py_compile`, which writes `__pycache__` beside read-only sources.
+ */
+export const SANDBOX_SYNTAX_CHECK_SCRIPT = [
+  "import pathlib, py_compile, sys",
+  `root = pathlib.Path(${JSON.stringify(SANDBOX_BYTECODE_DIR)})`,
+  "root.mkdir(parents=True, exist_ok=True)",
+  "for src in sys.argv[1:]:",
+  "    path = pathlib.Path(src)",
+  "    cfile = root / f'{path.name}.pyc'",
+  "    py_compile.compile(src, cfile=str(cfile), doraise=True)",
+  "print('syntax_ok', len(sys.argv) - 1)",
+].join("\n");
+
+/**
+ * Build the container command for syntax validation against a read-only /workspace.
+ */
+export function buildSandboxSyntaxCommand(touchedRepoPaths: string[]): string[] {
+  return [
+    "python3",
+    "-c",
+    SANDBOX_SYNTAX_CHECK_SCRIPT,
+    ...touchedRepoPaths.map((path) => `/workspace/${path}`),
+  ];
+}
+
+export function sandboxEnv(): Record<string, string> {
   return {
+    // Imports must not attempt bytecode writes beside read-only sources.
     PYTHONDONTWRITEBYTECODE: "1",
     PYTHONUNBUFFERED: "1",
+    // Defense in depth if any import still materializes bytecode.
+    PYTHONPYCACHEPREFIX: SANDBOX_BYTECODE_DIR,
     HOME: "/scratch",
     PATH: "/usr/local/bin:/usr/bin:/bin",
   };

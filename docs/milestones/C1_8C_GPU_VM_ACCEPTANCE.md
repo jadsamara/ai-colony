@@ -6,7 +6,16 @@
 |---|---|
 | Local unit tests for the acceptance harness | Verified in CI/dev machine |
 | TypeScript build | Verified in CI/dev machine |
-| **GPU VM Docker sandbox acceptance** | **PENDING — run manually over SSH** |
+| Read-only `/workspace` syntax check (`__pycache__` redirect) | Fixed locally; re-run VM acceptance |
+| **GPU VM Docker sandbox acceptance** | **PENDING re-run after the read-only syntax fix** |
+
+### Read-only syntax note
+
+`python -m py_compile` writes `__pycache__` beside sources and fails on a read-only `/workspace`. The sandbox now compiles with an explicit `cfile` under `/scratch/pycache` (`PYTHONPYCACHEPREFIX` set) while keeping `/workspace` mounted read-only. Re-run:
+
+```bash
+./scripts/c18c-sandbox-acceptance
+```
 
 Cursor runs on a local Mac and has **no access** to the Google Cloud GPU VM. Do not treat a green local test suite as GPU VM verification.
 

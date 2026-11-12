@@ -14,7 +14,7 @@
 
 1. **Isolated workspace materialization** (`patch-apply.ts`): copies only allowlisted training files, applies unified diffs, rejects symlinks/binary/unauthorized paths, deletes the disposable workspace afterward.
 2. **Restricted container runner** (`training-sandbox.ts`): Docker `--network=none`, read-only root, scratch/evidence mounts, CPU/memory/pids/time limits, capability drop, no GPU, no docker.socket, scrubbed env. Execution is **rejected** when isolation cannot be established.
-3. **Syntax + dry-run smoke test**: `py_compile` then `services/training/cuda/train_lora_cuda.py --dry-run` inside the sandbox image.
+3. **Syntax + dry-run smoke test**: compile touched `.py` files with bytecode under `/scratch/pycache` (read-only `/workspace`), then `services/training/cuda/train_lora_cuda.py` dry-run inside the sandbox image.
 4. **Blackwell-oriented trainer stub**: stdlib dry-run trainer with config manifest, Qwen3:8b alias support, LoRA fields, dataset refs, deterministic seed checks. **No weight download, no GPU training.**
 5. **Department workflow** (`department-learning-workflow.ts`): Math / Weight Optimization / Memory / Engineering contributions with explicit `live_inference` vs `integration_boundary` labels.
 6. **Evidence**: per-experiment `evidence.json` plus optional metrics/manifest copies; failed runs are recorded.
