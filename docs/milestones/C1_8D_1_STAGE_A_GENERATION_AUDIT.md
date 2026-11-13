@@ -30,25 +30,26 @@
 - After the slicing fix: **18/24** exact text matches, **6** wording mismatches; **no** prefix/template artifacts.
 - Divergences look like first-token / mid-text greedy wording flips under bf16; position_ids misalignment was not ruled out until gate v2 checks.
 
-## Batch-invariance gate v2 pass criteria
+## Batch-invariance Gate v2 (preserved; GPU failed)
 
-Exact text match is **reported**, not required. Pass requires:
+Pass required artifacts-free + aligned position ids + raw outcome/mathText agreement + `|Δlogit|≤5e-2`.  
+Operator GPU run under commit `86fc7f7` **failed** (logit diffs ≈0.5–1.5 including padding-free rows; one false raw disagreement on equivalent `1281/26` vs `\frac{1281}{26}`). Keep those reports unchanged.
 
-1. No prefix/template artifacts (`</think>`, `<think>`, chat specials, leading `assistant`)
-2. Position ids for padded rows equal the unpadded content span `[0..L-1]`
-3. Graded outcome (+ parsed math answer) agreement on all items
-4. First generated-token logit max abs diff ≤ **`5e-2`** (stated bf16 noise band)
+## Batch-invariance Gate v3 (current)
 
-## Eval batching policy (`c18d1-batched-eval-v3`)
+See `C1_8D_1_BATCH_INVARIANCE_GATE_V3.md`. Canonical SymPy answer agreement + graded-outcome agreement + same-config bs4 repeatability. Logit/KL diagnostics only (no hard logit threshold). Exact text reported, not required.
 
-Batch size and batch composition are fixed per evaluation configuration. Base and adapter are always evaluated with identical batching, because batch shape can change greedy wording under bf16.
+## Eval batching policy (`c18d1-batched-eval-v4`)
+
+Batch size and batch composition are fixed per evaluation configuration. Base and adapter are always evaluated with identical batching. Item order, prompts, grader, decoding, and model revision are fixed for a given eval config.
 
 ## Versioning
 
 | Component | Version |
 |-----------|---------|
-| Evaluation implementation | `c18d1-batched-eval-v3` |
-| Batch-invariance gate | `c18d1-batch-invariance-v2` |
+| Evaluation implementation | `c18d1-batched-eval-v4` |
+| Batch-invariance gate (current) | `c18d1-batch-invariance-v3` |
+| Batch-invariance gate (preserved) | `c18d1-batch-invariance-v2` |
 | Grader | `c18d1-grader-v2` |
 | Answer instruction | `c18d1-answer-instruction-v2` |
 

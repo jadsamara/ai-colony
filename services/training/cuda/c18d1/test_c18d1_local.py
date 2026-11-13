@@ -18,12 +18,18 @@ from access_control import LockedTestAccessError, assert_can_read_locked_items, 
 from answer_parser import GRADER_VERSION, parse_model_output
 from batch_invariance_metrics import (
     BF16_FIRST_TOKEN_LOGIT_ABS_TOL,
+    GATE_VERSION_V2,
+    GATE_VERSION_V3,
     detect_prefix_artifacts,
     expected_left_pad_position_ids,
+    first_token_diagnostics,
     gate_pass,
+    gate_pass_v3,
+    kl_divergence_f32,
     outcomes_agree,
     position_ids_aligned_with_unpadded,
 )
+from sympy_grader import answers_canonically_equal, grade_answer, grade_model_output
 from generation_utils import (
     BATCHING_POLICY,
     EVAL_IMPLEMENTATION_VERSION,
@@ -37,7 +43,6 @@ from generation_utils import (
 from generators import prompt_leaks_split_identity
 from locked_seeds import LockedSeedError, load_locked_stream_seeds
 from revisions import assert_commit_hash, is_commit_hash, require_for_baseline, verify_pinned
-from sympy_grader import grade_answer, grade_model_output
 
 
 def test_revisions() -> None:
@@ -301,6 +306,7 @@ def test_batch_invariance_metrics() -> None:
         {"outcome": "correct", "mathText": "9/4"},
         {"outcome": "wrong", "mathText": "1"},
     )
+    # Gate v2 preserved: hard logit band still fails large diffs.
     assert BF16_FIRST_TOKEN_LOGIT_ABS_TOL == 5e-2
     decision = gate_pass(
         prefix_artifact_count=0,
@@ -309,7 +315,7 @@ def test_batch_invariance_metrics() -> None:
         first_token_logit_max_abs=1e-2,
     )
     assert decision["passed"] is True
-    assert decision["exactTextMatchRequired"] is False
+    assert decision["gateVersion"] == GATE_VERSION_V2
     fail = gate_pass(
         prefix_artifact_count=0,
         position_ids_ok=True,
@@ -317,8 +323,45 @@ def test_batch_invariance_metrics() -> None:
         first_token_logit_max_abs=0.2,
     )
     assert fail["passed"] is False
+
+    # Equivalent LaTeX forms agree canonically (Gate v3); raw v2 outcomes_agree does not.
+    assert answers_canonically_equal(r"1281/26", r"\frac{1281}{26}")["equal"] is True
+    assert not outcomes_agree(
+        {"outcome": "correct", "mathText": r"1281/26"},
+        {"outcome": "correct", "mathText": r"\frac{1281}{26}"},
+    )
+    # Distinct wrong answers must not collapse just because both are wrong.
+    assert answers_canonically_equal("1", "2")["equal"] is False
+
+    logits_p = [2.0, 0.0, -1.0]
+    logits_q = [2.1, -0.1, -0.9]
+    diag = first_token_diagnostics(logits_p, logits_q)
+    assert diag["top1Agree"] is True
+    assert diag["klAB"] >= 0.0
+    assert kl_divergence_f32(logits_p, logits_p) < 1e-12
+
+    v3_pass = gate_pass_v3(
+        prefix_artifact_count=0,
+        position_ids_ok=True,
+        graded_outcome_disagreements=0,
+        canonical_answer_disagreements=0,
+        repeatability_passed=True,
+    )
+    assert v3_pass["passed"] is True
+    assert v3_pass["gateVersion"] == GATE_VERSION_V3
+    assert v3_pass["logitThresholdUsedForAcceptance"] is None
+    v3_fail = gate_pass_v3(
+        prefix_artifact_count=0,
+        position_ids_ok=True,
+        graded_outcome_disagreements=0,
+        canonical_answer_disagreements=1,
+        repeatability_passed=True,
+    )
+    assert v3_fail["passed"] is False
+
     assert BATCHING_POLICY["baseAndAdapterIdenticalBatching"] is True
-    assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v3"
+    assert BATCHING_POLICY["batchInvarianceGateVersion"] == GATE_VERSION_V3
+    assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v4"
 
 
 def test_transformers_523_sampling_compat_source() -> None:

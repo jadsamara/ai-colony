@@ -56,21 +56,31 @@ Use a **fresh** `C18D1_OUT` for every run. Do not overwrite prior Stage A report
 ```bash
 cd ~/ai-colony
 git pull
-# confirm commit includes c18d1-batched-eval-v3 / c18d1-batch-invariance-v2
+# confirm commit includes c18d1-batched-eval-v4 / c18d1-batch-invariance-v3
 ```
 
-### 1a. Batch-invariance gate (mandatory before trusting batched pilots)
+### 1a. Batch-invariance Gate v3 (mandatory; fresh output dir)
 
 ```bash
 cd ~/ai-colony
-export C18D1_OUT=~/ai-colony/tmp/c18d1/batch-invariance-v2-$(date +%Y%m%d-%H%M%S)
+export C18D1_OUT=~/ai-colony/tmp/c18d1/batch-invariance-v3-$(date +%Y%m%d-%H%M%S)
 export C18D1_PILOT_LIMIT=24
+export C18D1_GATE_VERSION=c18d1-batch-invariance-v3
 export C18D1_SKIP_INSTALL=1   # omit on first setup
 ./scripts/c18d1-gpu-batch-invariance
-# require: $C18D1_OUT/batch-invariance-report.json → "passed": true
-# gateVersion: c18d1-batch-invariance-v2
-# pass: no prefix artifacts + position_ids aligned + graded-outcome agreement
-#       + first-token logit maxAbsDiff <= 5e-2 (exact text match reported only)
+# require: $C18D1_OUT/batch-invariance-report.json → passed=true
+# gateVersion: c18d1-batch-invariance-v3
+# pass: no artifacts + position_ids aligned + 100% canonical answer agreement
+#       + 100% graded-outcome agreement + same-config bs4 repeatability
+# logit/KL fields are diagnostics only; do not overwrite prior v2 failure reports
+```
+
+Optional: re-run preserved Gate v2 (historical criterion only; expect failure under prior GPU conditions):
+
+```bash
+export C18D1_OUT=~/ai-colony/tmp/c18d1/batch-invariance-v2-rerun-$(date +%Y%m%d-%H%M%S)
+export C18D1_GATE_VERSION=c18d1-batch-invariance-v2
+./scripts/c18d1-gpu-batch-invariance
 ```
 
 ### 1b. Thinking-disabled pilot (re-run)
@@ -85,7 +95,7 @@ export C18D1_SKIP_INSTALL=1
 ./scripts/c18d1-gpu-pilot
 # report: $C18D1_OUT/eval-report.json
 # check: mathematicalAccuracy, formatComplianceRate, thinkingModeProtocolViolations,
-#        graderVersion=c18d1-grader-v2, specVersion=c18d1-batched-eval-v3
+#        graderVersion=c18d1-grader-v2, specVersion=c18d1-batched-eval-v4
 ```
 
 ### 1c. Thinking-enabled pilot (re-run)

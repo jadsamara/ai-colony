@@ -156,6 +156,70 @@ def _expr_equal(a: sp.Expr, b: sp.Expr) -> bool:
         return False
 
 
+def canonical_answer_key(answer_text: str | None) -> dict[str, Any]:
+    """Stable symbolic key for comparing two model answers without the expected value.
+
+    Used by batch-invariance Gate v3 so ``1281/26`` and ``\\\\frac{1281}{26}`` agree,
+    while two different wrong answers do not agree merely because both grade wrong.
+    """
+    if answer_text is None:
+        return {"ok": True, "key": None, "kind": "missing"}
+    text = str(answer_text).strip()
+    if not text:
+        return {"ok": True, "key": None, "kind": "missing"}
+    low = _normalize_text(text).lower()
+    if low in NO_SOLUTION_TOKENS or text in {"{}", "∅"}:
+        return {"ok": True, "key": "no_solution", "kind": "no_solution"}
+    if low in ALL_REALS_TOKENS or text in {"(-oo, oo)", "R"}:
+        return {"ok": True, "key": "all_reals", "kind": "all_reals"}
+    # Prefer multi-root set when commas present at depth 0.
+    parts = _split_root_list(text)
+    if len(parts) > 1:
+        try:
+            roots = sorted(str(sp.simplify(_parse_expr(p))) for p in parts)
+            return {"ok": True, "key": "roots:" + ",".join(roots), "kind": "roots"}
+        except Exception:
+            return {"ok": False, "key": None, "kind": "unparseable"}
+    try:
+        expr = sp.simplify(_parse_expr(text))
+        return {"ok": True, "key": "expr:" + str(expr), "kind": "expression"}
+    except Exception:
+        # Interval-like textual forms
+        try:
+            if text[0] in "([" and text[-1] in ")]":
+                body = text[1:-1]
+                left_s, right_s = [p.strip() for p in body.split(",", 1)]
+                left = -sp.oo if left_s in {"-oo", "-∞"} else sp.simplify(_parse_expr(left_s))
+                right = sp.oo if right_s in {"oo", "∞"} else sp.simplify(_parse_expr(right_s))
+                key = f"interval:{text[0]}{left},{right}{text[-1]}"
+                return {"ok": True, "key": key, "kind": "interval"}
+        except Exception:
+            pass
+        return {"ok": False, "key": f"raw:{text}", "kind": "opaque"}
+
+
+def answers_canonically_equal(a: str | None, b: str | None) -> dict[str, Any]:
+    """Compare two answer strings via canonical_answer_key."""
+    ka = canonical_answer_key(a)
+    kb = canonical_answer_key(b)
+    # Both missing → agree. One missing → disagree.
+    if ka["kind"] == "missing" and kb["kind"] == "missing":
+        return {"equal": True, "keyA": ka, "keyB": kb}
+    if ka["kind"] == "missing" or kb["kind"] == "missing":
+        return {"equal": False, "keyA": ka, "keyB": kb}
+    # Opaque unequal raw strings must not collapse.
+    if ka.get("key") is None or kb.get("key") is None:
+        return {"equal": False, "keyA": ka, "keyB": kb}
+    equal = ka["key"] == kb["key"]
+    # If both opaque raw keys differ, try expr equality via _expr_equal when parseable.
+    if not equal and ka["kind"] == "expression" and kb["kind"] == "expression":
+        try:
+            equal = _expr_equal(_parse_expr(str(a)), _parse_expr(str(b)))
+        except Exception:
+            equal = False
+    return {"equal": bool(equal), "keyA": ka, "keyB": kb}
+
+
 def grade_answer(answer_text: str, expected: dict[str, Any]) -> dict[str, Any]:
     exp = parse_expected(expected)
     text = _normalize_text(answer_text)

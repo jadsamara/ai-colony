@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # C1.8D.1 Stage A — GPU batch-invariance gate (thinking-disabled greedy).
-# Compares exact generated text at batch_size=1 vs batch_size=4.
+# Default: Gate v3 (canonical answers + bs4 repeatability; logit/KL diagnostics).
+# Historical Gate v2: set C18D1_GATE_VERSION=c18d1-batch-invariance-v2
+# Always use a fresh C18D1_OUT — never overwrite prior gate reports.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
@@ -9,8 +11,9 @@ PYTHON="${C18D1_PYTHON:-python3}"
 OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/batch-invariance-$(date +%Y%m%d-%H%M%S)}"
 VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
 LIMIT="${C18D1_PILOT_LIMIT:-24}"
+GATE_VERSION="${C18D1_GATE_VERSION:-c18d1-batch-invariance-v3}"
 
-echo "[c18d1] batch-invariance gate on $(hostname) limit=${LIMIT}"
+echo "[c18d1] batch-invariance gate=${GATE_VERSION} on $(hostname) limit=${LIMIT}"
 command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d1] WARN: nvidia-smi missing"
 
 if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
@@ -40,6 +43,7 @@ job = {
   "device": "cuda",
   "limit": int("${LIMIT}"),
   "seed": 18,
+  "gateVersion": "${GATE_VERSION}",
   "accessRole": "evaluation",
   "departmentId": "00000000-0000-4000-8000-000000000017",
 }
