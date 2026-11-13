@@ -116,7 +116,45 @@ export C18D1_SKIP_INSTALL=1
 - VRAM: ~10–20 GB for Qwen3-8B bf16 + small batch (left-padded).
 - Thinking-enabled pilot will use more tokens/latency; start with disabled for smoke.
 - If OOM: lower `C18D1_BATCH_SIZE` to 1–2.
-- GPU acceptance remains pending until the VM reports above are produced.
+
+Gate v3 GPU PASS is recorded in `C1_8D_1_BATCH_INVARIANCE_GATE_V3_GPU_PASS.md` (operator-measured).
+
+## 1d. Development foundation — stratified pilot + vLLM (STOP after review)
+
+Do **not** start Stage B/C. Fresh dirs only. Official backend remains HF.
+
+```bash
+cd ~/ai-colony && git pull
+
+# Stratified Stage A (HF official) — 10 families × 3 difficulties
+export C18D1_OUT=~/ai-colony/tmp/c18d1/stratified-pilot-$(date +%Y%m%d-%H%M%S)
+export C18D1_PER_CELL=1
+export C18D1_BATCH_SIZE=4
+export C18D1_CONDITION=thinking_disabled_zero_shot
+export C18D1_SKIP_INSTALL=1
+./scripts/c18d1-gpu-stratified-pilot
+# review: $C18D1_OUT/eval/eval-report.json, projections.json, reproducibility-manifest.json
+
+# HF vs vLLM thinking-enabled benchmark (experimental; does not replace HF)
+export C18D1_OUT=~/ai-colony/tmp/c18d1/backend-bench-$(date +%Y%m%d-%H%M%S)
+export C18D1_PILOT_LIMIT=8
+export C18D1_MAX_NEW_TOKENS=2048
+export C18D1_SAMPLES_PER_PROBLEM=1
+export C18D1_BACKENDS=huggingface,vllm
+export C18D1_SKIP_INSTALL=1
+./scripts/c18d1-gpu-backend-benchmark
+# review: $C18D1_OUT/backend-benchmark-report.json
+
+# vLLM same-config repeatability (greedy + fixed-seed sampled)
+export C18D1_OUT=~/ai-colony/tmp/c18d1/vllm-repeatability-$(date +%Y%m%d-%H%M%S)
+export C18D1_PILOT_LIMIT=24
+export C18D1_MAX_NEW_TOKENS=512
+export C18D1_SKIP_INSTALL=1
+./scripts/c18d1-gpu-vllm-repeatability
+# review: eligibleAsOfficialBackend in vllm-repeatability-report.json (pass or fail — report either way)
+```
+
+**STOP** after these three runs for human review. No Stage B/C, locked access, training, or adapter promotion.
 
 ## 2. Stage B — full development baselines
 

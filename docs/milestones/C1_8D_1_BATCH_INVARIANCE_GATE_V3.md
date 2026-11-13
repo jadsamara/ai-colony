@@ -34,3 +34,7 @@ Gate v2 required `|Δlogit| ≤ 5e-2`, so those runs correctly failed under v2 r
 ## Official evaluation policy (unchanged intent)
 
 Fixed batch size and composition; identical batching for base and adapter; fixed item order, prompts, grader, decoding, and model revision; explicit eval implementation version and template fingerprint.
+
+## GPU PASS (operator-reported)
+
+See `C1_8D_1_BATCH_INVARIANCE_GATE_V3_GPU_PASS.md`. Gate v3 **passed** its declared criteria on RTX PRO 6000 Blackwell (commit `e8522dc`). Batch-shape numerical differences (exact-text / logits) **remain unexplained**. Historical v1/v2 failures are preserved.

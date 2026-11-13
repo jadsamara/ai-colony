@@ -29,17 +29,21 @@ from batch_invariance_metrics import (
     outcomes_agree,
     position_ids_aligned_with_unpadded,
 )
-from sympy_grader import answers_canonically_equal, grade_answer, grade_model_output
+from accounting import build_accounting
 from generation_utils import (
     BATCHING_POLICY,
     EVAL_IMPLEMENTATION_VERSION,
     FINAL_ANSWER_INSTRUCTION,
+    OFFICIAL_BACKEND,
     apply_sampling_seed,
     build_generate_kwargs,
     filter_unsupported_generate_kwargs,
     prompt_token_length,
     slice_new_token_ids,
 )
+from projections import project_from_measured
+from stratified_selection import stratified_select
+from sympy_grader import answers_canonically_equal, grade_answer, grade_model_output
 from generators import prompt_leaks_split_identity
 from locked_seeds import LockedSeedError, load_locked_stream_seeds
 from revisions import assert_commit_hash, is_commit_hash, require_for_baseline, verify_pinned
@@ -361,7 +365,88 @@ def test_batch_invariance_metrics() -> None:
 
     assert BATCHING_POLICY["baseAndAdapterIdenticalBatching"] is True
     assert BATCHING_POLICY["batchInvarianceGateVersion"] == GATE_VERSION_V3
-    assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v4"
+    assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v5"
+    assert OFFICIAL_BACKEND == "huggingface-batched"
+
+
+def test_stratified_and_accounting() -> None:
+    path = ROOT / "datasets" / "dev" / "id_dev.jsonl"
+    items = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    selected = stratified_select(items, per_cell=1, seed=18)
+    assert selected["ok"] is True
+    assert selected["itemCount"] == 30  # 10 families × 3 difficulties
+    assert selected["allFamiliesCovered"] is True
+    assert selected["lockedAccess"] is False
+    assert selected["shortfalls"] == []
+
+    # Fake multi-sample results: 2 items × 3 samples
+    results = []
+    for item_i, item in enumerate(selected["items"][:2]):
+        for sample_index in range(3):
+            correct = sample_index == 0 and item_i == 0
+            results.append(
+                {
+                    "itemId": item["id"],
+                    "family": item["family"],
+                    "difficulty": item["difficulty"],
+                    "sampleIndex": sample_index,
+                    "outcome": "correct" if correct else "wrong",
+                    "correct": correct,
+                    "mathematicalCorrect": correct,
+                    "formatCompliant": correct,
+                    "truncated": False,
+                    "generatedTokens": 10 + sample_index,
+                    "runtimeMs": 100.0,
+                    "rawPrediction": "ANSWER: 1" if correct else "ANSWER: 0",
+                    "parsed": {"finalText": "ANSWER: 1" if correct else "ANSWER: 0", "mathText": "1" if correct else "0"},
+                },
+            )
+    # Add an invalid sample with post-think final text
+    results.append(
+        {
+            "itemId": selected["items"][0]["id"],
+            "family": selected["items"][0]["family"],
+            "difficulty": selected["items"][0]["difficulty"],
+            "sampleIndex": 99,
+            "outcome": "invalid",
+            "correct": False,
+            "mathematicalCorrect": False,
+            "formatCompliant": False,
+            "truncated": False,
+            "invalidReason": "no_answer_line",
+            "rawPrediction": "<think>x</think>\nI am unsure.",
+            "parsed": {"finalText": "\nI am unsure.", "reason": "no_answer_line"},
+            "generatedTokens": 5,
+            "runtimeMs": 50.0,
+        },
+    )
+    acc = build_accounting(results, samples_per_problem=3)
+    assert acc["passAt1Definition"] == "mean_correctness_over_all_samples"
+    assert acc["sampleSize"] == len(results)
+    assert acc["passAt1"] == (1 / len(results))
+    assert acc["invalidSampleDiagnostics"]
+    assert "I am unsure" in acc["invalidSampleDiagnostics"][0]["finalResponseAfterThink"]
+    assert acc["familyDifficulty"]
+
+    proj = project_from_measured(
+        {
+            "timing": {"wallClockMs": 94_028},
+            "sampleSize": 24,
+            "samplesPerProblem": 1,
+            "itemCount": 24,
+            "decoding": {"enableThinking": False},
+            "conditionId": "thinking_disabled_zero_shot",
+            "backend": OFFICIAL_BACKEND,
+            "evaluationImplementationVersion": EVAL_IMPLEMENTATION_VERSION,
+        },
+        target_item_counts={"stage_b_dev": 500},
+        samples_per_problem={"stage_b_dev": 1},
+    )
+    assert proj["ok"] is True
+    assert proj["targets"][0]["pointEstimateGpuHours"] > 0
+    # Missing timing must not invent throughput
+    bad = project_from_measured({}, target_item_counts={"x": 10})
+    assert bad["ok"] is False
 
 
 def test_transformers_523_sampling_compat_source() -> None:
@@ -460,6 +545,7 @@ def main() -> None:
     test_answer_instruction_contract()
     test_chat_template_boundary_contract()
     test_batch_invariance_metrics()
+    test_stratified_and_accounting()
     test_transformers_523_sampling_compat_source()
     test_access_control()
     test_dataset_minimums_public()

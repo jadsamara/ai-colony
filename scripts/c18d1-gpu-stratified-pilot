@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# C1.8D.1 — Stratified Stage A development pilot (HF official backend).
+# Covers all 10 families × 3 difficulties. No locked access. No Stage B/C.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+PYTHON="${C18D1_PYTHON:-python3}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/stratified-pilot-$(date +%Y%m%d-%H%M%S)}"
+VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
+PER_CELL="${C18D1_PER_CELL:-1}"
+BATCH="${C18D1_BATCH_SIZE:-4}"
+CONDITION="${C18D1_CONDITION:-thinking_disabled_zero_shot}"
+SEED="${C18D1_SEED:-18}"
+
+echo "[c18d1] stratified pilot condition=${CONDITION} per_cell=${PER_CELL} out=${OUT}"
+command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d1] WARN: nvidia-smi missing"
+
+if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
+  "${PYTHON}" -m venv "${VENV}"
+  # shellcheck disable=SC1091
+  source "${VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-c18d1.txt
+  PYTHON="${VENV}/bin/python"
+fi
+
+"${PYTHON}" services/training/cuda/c18d1/revisions.py --write
+mkdir -p "${OUT}"
+SEL="${OUT}/selection"
+"${PYTHON}" services/training/cuda/c18d1/stratified_selection.py \
+  --dataset services/training/cuda/c18d1/datasets/dev/id_dev.jsonl \
+  --output-dir "${SEL}" \
+  --per-cell "${PER_CELL}" \
+  --seed "${SEED}"
+
+JOB="${OUT}/pilot-job.json"
+python3 - <<PY
+import json
+from pathlib import Path
+pin = json.loads(Path("services/training/cuda/c18d1/pinned_revisions.json").read_text())
+job = {
+  "modelId": pin["modelId"],
+  "tokenizerId": pin["tokenizerId"],
+  "modelRevision": pin["modelRevision"],
+  "tokenizerRevision": pin["tokenizerRevision"],
+  "conditionId": "${CONDITION}",
+  "datasetPath": str(Path("${SEL}/stratified_pilot.jsonl").resolve()),
+  "outputDir": "${OUT}/eval",
+  "device": "cuda",
+  "batchSize": int("${BATCH}"),
+  "seed": int("${SEED}"),
+  "accessRole": "evaluation",
+  "departmentId": "00000000-0000-4000-8000-000000000017",
+}
+Path("${JOB}").write_text(json.dumps(job, indent=2) + "\n")
+print(json.dumps(job, indent=2))
+PY
+
+"${PYTHON}" services/training/cuda/c18d1/batched_eval.py --job "${JOB}"
+"${PYTHON}" services/training/cuda/c18d1/projections.py \
+  --measured-report "${OUT}/eval/eval-report.json" \
+  --output "${OUT}/projections.json"
+echo "[c18d1] stratified pilot report: ${OUT}/eval/eval-report.json"
+echo "[c18d1] projections: ${OUT}/projections.json"
+echo "[c18d1] STOP — review results before Stage B/C or further runs."

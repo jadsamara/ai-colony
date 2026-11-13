@@ -3,3 +3,6 @@
 -r requirements-phase0.txt
 sympy>=1.12
 huggingface_hub>=0.24.0
+# Optional experimental backend (install only for backend_benchmark / vllm_repeatability):
+#   pip install "vllm>=0.6.0"
+# Official evaluation backend remains Hugging Face batched generate.

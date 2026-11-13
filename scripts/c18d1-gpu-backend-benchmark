@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# C1.8D.1 — HF vs experimental vLLM benchmark (thinking-enabled, development only).
+# Does NOT replace the official HF backend. No locked access. No Stage B/C.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+PYTHON="${C18D1_PYTHON:-python3}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/backend-bench-$(date +%Y%m%d-%H%M%S)}"
+VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
+LIMIT="${C18D1_PILOT_LIMIT:-8}"
+BATCH="${C18D1_BATCH_SIZE:-4}"
+SEED="${C18D1_SEED:-18}"
+MAX_NEW="${C18D1_MAX_NEW_TOKENS:-2048}"
+SAMPLES="${C18D1_SAMPLES_PER_PROBLEM:-1}"
+BACKENDS="${C18D1_BACKENDS:-huggingface,vllm}"
+
+echo "[c18d1] backend benchmark backends=${BACKENDS} limit=${LIMIT} out=${OUT}"
+command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d1] WARN: nvidia-smi missing"
+
+if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
+  "${PYTHON}" -m venv "${VENV}"
+  # shellcheck disable=SC1091
+  source "${VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-c18d1.txt
+  # Experimental: install vLLM only when requested
+  if [[ "${BACKENDS}" == *vllm* ]]; then
+    pip install "vllm>=0.6.0" || echo "[c18d1] WARN: vllm install failed; HF-only run still valid"
+  fi
+  PYTHON="${VENV}/bin/python"
+fi
+
+"${PYTHON}" services/training/cuda/c18d1/revisions.py --write
+mkdir -p "${OUT}"
+# Prefer stratified subset when present; else first N of id_dev
+SEL="${OUT}/selection"
+"${PYTHON}" services/training/cuda/c18d1/stratified_selection.py \
+  --dataset services/training/cuda/c18d1/datasets/dev/id_dev.jsonl \
+  --output-dir "${SEL}" \
+  --per-cell 1 \
+  --seed "${SEED}" || true
+DATASET="${SEL}/stratified_pilot.jsonl"
+if [[ ! -f "${DATASET}" ]]; then
+  DATASET="services/training/cuda/c18d1/datasets/dev/id_dev.jsonl"
+fi
+
+JOB="${OUT}/bench-job.json"
+python3 - <<PY
+import json
+from pathlib import Path
+pin = json.loads(Path("services/training/cuda/c18d1/pinned_revisions.json").read_text())
+backends = [b.strip() for b in "${BACKENDS}".split(",") if b.strip()]
+job = {
+  "modelId": pin["modelId"],
+  "tokenizerId": pin["tokenizerId"],
+  "modelRevision": pin["modelRevision"],
+  "tokenizerRevision": pin["tokenizerRevision"],
+  "conditionId": "thinking_enabled_zero_shot",
+  "datasetPath": str(Path("${DATASET}").resolve()),
+  "outputDir": "${OUT}",
+  "device": "cuda",
+  "batchSize": int("${BATCH}"),
+  "limit": int("${LIMIT}"),
+  "seed": int("${SEED}"),
+  "maxNewTokens": int("${MAX_NEW}"),
+  "samplesPerProblem": int("${SAMPLES}"),
+  "backends": backends,
+  "accessRole": "evaluation",
+  "departmentId": "00000000-0000-4000-8000-000000000017",
+}
+Path("${JOB}").write_text(json.dumps(job, indent=2) + "\n")
+print(json.dumps(job, indent=2))
+PY
+
+"${PYTHON}" services/training/cuda/c18d1/backend_benchmark.py --job "${JOB}"
+echo "[c18d1] backend benchmark: ${OUT}/backend-benchmark-report.json"
+echo "[c18d1] STOP — review before further work."

@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
-"""Batched Hugging Face evaluation for C1.8D.1 Math baselines (eval v2).
+"""Batched Hugging Face evaluation for C1.8D.1 Math baselines (official backend).
 
-Fixes relative to v1:
-- Slice new tokens at ``input_ids.shape[1]`` (left-pad safe).
-- Do not pass ``generator=`` to ``model.generate`` (Transformers 5.23).
-- Seed sampling via ``torch.manual_seed``; per-item generate when sampling.
-- Grader v2 dual metrics: mathematical accuracy vs format compliance.
+Official backend: huggingface-batched. vLLM is experimental (see backend_benchmark /
+vllm_repeatability) and must not silently replace this path.
 
-vLLM is deferred unless HF batching proves insufficient on the GPU VM.
 Does not touch production Ollama containers.
 """
 
@@ -20,12 +16,14 @@ from pathlib import Path
 from typing import Any
 
 from access_control import LockedTestAccessError, assert_can_read_locked_items, redact_item_level
+from accounting import build_accounting
 from answer_parser import GRADER_VERSION
 from decoding import CONDITIONS, matched_job_fields, sampling_seed_schedule
 from generation_utils import (
     BATCHING_POLICY,
     EVAL_IMPLEMENTATION_VERSION,
     FINAL_ANSWER_INSTRUCTION,
+    OFFICIAL_BACKEND,
     PROMPT_INSTRUCTION_VERSION,
     apply_sampling_seed,
     assert_left_padding,
@@ -35,7 +33,9 @@ from generation_utils import (
     slice_new_token_ids,
 )
 from peft_eval_common_bridge import conservative_from_outcomes
+from reproducibility import build_reproducibility_manifest
 from revisions import PINNED_QWEN3_8B, require_for_baseline, verify_pinned
+from stratified_selection import dataset_content_hash
 from sympy_grader import grade_model_output
 
 ROOT = Path(__file__).resolve().parent
@@ -64,43 +64,26 @@ def build_user_prompt(item: dict[str, Any], *, few_shot: str | None = None) -> s
     return f"{prefix}{item['prompt']}\n\n{FINAL_ANSWER_INSTRUCTION}"
 
 
-def _aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
+def _aggregate_metrics(results: list[dict[str, Any]], *, samples_per_problem: int) -> dict[str, Any]:
     by_item: dict[str, list[dict[str, Any]]] = {}
     for row in results:
         by_item.setdefault(row["itemId"], []).append(row)
 
-    pass1_correct = 0
     pass3_correct = 0
-    outcomes: list[str] = []
-    format_ok = 0
+    outcomes_first: list[str] = []
     think_violations = 0
-    invalid_math = 0
-    wrong_math = 0
-    truncated_count = 0
-    first_rows: list[dict[str, Any]] = []
-
     for _item_id, rows in by_item.items():
         rows = sorted(rows, key=lambda r: r["sampleIndex"])
         first = rows[0]
-        first_rows.append(first)
-        outcomes.append(first["outcome"])
-        if first["correct"]:
-            pass1_correct += 1
+        outcomes_first.append(first["outcome"])
         if any(r["correct"] for r in rows[:3]):
             pass3_correct += 1
-        if first.get("formatCompliant"):
-            format_ok += 1
         if first.get("thinkingProtocolViolation"):
             think_violations += 1
-        if first["outcome"] == "invalid":
-            invalid_math += 1
-        elif first["outcome"] == "wrong":
-            wrong_math += 1
-        elif first["outcome"] == "truncated":
-            truncated_count += 1
 
     n = len(by_item)
-    accounting = conservative_from_outcomes(outcomes)
+    detailed = build_accounting(results, samples_per_problem=samples_per_problem)
+    conservative = conservative_from_outcomes([r["outcome"] for r in results])
     incomplete_families: list[str] = []
     family_trunc: dict[str, list[bool]] = {}
     for row in results:
@@ -110,19 +93,24 @@ def _aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         if flags and (sum(flags) / len(flags)) > 0.25:
             incomplete_families.append(family)
 
+    per_sample = detailed["perSample"]
     return {
         "byItem": by_item,
-        "passAt1": (pass1_correct / n) if n else 0.0,
+        # pass@1 = mean over all samples (sampleSize = items × samplesPerProblem)
+        "passAt1": detailed["passAt1"],
+        "passAt1Definition": detailed["passAt1Definition"],
         "passAt3": (pass3_correct / n) if n else 0.0,
-        "mathematicalAccuracy": (pass1_correct / n) if n else 0.0,
-        "formatComplianceRate": (format_ok / n) if n else 0.0,
-        "invalidMathematicalAnswers": invalid_math,
-        "wrongMathematicalAnswers": wrong_math,
-        "truncationRate": (truncated_count / n) if n else 0.0,
+        "mathematicalAccuracy": per_sample["mathematicalAccuracy"],
+        "formatComplianceRate": per_sample["formatComplianceRate"],
+        "invalidMathematicalAnswers": per_sample["invalid"],
+        "wrongMathematicalAnswers": per_sample["wrong"],
+        "truncationRate": per_sample["truncationRate"],
         "thinkingModeProtocolViolations": think_violations,
-        "accounting": accounting,
+        "accounting": conservative,
+        "detailedAccounting": detailed,
         "incompleteFamilies": incomplete_families,
         "itemCount": n,
+        "sampleSize": detailed["sampleSize"],
     }
 
 
@@ -220,15 +208,18 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
             )
 
             # Greedy: true batch. Sampling: per-item generate for RNG isolation.
+            texts: list[str] = []
+            truncated_flags: list[bool] = []
+            token_counts: list[int] = []
+            runtime_ms_list: list[float] = []
             if fields["doSample"]:
-                texts: list[str] = []
-                truncated_flags: list[bool] = []
                 for row_index, item in enumerate(batch):
                     item_index = id_to_index[item["id"]]
                     seed = sampling_seed_schedule(base_seed, item_index, sample_index)
                     seed_meta = apply_sampling_seed(torch, seed, device=device)
                     if len(seed_policy_notes) < 3:
                         seed_policy_notes.append({**seed_meta, "itemId": item["id"], "mode": "per_item"})
+                    t0 = time.time()
                     encoded_one = tokenizer([prompts[row_index]], return_tensors="pt", padding=True)
                     encoded_one = {key: value.to(device) for key, value in encoded_one.items()}
                     prompt_len = prompt_token_length(int(encoded_one["input_ids"].shape[1]))
@@ -240,15 +231,16 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
                         truncated = False
                     texts.append(tokenizer.decode(new_tokens, skip_special_tokens=True))
                     truncated_flags.append(truncated)
+                    token_counts.append(int(new_tokens.shape[0]))
+                    runtime_ms_list.append((time.time() - t0) * 1000.0)
             else:
+                t0 = time.time()
                 encoded = tokenizer(prompts, return_tensors="pt", padding=True)
                 encoded = {key: value.to(device) for key, value in encoded.items()}
-                # Left-pad: shared prompt length is the padded width.
                 prompt_len = prompt_token_length(int(encoded["input_ids"].shape[1]))
                 with torch.no_grad():
                     generated = model.generate(**encoded, **gen_base)
-                texts = []
-                truncated_flags = []
+                batch_ms = (time.time() - t0) * 1000.0
                 for row_index in range(len(batch)):
                     new_tokens = slice_new_token_ids(generated[row_index], prompt_len)
                     truncated = int(new_tokens.shape[0]) >= int(fields["maxNewTokens"])
@@ -256,6 +248,8 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
                         truncated = False
                     texts.append(tokenizer.decode(new_tokens, skip_special_tokens=True))
                     truncated_flags.append(truncated)
+                    token_counts.append(int(new_tokens.shape[0]))
+                    runtime_ms_list.append(batch_ms / max(len(batch), 1))
 
             for row_index, item in enumerate(batch):
                 item_index = id_to_index[item["id"]]
@@ -284,6 +278,8 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
                     "parsed": graded["parsed"],
                     "grade": graded["grade"],
                     "graderVersion": graded.get("graderVersion", GRADER_VERSION),
+                    "generatedTokens": token_counts[row_index],
+                    "runtimeMs": runtime_ms_list[row_index],
                 }
                 results.append(result)
                 if sample_index == samples_per - 1:
@@ -302,7 +298,7 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
             )
 
     eval_ms = int((time.time() - eval_started) * 1000)
-    metrics = _aggregate_metrics(results)
+    metrics = _aggregate_metrics(results, samples_per_problem=samples_per)
 
     gpu_info: dict[str, Any] | None = None
     if device == "cuda" and torch.cuda.is_available():
@@ -312,15 +308,19 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
             "capability": list(torch.cuda.get_device_capability(0)),
         }
 
+    detailed = metrics["detailedAccounting"]
     report = {
         "ok": True,
         "specVersion": EVAL_IMPLEMENTATION_VERSION,
         "evaluationImplementationVersion": EVAL_IMPLEMENTATION_VERSION,
         "graderVersion": GRADER_VERSION,
         "promptInstructionVersion": PROMPT_INSTRUCTION_VERSION,
-        "backend": "huggingface-batched",
+        "backend": OFFICIAL_BACKEND,
         "vllmUsed": False,
-        "vllmDeferredReason": "Use HF batched generate first; introduce vLLM only if needed and document VRAM impact.",
+        "vllmDeferredReason": (
+            "Official backend remains huggingface-batched. vLLM is experimental; "
+            "see backend_benchmark.py / vllm_repeatability.py. Do not silently replace HF."
+        ),
         "model": require_for_baseline({**job, **pin}),
         "pinned": pin,
         "templateFingerprint": tmpl_fp,
@@ -347,8 +347,8 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
                 if fields["doSample"]
                 else [
                     "Greedy wording can differ across batch shapes due to bf16 near-ties; "
-                    "batch-invariance gate v2 requires outcome agreement + logit/position checks, "
-                    "not exact text match.",
+                    "Gate v3 accepts on canonical/outcome agreement + repeatability, "
+                    "not exact text. Batch-shape numerical diffs remain unexplained.",
                 ]
             ),
         },
@@ -357,11 +357,14 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
             "batchSize": batch_size,
         },
         "datasetPath": str(dataset_path),
+        "datasetContentHash": dataset_content_hash(items),
         "adapterPath": adapter_path,
         "batchSize": batch_size,
         "itemCount": metrics["itemCount"],
+        "sampleSize": metrics["sampleSize"],
         "samplesPerProblem": samples_per,
         "passAt1": metrics["passAt1"],
+        "passAt1Definition": metrics["passAt1Definition"],
         "passAt3": metrics["passAt3"],
         "mathematicalAccuracy": metrics["mathematicalAccuracy"],
         "formatComplianceRate": metrics["formatComplianceRate"],
@@ -370,6 +373,8 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
         "truncationRate": metrics["truncationRate"],
         "thinkingModeProtocolViolations": metrics["thinkingModeProtocolViolations"],
         "accounting": metrics["accounting"],
+        "detailedAccounting": detailed,
+        "familyDifficulty": detailed.get("familyDifficulty"),
         "incompleteFamilies": metrics["incompleteFamilies"],
         "timing": {
             "modelLoadMs": load_ms,
@@ -383,13 +388,26 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
             "torch": getattr(__import__("torch"), "__version__", None),
             "transformers": getattr(__import__("transformers"), "__version__", None),
         },
+        "reproducibility": build_reproducibility_manifest(
+            pinned=pin,
+            decoding=fields,
+            batch_size=batch_size,
+            dataset_path=dataset_path,
+            dataset_content_hash=dataset_content_hash(items),
+            backend=OFFICIAL_BACKEND,
+            template_fingerprint=tmpl_fp,
+            condition_id=job["conditionId"],
+            seed=base_seed,
+        ),
         "aggregateForLearningAgents": redact_item_level(
             {
                 "conditionId": job["conditionId"],
                 "passAt1": metrics["passAt1"],
+                "passAt1Definition": metrics["passAt1Definition"],
                 "passAt3": metrics["passAt3"],
                 "mathematicalAccuracy": metrics["mathematicalAccuracy"],
                 "formatComplianceRate": metrics["formatComplianceRate"],
+                "sampleSize": metrics["sampleSize"],
                 "accounting": metrics["accounting"],
                 "incompleteFamilies": metrics["incompleteFamilies"],
                 "graderVersion": GRADER_VERSION,
@@ -399,6 +417,14 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
     }
     _write_json(out / "eval-report.json", report)
     _write_json(out / "item-results.json", {"access": "evaluation_only", "results": results})
+    _write_json(
+        out / "invalid-sample-diagnostics.json",
+        {
+            "access": "evaluation_only",
+            "items": detailed.get("invalidSampleDiagnostics") or [],
+        },
+    )
+    _write_json(out / "reproducibility-manifest.json", report["reproducibility"])
     _write_json(ckpt_path, {"completedIds": sorted(done), "results": results, "partial": False})
     return report
 

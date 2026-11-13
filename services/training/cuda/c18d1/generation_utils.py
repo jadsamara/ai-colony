@@ -8,7 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
-EVAL_IMPLEMENTATION_VERSION = "c18d1-batched-eval-v4"
+EVAL_IMPLEMENTATION_VERSION = "c18d1-batched-eval-v5"
+OFFICIAL_BACKEND = "huggingface-batched"
+# vLLM is experimental until same-config repeatability passes under backend=vllm.
+EXPERIMENTAL_BACKENDS = ("vllm",)
 PROMPT_INSTRUCTION_VERSION = "c18d1-answer-instruction-v2"
 
 # Official evals fix batch size and item composition; base vs adapter must share them.
