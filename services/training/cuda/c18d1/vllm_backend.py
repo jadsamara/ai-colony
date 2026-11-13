@@ -10,6 +10,7 @@ per-request ``SamplingParams(seed=...)`` from ``sampling_seed_schedule``.
 
 from __future__ import annotations
 
+import gc
 import os
 import time
 from typing import Any
@@ -128,6 +129,80 @@ def load_vllm_engine(
         "enableLora": bool(enable_lora),
         **sampler,
     }
+
+
+def shutdown_vllm_engine(llm: Any | None) -> dict[str, Any]:
+    """Fully tear down a vLLM engine and release CUDA memory.
+
+    Required before loading Hugging Face in the same GPU host: default
+    ``gpu_memory_utilization≈0.9`` can reserve ~88 GiB on a 96 GB card
+    (including large KV cache). In-process HF after vLLM will OOM unless
+    the engine is destroyed and caches cleared. Prefer exiting the vLLM
+    process entirely when possible; this helper covers same-process teardown.
+    """
+    steps: list[str] = []
+    errors: list[str] = []
+    if llm is None:
+        return {"ok": True, "steps": ["llm_already_none"], "errors": []}
+
+    def _try(name: str, fn: Any) -> None:
+        try:
+            fn()
+            steps.append(name)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{name}: {type(exc).__name__}: {exc}")
+
+    engine = getattr(llm, "llm_engine", None) or getattr(llm, "engine", None)
+    if engine is not None:
+        for attr in (
+            "shutdown",
+            "close",
+            "abort_all_requests",
+        ):
+            method = getattr(engine, attr, None)
+            if callable(method):
+                _try(f"engine.{attr}", method)
+        # Older / parallel helpers
+        for attr in ("destroy_model_parallel", "destroy_distributed_environment"):
+            method = getattr(engine, attr, None)
+            if callable(method):
+                _try(f"engine.{attr}", method)
+        model_exec = getattr(engine, "model_executor", None)
+        if model_exec is not None:
+            for attr in ("shutdown", "close"):
+                method = getattr(model_exec, attr, None)
+                if callable(method):
+                    _try(f"model_executor.{attr}", method)
+
+    for attr in ("shutdown", "close", "reset"):
+        method = getattr(llm, attr, None)
+        if callable(method):
+            _try(f"llm.{attr}", method)
+
+    try:
+        del engine
+    except Exception:
+        pass
+    try:
+        del llm
+    except Exception:
+        pass
+    steps.append("del_llm")
+
+    _try("gc.collect", gc.collect)
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            _try("torch.cuda.synchronize", torch.cuda.synchronize)
+            _try("torch.cuda.empty_cache", torch.cuda.empty_cache)
+            ipc = getattr(torch.cuda, "ipc_collect", None)
+            if callable(ipc):
+                _try("torch.cuda.ipc_collect", ipc)
+    except ImportError:
+        errors.append("torch_unavailable")
+
+    return {"ok": len(errors) == 0, "steps": steps, "errors": errors}
 
 
 def _build_lora_request(adapter_path: str | None) -> Any | None:

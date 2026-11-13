@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # C1.8D.1 — vLLM vs HF cross-backend check (stratified dev subset).
-# Requires noise-floor report path for tolerance. Stop after review.
+# Process-separated GPU sequencing:
+#   1) vLLM eval + shutdown in C18D1_VLLM_PYTHON (process exits → VRAM released)
+#   2) HF reference in C18D1_PYTHON / .venv-gpu
+#   3) CPU compare
+# Requires noise-floor report path for tolerance. Stop after review. No Stage B.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
@@ -18,6 +22,10 @@ command -v nvidia-smi >/dev/null && nvidia-smi || true
 
 if [[ ! -x "${VLLM_PYTHON}" ]]; then
   echo "[c18d1] ERROR: C18D1_VLLM_PYTHON not executable" >&2
+  exit 3
+fi
+if [[ ! -x "${HF_PYTHON}" ]]; then
+  echo "[c18d1] ERROR: C18D1_PYTHON / HF python not executable: ${HF_PYTHON}" >&2
   exit 3
 fi
 if [[ ! -f "${NOISE_REPORT}" ]]; then
@@ -62,10 +70,34 @@ Path("${JOB}").write_text(json.dumps(job, indent=2) + "\n")
 print(json.dumps(job, indent=2))
 PY
 
+echo "[c18d1] phase=vllm (will exit process to release ~88GiB reservation)"
 set +e
-"${VLLM_PYTHON}" services/training/cuda/c18d1/cross_backend_check.py --job "${JOB}"
+"${VLLM_PYTHON}" services/training/cuda/c18d1/cross_backend_check.py --job "${JOB}" --phase vllm
+RC_VLLM=$?
+set -e
+if [[ "${RC_VLLM}" -ne 0 ]]; then
+  echo "[c18d1] vLLM phase failed (exit=${RC_VLLM}); see ${OUT}/vllm-phase-report.json" >&2
+  command -v nvidia-smi >/dev/null && nvidia-smi || true
+  exit "${RC_VLLM}"
+fi
+echo "[c18d1] vLLM process exited; checking GPU memory before HF"
+command -v nvidia-smi >/dev/null && nvidia-smi || true
+
+echo "[c18d1] phase=hf (separate interpreter: ${HF_PYTHON})"
+set +e
+"${HF_PYTHON}" services/training/cuda/c18d1/cross_backend_check.py --job "${JOB}" --phase hf
+RC_HF=$?
+set -e
+if [[ "${RC_HF}" -ne 0 ]]; then
+  echo "[c18d1] HF phase failed (exit=${RC_HF}); see ${OUT}/hf-phase-report.json and hf-ref logs" >&2
+  exit "${RC_HF}"
+fi
+
+echo "[c18d1] phase=compare"
+set +e
+"${HF_PYTHON}" services/training/cuda/c18d1/cross_backend_check.py --job "${JOB}" --phase compare
 RC=$?
 set -e
 echo "[c18d1] cross-backend-report: ${OUT}/cross-backend-report.json (exit=${RC})"
-echo "[c18d1] STOP — review statisticalGate.passed before stratified pilot."
+echo "[c18d1] STOP — review statisticalGate.passed. Do not start Stage B from this step."
 exit "${RC}"

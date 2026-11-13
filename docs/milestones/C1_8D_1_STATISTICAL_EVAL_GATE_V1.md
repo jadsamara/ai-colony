@@ -41,6 +41,23 @@ Distinguish four layers in every noise-floor report:
 
 `differenceWilson` on discordant composition is **deprecated** as a signed-difference CI. Prior reports under `c18d1-paired-stats-v1` are preserved (fresh `C18D1_OUT` for reruns).
 
+### MDI 21.24% → 31.84% (item-level)
+
+Under `c18d1-paired-stats-v2`, MDI is driven by **item** flip count \(n=24\), not response count:
+
+| Item flips / 24 | Approx. MDI |
+|---|---|
+| 0 | **21.24%** (rule-of-three / Wilson floor on \(\pi_d\)) |
+| 1 | 25.73% |
+| 2 | 29.08% |
+| 3 | **31.84%** |
+
+So a rise from 21.24% to 31.84% means the latest identical-run pair had **3 items** with ≥1 graded-outcome disagreement (often in thinking mode under sampling), not a formula regression. Response-level tallies (e.g. 1/72) are diagnostic only; MDI uses `independentItemCount`.
+
+### Cross-backend GPU sequencing
+
+vLLM at `gpu_memory_utilization≈0.92` can reserve ~88 GiB of 96 GiB (large KV cache). Cross-backend **must** finish and exit the vLLM process before loading HF in `.venv-gpu`. See `shutdown_vllm_engine` and `scripts/c18d1-gpu-cross-backend` phases `vllm` → `hf` → `compare`.
+
 ## Adapter claims
 
 - Base and adapter evaluated in the **same session**, same backend; adapter via vLLM LoRA.

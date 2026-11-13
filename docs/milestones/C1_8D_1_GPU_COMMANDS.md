@@ -156,13 +156,18 @@ export C18D1_NOISE_FLOOR_REPORT=$C18D1_OUT/noise-floor-report.json
 
 ### Step 2 — Cross-backend check (vLLM vs HF)
 
+Process-separated: vLLM phase exits (releases ~88 GiB) → HF in `.venv-gpu` → compare.
+Preserve decoding/pins/seeds; do not lower `gpu_memory_utilization` for this fix.
+
 ```bash
 export C18D1_OUT=~/ai-colony/tmp/c18d1/cross-backend-$(date +%Y%m%d-%H%M%S)
 export C18D1_CONDITION=thinking_disabled_zero_shot
-# C18D1_NOISE_FLOOR_REPORT must still point at Step 1 report
+# C18D1_NOISE_FLOOR_REPORT must point at the reviewed v2 noise-floor report
 ./scripts/c18d1-gpu-cross-backend
-# review: $C18D1_OUT/cross-backend-report.json → statisticalGate.passed
-# STOP — do not continue until reviewed
+# review: nvidia-smi after vLLM phase (memory released); then
+#   $C18D1_OUT/cross-backend-report.json → statisticalGate.passed
+#   gpuSequencing.vllmProcessExitedBeforeHf=true
+# STOP — do not start Stage B from this step
 ```
 
 ### Step 3 — Stratified pilot (vLLM, both modes)

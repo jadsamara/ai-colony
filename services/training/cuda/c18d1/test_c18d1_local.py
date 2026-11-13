@@ -863,6 +863,24 @@ def test_paired_stats_and_statistical_gate() -> None:
     assert len(lines) == 40
     assert lines[-1] == "99"
 
+    # MDI ladder: 0 → 21.24%, 3 → 31.84% at n_items=24 (item-level)
+    assert abs(minimum_detectable_improvement(n_items=24, item_flip_count=0)["minimumDetectableImprovement"] - 0.2124) < 0.001
+    assert abs(minimum_detectable_improvement(n_items=24, item_flip_count=3)["minimumDetectableImprovement"] - 0.3184) < 0.001
+
+    # shutdown helper is importable and handles None
+    from vllm_backend import shutdown_vllm_engine
+
+    assert shutdown_vllm_engine(None)["ok"] is True
+
+    # Cross-backend source must sequence vLLM teardown / separate HF process
+    xb_src = (ROOT / "cross_backend_check.py").read_text(encoding="utf-8")
+    assert "shutdown_vllm_engine" in xb_src
+    assert "--phase" in xb_src
+    assert "phase_vllm" in xb_src and "phase_hf" in xb_src
+    assert "run_hf_benchmark" in xb_src  # HF phase only
+    script_src = (REPO_ROOT / "scripts" / "c18d1-gpu-cross-backend").read_text(encoding="utf-8")
+    assert "--phase vllm" in script_src and "--phase hf" in script_src and "--phase compare" in script_src
+
 
 def test_locked_generator_refuses_without_external_seed() -> None:
     saved = {
