@@ -495,6 +495,25 @@ export type {
   MathToolOutcome,
 } from "./evaluation/math-baseline.js";
 export {
+  C18D1_AUTONOMOUS_MATH_TRAINING_ENABLED,
+  C18D1_BENCHMARK_VERSION,
+  C18D1_EVALUATION_DEPARTMENT_ID,
+  C18D1_MATH_DEPARTMENT_ID,
+  C18D1_RESIDUAL_ACCESS_LIMITATIONS,
+  C18D1_WEIGHT_DEPARTMENT_ID,
+  assertCanReadLockedMathItems,
+  canReadAggregateMathSummary,
+  canReadLockedMathItems,
+  redactLockedItemFields,
+  resolveC18d1Role,
+} from "./evaluation/c18d1/access.js";
+export type { C18d1AccessRole } from "./evaluation/c18d1/access.js";
+export {
+  conservativeImprovement,
+  summarizeC18d1Counts,
+} from "./evaluation/c18d1/accounting.js";
+export type { C18d1OutcomeCounts } from "./evaluation/c18d1/accounting.js";
+export {
   compareSpecializations,
   MATH_SKILL_CATALOG_VERSION,
   MATH_STRONG_SKILL_ACCURACY,

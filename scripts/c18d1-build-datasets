@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# C1.8D.1 — regenerate versioned algebra datasets + overlap audit (CPU / local OK).
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}/services/training/cuda/c18d1"
+PYTHON="${C18D1_PYTHON:-python3}"
+"${PYTHON}" -c "import sympy" 2>/dev/null || "${PYTHON}" -m pip install -q sympy
+"${PYTHON}" build_datasets.py
+"${PYTHON}" test_c18d1_local.py

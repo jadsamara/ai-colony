@@ -1,0 +1,13 @@
+# Few-shot exemplars must be selected from DEVELOPMENT items only after Stage B review.
+# Do not insert locked-test content here.
+# Placeholder — replace using development data only before freezing Stage C prompts.
+
+Example 1:
+Solve for x over the reals. End with ANSWER.
+Equation: x + 2 = 5
+ANSWER: 3
+
+Example 2:
+Solve for x over the reals. End with ANSWER.
+Equation: 2*x - 4 = 0
+ANSWER: 2

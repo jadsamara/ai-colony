@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# C1.8D.1 — verify / refresh immutable HF revision pin (safe on Mac or GPU VM).
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+PYTHON="${C18D1_PYTHON:-python3}"
+"${PYTHON}" services/training/cuda/c18d1/revisions.py --write
+"${PYTHON}" services/training/cuda/c18d1/revisions.py --check-remote || true
+echo "[c18d1] pinned revisions written; official baselines fail closed without commit hashes"

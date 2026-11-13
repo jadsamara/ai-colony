@@ -8,8 +8,8 @@
 | Thresholds v2 | **Unchanged** in repo; superseded as gate spec |
 | Thresholds v2.1 | **Unchanged** in repo; superseded as gate spec after examining GPU results |
 | Thresholds v3 (gate) | `services/training/cuda/phase0/thresholds-v3.json` |
-| Autonomous training | **Locked** until `C1_8D_PHASE0_GPU_RESULT_V3.json` independently validates |
-| v3 GPU run in this Cursor session | **Not run** |
+| Autonomous training | **Locked** for Math during C1.8D.1; Phase 0 eligibility ≠ Math training authorization |
+| v3 GPU run | Operator-reported pass on RTX PRO 6000; **copy real** `phase0-report-v3.json` → `C1_8D_PHASE0_GPU_RESULT_V3.json` (not invented here) |
 
 ## Why v3 (after examining v2.1)
 

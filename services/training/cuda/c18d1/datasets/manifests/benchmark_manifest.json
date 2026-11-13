@@ -1,0 +1,127 @@
+{
+  "benchmarkVersion": "c18d1-algebra-v1",
+  "counts": {
+    "development": 500,
+    "locked_id": 1000,
+    "locked_ood": 300,
+    "regression": 120
+  },
+  "difficultyBasis": "development_structural_tiers_only",
+  "difficultyFrozen": true,
+  "minimums": {
+    "devPerIdFamily": 50,
+    "idFamilies": 10,
+    "lockedPerIdFamily": 100,
+    "lockedPerOodFamily": 100,
+    "oodFamilies": 3
+  },
+  "oodStructuralDistinctions": {
+    "linear_diophantine": "Integer Diophantine constraints vs real closed-form algebra.",
+    "piecewise_equations": "Piecewise branch structure absent from ID templates.",
+    "trigonometric_equations": "Uses trig equations absent from ID families."
+  },
+  "splits": {
+    "development": {
+      "access": {
+        "aggregateSummaries": "learning_agents_allowed",
+        "itemLevel": "evaluation_only"
+      },
+      "benchmarkVersion": "c18d1-algebra-v1",
+      "contentHash": "3252c818f49f2bf83eda9d501ed6d5003e07371eae4b743f7778b7fb46803623",
+      "difficulties": {
+        "easy": 163,
+        "hard": 170,
+        "moderate": 167
+      },
+      "families": [
+        "absolute_value_equations",
+        "exponential_log_equations",
+        "inequalities",
+        "linear_equations",
+        "linear_systems",
+        "polynomial_factorization",
+        "quadratic_equations",
+        "radical_equations",
+        "rational_equations",
+        "symbolic_simplification"
+      ],
+      "generatorVersion": "c18d1-gen-v1",
+      "itemCount": 500,
+      "name": "id_dev",
+      "ownerDepartmentId": "00000000-0000-4000-8000-000000000017"
+    },
+    "locked_id": {
+      "access": {
+        "aggregateSummaries": "learning_agents_allowed",
+        "itemLevel": "evaluation_only"
+      },
+      "benchmarkVersion": "c18d1-algebra-v1",
+      "contentHash": "385600050693e24373078c8d235fc3086d9ef0abf82dfc34687e1b41ee3e7287",
+      "difficulties": {
+        "easy": 330,
+        "hard": 333,
+        "moderate": 337
+      },
+      "families": [
+        "absolute_value_equations",
+        "exponential_log_equations",
+        "inequalities",
+        "linear_equations",
+        "linear_systems",
+        "polynomial_factorization",
+        "quadratic_equations",
+        "radical_equations",
+        "rational_equations",
+        "symbolic_simplification"
+      ],
+      "generatorVersion": "c18d1-gen-v1",
+      "itemCount": 1000,
+      "name": "id_locked",
+      "ownerDepartmentId": "00000000-0000-4000-8000-000000000017"
+    },
+    "locked_ood": {
+      "access": {
+        "aggregateSummaries": "learning_agents_allowed",
+        "itemLevel": "evaluation_only"
+      },
+      "benchmarkVersion": "c18d1-algebra-v1",
+      "contentHash": "25c7c91945daa965686e02e8fc419d06aa5bc537120795fef326140bf22a7775",
+      "difficulties": {
+        "easy": 97,
+        "hard": 82,
+        "moderate": 121
+      },
+      "families": [
+        "linear_diophantine",
+        "piecewise_equations",
+        "trigonometric_equations"
+      ],
+      "generatorVersion": "c18d1-gen-v1",
+      "itemCount": 300,
+      "name": "ood_locked",
+      "ownerDepartmentId": "00000000-0000-4000-8000-000000000017"
+    },
+    "regression": {
+      "access": {
+        "aggregateSummaries": "learning_agents_allowed",
+        "itemLevel": "evaluation_only"
+      },
+      "benchmarkVersion": "c18d1-algebra-v1",
+      "contentHash": "6b58d893e0e6fa816b18befe094267e5219d86e2ebbd2f01b1e984991dbf7ace",
+      "difficulties": {
+        "easy": 38,
+        "hard": 42,
+        "moderate": 40
+      },
+      "families": [
+        "linear_equations",
+        "quadratic_equations",
+        "symbolic_simplification"
+      ],
+      "generatorVersion": "c18d1-gen-v1",
+      "itemCount": 120,
+      "name": "regression",
+      "ownerDepartmentId": "00000000-0000-4000-8000-000000000017"
+    }
+  }
+}

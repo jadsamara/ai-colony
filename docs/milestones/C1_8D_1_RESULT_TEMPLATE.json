@@ -1,0 +1,54 @@
+{
+  "specVersion": "c18d1-result-template-v1",
+  "benchmarkVersion": "c18d1-algebra-v1",
+  "stage": "A|B|C",
+  "conditionId": "thinking_disabled_zero_shot|thinking_enabled_zero_shot|thinking_enabled_few_shot",
+  "model": {
+    "modelId": "Qwen/Qwen3-8B",
+    "tokenizerId": "Qwen/Qwen3-8B",
+    "modelRevision": "<40-hex>",
+    "tokenizerRevision": "<40-hex>",
+    "sameRepositoryRevision": true,
+    "dtype": "bfloat16",
+    "quantization": null,
+    "templateFingerprint": "<sha256>",
+    "ollamaTouched": false
+  },
+  "decoding": {
+    "enableThinking": false,
+    "doSample": false,
+    "temperature": 0.0,
+    "topP": null,
+    "topK": null,
+    "maxNewTokens": 512,
+    "samplesPerProblem": 1
+  },
+  "metrics": {
+    "passAt1": null,
+    "passAt3": null,
+    "accounting": {
+      "sampleSize": null,
+      "correct": null,
+      "wrong": null,
+      "invalid": null,
+      "truncated": null,
+      "observedAccuracy": null,
+      "lowerBoundAccuracy": null,
+      "upperBoundAccuracy": null
+    },
+    "incompleteFamilies": [],
+    "perFamily": []
+  },
+  "timing": {
+    "modelLoadMs": null,
+    "evalMs": null,
+    "wallClockMs": null,
+    "peakVramBytes": null,
+    "batchSize": null
+  },
+  "access": {
+    "itemLevel": "evaluation_only",
+    "aggregatePublished": false
+  },
+  "notes": []
+}

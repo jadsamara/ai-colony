@@ -1,0 +1,5 @@
+# C1.8D.1 Math evaluation — isolated venv on the GPU VM.
+# Do not install into the API/Ollama host environment.
+-r requirements-phase0.txt
+sympy>=1.12
+huggingface_hub>=0.24.0

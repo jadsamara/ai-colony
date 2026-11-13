@@ -114,8 +114,35 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
         if not adapter_loaded:
             _fail("ADAPTER_NOT_LOADED", f"No LoRA parameters found under {adapter_path}")
     load_ms = int((time.time() - load_started) * 1000)
-    resolved_model_revision = revision or getattr(base.config, "_commit_hash", None)
-    resolved_tokenizer_revision = tokenizer_revision or getattr(tokenizer, "name_or_path", None)
+
+    def _immutable_revision(model_id: str, requested: str | None, fallback: str | None) -> str | None:
+        import re
+
+        if requested and re.fullmatch(r"[0-9a-f]{40}", requested):
+            return requested
+        try:
+            from huggingface_hub import model_info
+
+            info = model_info(model_id, revision=requested)
+            sha = getattr(info, "sha", None)
+            if sha and re.fullmatch(r"[0-9a-f]{40}", str(sha)):
+                return str(sha)
+        except Exception:
+            pass
+        if fallback and re.fullmatch(r"[0-9a-f]{40}", str(fallback)):
+            return str(fallback)
+        return fallback
+
+    resolved_model_revision = _immutable_revision(
+        model_id,
+        revision,
+        getattr(base.config, "_commit_hash", None),
+    )
+    resolved_tokenizer_revision = _immutable_revision(
+        model_id,
+        tokenizer_revision or revision,
+        getattr(base.config, "_commit_hash", None),
+    )
 
     eval_started = time.time()
     predictions: list[dict[str, Any]] = []

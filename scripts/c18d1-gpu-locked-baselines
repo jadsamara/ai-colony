@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# C1.8D.1 Stage C — locked ID / OOD / regression baselines AFTER freeze.
+# Requires Evaluation access role. Do not use for prompt tuning.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+if [[ "${C18D1_BENCHMARK_FROZEN:-}" != "1" ]]; then
+  echo "[c18d1] Refusing Stage C: set C18D1_BENCHMARK_FROZEN=1 after Stage B freeze."
+  exit 1
+fi
+
+PYTHON="${C18D1_PYTHON:-python3}"
+OUT_ROOT="${C18D1_OUT:-${ROOT}/tmp/c18d1/locked-baselines-$(date +%Y%m%d-%H%M%S)}"
+VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
+BATCH="${C18D1_BATCH_SIZE:-4}"
+CONDITION="${C18D1_CONDITION:-thinking_enabled_zero_shot}"
+
+if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
+  "${PYTHON}" -m venv "${VENV}"
+  # shellcheck disable=SC1091
+  source "${VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-c18d1.txt
+  PYTHON="${VENV}/bin/python"
+fi
+
+"${PYTHON}" services/training/cuda/c18d1/revisions.py --write
+PIN_MODEL=$("${PYTHON}" -c "import json;print(json.load(open('services/training/cuda/c18d1/pinned_revisions.json'))['modelRevision'])")
+
+run_one() {
+  local NAME="$1"
+  local DATA="$2"
+  local OUT="${OUT_ROOT}/${NAME}"
+  mkdir -p "${OUT}"
+  cat > "${OUT}/job.json" <<EOF
+{
+  "modelId": "Qwen/Qwen3-8B",
+  "tokenizerId": "Qwen/Qwen3-8B",
+  "modelRevision": "${PIN_MODEL}",
+  "tokenizerRevision": "${PIN_MODEL}",
+  "conditionId": "${CONDITION}",
+  "datasetPath": "${DATA}",
+  "outputDir": "${OUT}",
+  "device": "cuda",
+  "batchSize": ${BATCH},
+  "seed": 18,
+  "accessRole": "evaluation",
+  "departmentId": "00000000-0000-4000-8000-000000000017"
+}
+EOF
+  echo "[c18d1] Stage C ${NAME}"
+  "${PYTHON}" services/training/cuda/c18d1/batched_eval.py --job "${OUT}/job.json"
+}
+
+BASE="$(pwd)/services/training/cuda/c18d1/datasets"
+run_one locked_id "${BASE}/locked/id_locked.jsonl"
+run_one locked_ood "${BASE}/locked/ood_locked.jsonl"
+run_one regression "${BASE}/regression/regression.jsonl"
+
+echo "[c18d1] Stage C complete under ${OUT_ROOT}"
+echo "[c18d1] Publish aggregates only; keep item-level artifacts Evaluation-only."

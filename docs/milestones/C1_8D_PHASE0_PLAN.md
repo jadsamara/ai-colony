@@ -22,15 +22,30 @@
 
 ## Later phases — Math / algebra evaluation
 
-Evaluation algebra suite → Math accumulation → learning room → A/B/C train → records → scheduler.
+**C1.8D.1 (this milestone):** independent Math benchmark, pinned HF revisions, batched HF eval, locked-test access. **No autonomous Math training.**
 
-### Algebra / Math evaluation requirements (prepare before large-scale runs)
+Then: Math accumulation → learning room → A/B/C train → records → scheduler.
 
-1. **Batched evaluation first.** Implement batched evaluation with vLLM or batched Hugging Face generation before large-scale Math evaluation. Sequential single-example generate loops are not acceptable at suite scale.
+### Algebra / Math evaluation requirements
+
+1. **Batched evaluation first.** Batched Hugging Face generation is implemented in C1.8D.1; vLLM only if needed and documented.
 2. **Matched baseline vs adapter configs.** Keep decoding, thinking mode, token budgets, templates, and stop criteria identical for baseline and adapter; record fingerprints.
 3. **Thinking-mode alignment.** If Math normally uses thinking mode, ensure training data and training objectives support that mode, **or** explicitly train and evaluate both modes with the same honesty rules used in Phase 0.
 4. **Regression coverage.** Include regression testing for general reasoning and thinking-mode behavior alongside algebra metrics.
-5. **No Phase 0 transfer claim.** Do **not** treat Phase 0 synthetic-task success (memorization / hidden reverse+`!`) as evidence of improved mathematical reasoning.
+5. **No Phase 0 transfer claim.** Do **not** treat Phase 0 synthetic-task success as evidence of improved mathematical reasoning.
+
+### Required before any autonomous Math learning cycle (future milestones)
+
+- Math-generated training examples independently verified by Evaluation.
+- No training on locked benchmark questions or answers.
+- Thinking-format training examples, or train/eval both modes, if Math uses thinking.
+- Evaluate thinking-mode regressions after LoRA training.
+- Precommitted Weight Optimization decisions before seeing training outcomes.
+- Multiple training configurations and seeds.
+- Independent comparison against the strongest prompted base model from C1.8D.1.
+- Human approval before production adapter promotion.
+- Deterministic budget enforcement and kill switches.
+- No claims of autonomous learning until a complete cycle is independently evaluated.
 
 ## Gate history (brief)
 

@@ -1,0 +1,14 @@
+{
+  "dtype": "bfloat16",
+  "modelId": "Qwen/Qwen3-8B",
+  "modelRevision": "b968826d9c46dd6066d109eabc6255188de91218",
+  "note": "Model weights, tokenizer, and chat template share one immutable commit. Do not substitute an Ollama tag for this Hugging Face revision.",
+  "ollamaForbidden": true,
+  "quantization": null,
+  "resolvedAt": "2026-11-13T17:30:00.000Z",
+  "sameRepositoryRevision": true,
+  "source": "huggingface.co/api/models/Qwen/Qwen3-8B",
+  "tokenizerId": "Qwen/Qwen3-8B",
+  "tokenizerRevision": "b968826d9c46dd6066d109eabc6255188de91218",
+  "verified": true
+}

@@ -1,0 +1,11 @@
+{
+  "benchmarkVersion": "c18d1-algebra-v1",
+  "counts": {
+    "development": 500,
+    "locked_id": 1000,
+    "locked_ood": 300,
+    "regression": 120
+  },
+  "note": "Item-level locked contents withheld. Evaluation-owned.",
+  "status": "datasets_generated_baselines_pending"
+}
