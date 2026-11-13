@@ -3,17 +3,21 @@ import { resolve } from "node:path";
 
 /**
  * C1.8D Phase 0 gate: autonomous training stays disabled until an operator
- * records a real GPU VM **v2** pass under matched two-mode evaluation.
- * Local smoke and superseded v1 reports never unlock the scheduler.
+ * records a real GPU VM **v2.1** pass under thinking_disabled gating
+ * (matched thinking_enabled eval is informational only).
+ * Local smoke and superseded v1/v2-both-modes reports never unlock the scheduler.
  */
-export const C18D_PHASE0_THRESHOLDS_VERSION = "c18d-phase0-thresholds-v2" as const;
+export const C18D_PHASE0_THRESHOLDS_VERSION = "c18d-phase0-thresholds-v2.1" as const;
+export const C18D_PHASE0_THRESHOLDS_V2 = "c18d-phase0-thresholds-v2" as const;
 export const C18D_PHASE0_THRESHOLDS_V1 = "c18d-phase0-thresholds-v1" as const;
 export const C18D_AUTONOMOUS_TRAINING_FLAG = "c18d.autonomousTrainingEnabled" as const;
 
 export type Phase0ThinkingModeId = "thinking_disabled" | "thinking_enabled";
+export type Phase0EvalModeRole = "gating" | "informational";
 
 export interface Phase0EvalMode {
   id: Phase0ThinkingModeId;
+  role: Phase0EvalModeRole;
   enableThinking: boolean;
   maxNewTokens: number;
   extractAfterThink?: boolean;
@@ -42,8 +46,10 @@ export interface Phase0Thresholds {
   specVersion: typeof C18D_PHASE0_THRESHOLDS_VERSION | string;
   declaredBeforeTraining: boolean;
   evaluation: {
+    gatingMode: Phase0ThinkingModeId;
     modes: Phase0EvalMode[];
     maxBaseInvalidRate: number;
+    maxBaseInvalidRateAppliesTo: "gatingMode";
     matchedSettingsRequired: boolean;
     invalidIsNotWrong: boolean;
   };
@@ -52,7 +58,7 @@ export interface Phase0Thresholds {
   localSmoke: { modelId: string; countsAsPhase0Pass: false | boolean };
   gpuGate: {
     modelId: string;
-    bothControlsMustPassInBothModes: boolean;
+    bothControlsMustPassInGatingMode: boolean;
     autonomousTrainingUnlocksOnlyAfterPass: boolean;
     requiredReportPath: string;
   };
@@ -82,11 +88,19 @@ export const DEFAULT_PHASE0_THRESHOLDS: Phase0Thresholds = {
   specVersion: C18D_PHASE0_THRESHOLDS_VERSION,
   declaredBeforeTraining: true,
   evaluation: {
+    gatingMode: "thinking_disabled",
     modes: [
-      { id: "thinking_disabled", enableThinking: false, maxNewTokens: 64 },
-      { id: "thinking_enabled", enableThinking: true, maxNewTokens: 1024, extractAfterThink: true },
+      { id: "thinking_disabled", role: "gating", enableThinking: false, maxNewTokens: 64 },
+      {
+        id: "thinking_enabled",
+        role: "informational",
+        enableThinking: true,
+        maxNewTokens: 4096,
+        extractAfterThink: true,
+      },
     ],
     maxBaseInvalidRate: 0.05,
+    maxBaseInvalidRateAppliesTo: "gatingMode",
     matchedSettingsRequired: true,
     invalidIsNotWrong: true,
   },
@@ -113,10 +127,17 @@ export const DEFAULT_PHASE0_THRESHOLDS: Phase0Thresholds = {
   },
   gpuGate: {
     modelId: "Qwen/Qwen3-8B",
-    bothControlsMustPassInBothModes: true,
+    bothControlsMustPassInGatingMode: true,
     autonomousTrainingUnlocksOnlyAfterPass: true,
     requiredReportPath: "docs/milestones/C1_8D_PHASE0_GPU_RESULT_V2.json",
   },
+};
+
+/** Historical v2 thresholds (both modes gated). Superseded by v2.1. */
+export const PHASE0_THRESHOLDS_V2_HISTORICAL = {
+  specVersion: C18D_PHASE0_THRESHOLDS_V2,
+  status: "superseded" as const,
+  note: "Required both thinking modes to pass. Superseded because adapters train with enable_thinking=False; thinking_enabled eval is OOD for the gate.",
 };
 
 /** Legacy v1 thresholds retained for historical comparison only. */
@@ -191,7 +212,7 @@ export function evaluationValidity(input: {
 }
 
 /**
- * Autonomous training unlocks only from a non-superseded GPU v2 pass report.
+ * Autonomous training unlocks only from a non-superseded GPU v2.1 pass report.
  */
 export function readAutonomousLearningFlags(input?: {
   reportPath?: string | null;
@@ -213,10 +234,10 @@ export function readAutonomousLearningFlags(input?: {
         autonomousTrainingUnlocked?: boolean;
       };
       if (superseded.status === "superseded" && superseded.autonomousTrainingUnlocked === false) {
-        // Continue — v1 is locked; still check for a v2 pass below.
+        // Continue — v1 is locked; still check for a v2.1 pass below.
       }
     } catch {
-      // Ignore unreadable supersession marker; fail closed via missing v2 report.
+      // Ignore unreadable supersession marker; fail closed via missing v2.1 report.
     }
   }
 
@@ -226,7 +247,7 @@ export function readAutonomousLearningFlags(input?: {
       phase0GpuPassRecorded: false,
       phase0ReportPath: reportPath,
       thresholdsVersionRequired: C18D_PHASE0_THRESHOLDS_VERSION,
-      reason: "No GPU Phase 0 v2 pass report recorded; autonomous training remains disabled",
+      reason: "No GPU Phase 0 v2.1 pass report recorded; autonomous training remains disabled",
     };
   }
 
@@ -260,8 +281,8 @@ export function readAutonomousLearningFlags(input?: {
       phase0ReportPath: reportPath,
       thresholdsVersionRequired: C18D_PHASE0_THRESHOLDS_VERSION,
       reason: ok
-        ? "GPU Phase 0 v2 pass report present"
-        : "Phase 0 report present but does not satisfy v2 unlock requirements",
+        ? "GPU Phase 0 v2.1 pass report present"
+        : "Phase 0 report present but does not satisfy v2.1 unlock requirements",
     };
   } catch (error) {
     return {

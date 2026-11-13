@@ -12,12 +12,12 @@
     "predictions beginning with <think> were not extracted after </think>",
     "truncated/unparseable outputs were not separated from wrong answers",
     "v1 generalization prompt leaked the rewrite rule in the user text",
-    "Phase 0 unlock now requires thresholds v2 + matched two-mode GPU pass"
+    "Phase 0 unlock now requires thresholds v2.1 + thinking_disabled gating-mode GPU pass"
   ],
   "preserveOriginalReports": true,
   "doNotEditOriginalResults": true,
   "replacement": {
-    "thresholdsVersion": "c18d-phase0-thresholds-v2",
+    "thresholdsVersion": "c18d-phase0-thresholds-v2.1",
     "requiredReport": "docs/milestones/C1_8D_PHASE0_GPU_RESULT_V2.json",
     "audit": "docs/milestones/C1_8D_PHASE0_EVAL_AUDIT.md"
   },

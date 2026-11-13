@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# C1.8D Phase 0 — corrected GPU controls (thresholds v2, two matched eval modes).
+# C1.8D Phase 0 — corrected GPU controls (thresholds v2.1).
+# Gate: thinking_disabled only. thinking_enabled is informational (matched, reported).
 # Run ONLY on the Debian GPU VM. Cursor cannot access that VM.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -9,7 +10,7 @@ PYTHON="${C18D_PHASE0_PYTHON:-python3}"
 OUT="${C18D_PHASE0_OUT:-${ROOT}/tmp/c18d-phase0/gpu-controls-v2}"
 VENV="${C18D_PHASE0_VENV:-${ROOT}/tmp/c18d-phase0/.venv-gpu}"
 
-echo "[c18d-phase0] GPU controls v2 on $(hostname)"
+echo "[c18d-phase0] GPU controls v2.1 on $(hostname)"
 command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d-phase0] WARN: nvidia-smi missing"
 
 if [[ "${C18D_PHASE0_SKIP_INSTALL:-}" != "1" ]]; then
@@ -34,5 +35,5 @@ mkdir -p "${OUT}"
   --out "${OUT}" \
   --device cuda
 
-echo "[c18d-phase0] v2 report: ${OUT}/phase0-report-v2.json"
+echo "[c18d-phase0] v2.1 report: ${OUT}/phase0-report-v2.json"
 echo "[c18d-phase0] On pass: cp ${OUT}/phase0-report-v2.json docs/milestones/C1_8D_PHASE0_GPU_RESULT_V2.json"

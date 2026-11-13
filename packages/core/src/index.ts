@@ -156,9 +156,11 @@ export {
 } from "./training/c18c-acceptance.js";
 export {
   C18D_PHASE0_THRESHOLDS_VERSION,
+  C18D_PHASE0_THRESHOLDS_V2,
   C18D_PHASE0_THRESHOLDS_V1,
   C18D_AUTONOMOUS_TRAINING_FLAG,
   DEFAULT_PHASE0_THRESHOLDS,
+  PHASE0_THRESHOLDS_V2_HISTORICAL,
   PHASE0_THRESHOLDS_V1_HISTORICAL,
   judgeMemorizationControl,
   judgeGeneralizationControl,
@@ -171,6 +173,7 @@ export type {
   AutonomousLearningFlags,
   Phase0ControlEvidence,
   Phase0EvalMode,
+  Phase0EvalModeRole,
   Phase0GeneralizationThresholds,
   Phase0MemorizationThresholds,
   Phase0ThinkingModeId,

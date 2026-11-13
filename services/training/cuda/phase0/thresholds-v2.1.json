@@ -1,0 +1,60 @@
+{
+  "specVersion": "c18d-phase0-thresholds-v2.1",
+  "supersedes": "c18d-phase0-thresholds-v2",
+  "declaredBeforeTraining": true,
+  "declaredAt": "2026-11-13T06:00:00.000Z",
+  "note": "Committed before any v2/v2.1 GPU run. Supersedes thresholds-v2 as the gate spec. Adapter training uses enable_thinking=False; gating therefore requires thinking_disabled only. thinking_enabled remains matched and reported for diagnostics but is out of distribution for a no-think-trained adapter and does not affect the gate. Do not edit after a GPU attempt without creating thresholds-v3.",
+  "evaluation": {
+    "gatingMode": "thinking_disabled",
+    "modes": [
+      {
+        "id": "thinking_disabled",
+        "role": "gating",
+        "enableThinking": false,
+        "maxNewTokens": 64
+      },
+      {
+        "id": "thinking_enabled",
+        "role": "informational",
+        "enableThinking": true,
+        "maxNewTokens": 4096,
+        "extractAfterThink": true
+      }
+    ],
+    "maxBaseInvalidRate": 0.05,
+    "maxBaseInvalidRateAppliesTo": "gatingMode",
+    "matchedSettingsRequired": true,
+    "invalidIsNotWrong": true
+  },
+  "memorization": {
+    "controlId": "phase0-memorization-v1-dataset",
+    "datasetPath": "memorization.jsonl",
+    "minExactMatchPerMode": 0.95,
+    "minItems": 8,
+    "requireAdapterLoaded": true,
+    "requireAdapterWeightDelta": true,
+    "evaluateBaseInBothModes": true
+  },
+  "generalization": {
+    "controlId": "phase0-generalization-v2-hidden-reverse-suffix",
+    "rule": "Reverse the input word and append a fixed '!' suffix. The rule is never stated in the input.",
+    "trainPath": "generalization_v2_train.jsonl",
+    "heldoutPath": "generalization_v2_heldout.jsonl",
+    "minTrainItems": 200,
+    "minHeldoutItems": 100,
+    "minHeldoutExactMatchPerMode": 0.9,
+    "minImprovementOverBasePerMode": 0.5,
+    "requireAdapterLoaded": true,
+    "requireAdapterWeightDelta": true
+  },
+  "localSmoke": {
+    "modelId": "Qwen/Qwen3-0.6B",
+    "countsAsPhase0Pass": false
+  },
+  "gpuGate": {
+    "modelId": "Qwen/Qwen3-8B",
+    "bothControlsMustPassInGatingMode": true,
+    "autonomousTrainingUnlocksOnlyAfterPass": true,
+    "requiredReportPath": "docs/milestones/C1_8D_PHASE0_GPU_RESULT_V2.json"
+  }
+}

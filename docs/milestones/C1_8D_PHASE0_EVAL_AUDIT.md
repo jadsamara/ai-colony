@@ -2,7 +2,7 @@
 
 ## Gate status
 
-**`autonomousTrainingUnlocked` remains false** until corrected **thresholds v2** controls pass on the GPU VM under matched two-mode evaluation.
+**`autonomousTrainingUnlocked` remains false** until corrected **thresholds v2.1** controls pass on the GPU VM (`thinking_disabled` gating; `thinking_enabled` informational only). Thresholds v2 remains in-repo unchanged but is superseded as the gate spec.
 
 Any prior v1 GPU report (if recorded) is **historical only** and is marked superseded in `docs/milestones/C1_8D_PHASE0_V1_SUPERSEDED.json`. Do not edit original result payloads.
 
@@ -28,3 +28,4 @@ Any prior v1 GPU report (if recorded) is **historical only** and is marked super
 2. Two matched modes for base and adapter: thinking **disabled**; thinking **enabled** with a large budget + final-answer extraction after `</think>`.
 3. Predictions classified as `correct` | `wrong` | `invalid` (truncated / no final answer / empty). If base `invalidRate > 5%`, that mode’s evaluation is **invalid**, not a pass.
 4. Thresholds **v2** + hidden-rule generalization dataset (no instruction text in the input).
+5. Thresholds **v2.1** (before any v2 GPU run): gate on `thinking_disabled` only — adapters train with `enable_thinking=False`, so thinking-enabled eval is OOD for the gate; raise informational `maxNewTokens` to 4096.

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""C1.8D Phase 0 corrected controls (thresholds v2).
+"""C1.8D Phase 0 corrected controls (thresholds v2.1).
 
-Trains memorization + hidden-rule generalization, evaluates base and adapter
-under both thinking modes with invalid-output accounting.
+Trains memorization + hidden-rule generalization with enable_thinking=False.
+Evaluates base and adapter under both thinking modes; only thinking_disabled
+gates the pass (thinking_enabled is informational / OOD for the adapter).
 """
 
 from __future__ import annotations
@@ -17,8 +18,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PHASE0 = Path(__file__).resolve().parent
-THRESHOLDS = json.loads((PHASE0 / "thresholds-v2.json").read_text(encoding="utf-8"))
+THRESHOLDS = json.loads((PHASE0 / "thresholds-v2.1.json").read_text(encoding="utf-8"))
 MODES = THRESHOLDS["evaluation"]["modes"]
+GATING_MODE = THRESHOLDS["evaluation"]["gatingMode"]
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -29,6 +31,10 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 def _run(cmd: list[str]) -> None:
     print("+", " ".join(cmd), flush=True)
     subprocess.run(cmd, check=True)
+
+
+def _mode_role(mode: dict[str, Any]) -> str:
+    return str(mode.get("role") or ("gating" if mode["id"] == GATING_MODE else "informational"))
 
 
 def _train(
@@ -45,7 +51,7 @@ def _train(
     job = {
         "backend": "peft-lora",
         "allowGpuTraining": True,
-        "phase": "c18d-phase0-v2",
+        "phase": "c18d-phase0-v2.1",
         "modelId": model_id,
         "datasetPath": str(dataset),
         "outputDir": str(out_dir),
@@ -102,13 +108,18 @@ def _judge_mode(
 ) -> dict[str, Any]:
     thr_mem = THRESHOLDS["memorization"]
     thr_gen = THRESHOLDS["generalization"]
+    role = _mode_role(mode)
+    affects_gate = role == "gating"
+    base_invalid_rate = float(base.get("invalidRate") or 0.0)
+    max_invalid = float(THRESHOLDS["evaluation"]["maxBaseInvalidRate"])
     base_valid = bool(base.get("evaluationValid"))
+    if base.get("evaluationValid") is None:
+        base_valid = base_invalid_rate <= max_invalid
     adapter_exact = float(adapter.get("exactMatch") or 0.0)
     base_exact = float(base.get("exactMatch") or 0.0)
     improvement = adapter_exact - base_exact
     if control == "memorization":
         checks = {
-            "evaluationValid": base_valid,
             "exactMatchPass": adapter_exact >= float(thr_mem["minExactMatchPerMode"]),
             "adapterLoaded": bool(adapter.get("adapterLoaded")),
             "adapterWeightDelta": bool(train.get("adapterWeightsChanged")),
@@ -116,16 +127,36 @@ def _judge_mode(
         }
     else:
         checks = {
-            "evaluationValid": base_valid,
             "heldoutExactMatchPass": adapter_exact >= float(thr_gen["minHeldoutExactMatchPerMode"]),
             "improvementPass": improvement >= float(thr_gen["minImprovementOverBasePerMode"]),
             "adapterLoaded": bool(adapter.get("adapterLoaded")),
             "adapterWeightDelta": bool(train.get("adapterWeightsChanged")),
             "sampleSizeOk": int(adapter.get("sampleSize") or 0) >= int(thr_gen["minHeldoutItems"]),
         }
+    # maxBaseInvalidRate fails the gate only in the gating mode.
+    if affects_gate:
+        checks = {"evaluationValid": base_valid, **checks}
+    else:
+        checks = {
+            "evaluationValidReported": base_valid,
+            "evaluationValidAffectsGate": False,
+            **checks,
+        }
+    gate_checks = {k: v for k, v in checks.items() if k != "evaluationValidReported" and k != "evaluationValidAffectsGate"}
+    if not affects_gate:
+        # Informational: accuracy/adapter checks are reported; invalid rate never fails the gate.
+        diagnostic_pass = all(
+            v for k, v in checks.items()
+            if k not in ("evaluationValidReported", "evaluationValidAffectsGate")
+        )
+        passed = diagnostic_pass
+    else:
+        passed = all(gate_checks.values())
     return {
         "thinkingMode": mode["id"],
-        "passed": all(checks.values()),
+        "role": role,
+        "affectsGate": affects_gate,
+        "passed": passed,
         "checks": checks,
         "baseExactMatch": base_exact,
         "adapterExactMatch": adapter_exact,
@@ -140,6 +171,13 @@ def _judge_mode(
             "train": train.get("templateFingerprint"),
         },
     }
+
+
+def _gating_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    for row in rows:
+        if row.get("affectsGate"):
+            return row
+    raise RuntimeError(f"No gating-mode row found (expected {GATING_MODE})")
 
 
 def main() -> None:
@@ -242,20 +280,32 @@ def main() -> None:
             ),
         )
 
-    mem_pass = all(row["passed"] for row in mem_modes)
-    gen_pass = all(row["passed"] for row in gen_modes)
-    both = mem_pass and gen_pass
+    mem_gating = _gating_row(mem_modes)
+    gen_gating = _gating_row(gen_modes)
+    mem_pass = bool(mem_gating["passed"])
+    gen_pass = bool(gen_gating["passed"])
+    require_both = bool(THRESHOLDS["gpuGate"].get("bothControlsMustPassInGatingMode", True))
+    both = (mem_pass and gen_pass) if require_both else (mem_pass or gen_pass)
     phase0_pass = bool(counts_as_pass and both)
 
     report = {
-        "specVersion": "c18d-phase0-report-v2",
+        "specVersion": "c18d-phase0-report-v2.1",
         "thresholdsVersion": THRESHOLDS["specVersion"],
         "mode": args.mode,
         "status": "pass" if phase0_pass else "fail_or_incomplete",
         "modelId": model_id,
-        "memorization": {"passedAllModes": mem_pass, "modes": mem_modes},
-        "generalization": {"passedAllModes": gen_pass, "modes": gen_modes},
-        "bothControlsPassed": both,
+        "gatingMode": GATING_MODE,
+        "memorization": {
+            "passedInGatingMode": mem_pass,
+            "gatingMode": mem_gating,
+            "modes": mem_modes,
+        },
+        "generalization": {
+            "passedInGatingMode": gen_pass,
+            "gatingMode": gen_gating,
+            "modes": gen_modes,
+        },
+        "bothControlsPassedInGatingMode": both,
         "countsAsPhase0Pass": counts_as_pass,
         "phase0Passed": phase0_pass,
         "autonomousTrainingUnlocked": phase0_pass,
@@ -264,13 +314,17 @@ def main() -> None:
         "note": (
             "Local smoke never unlocks autonomous training."
             if args.mode == "local-smoke"
-            else "On pass, copy to docs/milestones/C1_8D_PHASE0_GPU_RESULT_V2.json"
+            else (
+                "On pass, copy to docs/milestones/C1_8D_PHASE0_GPU_RESULT_V2.json. "
+                "Gate uses thinking_disabled only; thinking_enabled is informational."
+            )
         ),
     }
     _write_json(out / "phase0-report-v2.json", report)
     print(json.dumps({
         "phase0Passed": phase0_pass,
         "autonomousTrainingUnlocked": phase0_pass,
+        "gatingMode": GATING_MODE,
         "report": str(out / "phase0-report-v2.json"),
     }, indent=2))
     if args.mode == "gpu-controls-v2" and not phase0_pass:

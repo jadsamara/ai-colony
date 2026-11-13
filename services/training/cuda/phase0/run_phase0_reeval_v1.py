@@ -16,8 +16,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PHASE0 = Path(__file__).resolve().parent
-THRESHOLDS_V2 = json.loads((PHASE0 / "thresholds-v2.json").read_text(encoding="utf-8"))
-MODES = THRESHOLDS_V2["evaluation"]["modes"]
+THRESHOLDS = json.loads((PHASE0 / "thresholds-v2.1.json").read_text(encoding="utf-8"))
+MODES = THRESHOLDS["evaluation"]["modes"]
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -45,7 +45,7 @@ def _run_eval(
         "thinkingMode": mode["id"],
         "enableThinking": mode["enableThinking"],
         "maxNewTokens": mode["maxNewTokens"],
-        "maxBaseInvalidRate": THRESHOLDS_V2["evaluation"]["maxBaseInvalidRate"],
+        "maxBaseInvalidRate": THRESHOLDS["evaluation"]["maxBaseInvalidRate"],
     }
     _write_json(out_dir / "job.json", job)
     subprocess.run([python, str(ROOT / "peft_lora_eval.py"), "--job", str(out_dir / "job.json")], check=True)
@@ -94,7 +94,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--model-id", default=THRESHOLDS_V2["gpuGate"]["modelId"])
+    parser.add_argument("--model-id", default=THRESHOLDS["gpuGate"]["modelId"])
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--memorization-adapter", type=Path, required=True)
     parser.add_argument("--generalization-adapter", type=Path, required=True)
@@ -106,7 +106,8 @@ def main() -> None:
         "specVersion": "c18d-phase0-reeval-v1-report",
         "status": "diagnostic",
         "autonomousTrainingUnlocked": False,
-        "thresholdsVersion": "c18d-phase0-thresholds-v2",
+        "thresholdsVersion": THRESHOLDS["specVersion"],
+        "gatingMode": THRESHOLDS["evaluation"]["gatingMode"],
         "modelId": args.model_id,
         "controls": {},
         "auditConclusion": [],

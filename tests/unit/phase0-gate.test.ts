@@ -20,16 +20,29 @@ afterEach(() => {
   }
 });
 
-describe("C1.8D Phase 0 gate (thresholds v2)", () => {
-  it("uses predeclared v2 thresholds with two matched eval modes", () => {
-    expect(DEFAULT_PHASE0_THRESHOLDS.specVersion).toBe("c18d-phase0-thresholds-v2");
+describe("C1.8D Phase 0 gate (thresholds v2.1)", () => {
+  it("uses predeclared v2.1 thresholds with thinking_disabled gating", () => {
+    expect(DEFAULT_PHASE0_THRESHOLDS.specVersion).toBe("c18d-phase0-thresholds-v2.1");
     expect(DEFAULT_PHASE0_THRESHOLDS.declaredBeforeTraining).toBe(true);
+    expect(DEFAULT_PHASE0_THRESHOLDS.evaluation.gatingMode).toBe("thinking_disabled");
+    expect(DEFAULT_PHASE0_THRESHOLDS.evaluation.maxBaseInvalidRateAppliesTo).toBe("gatingMode");
     expect(DEFAULT_PHASE0_THRESHOLDS.evaluation.modes).toHaveLength(2);
+    expect(DEFAULT_PHASE0_THRESHOLDS.evaluation.modes[0]).toMatchObject({
+      id: "thinking_disabled",
+      role: "gating",
+      maxNewTokens: 64,
+    });
+    expect(DEFAULT_PHASE0_THRESHOLDS.evaluation.modes[1]).toMatchObject({
+      id: "thinking_enabled",
+      role: "informational",
+      maxNewTokens: 4096,
+    });
     expect(DEFAULT_PHASE0_THRESHOLDS.evaluation.maxBaseInvalidRate).toBe(0.05);
     expect(DEFAULT_PHASE0_THRESHOLDS.memorization.minExactMatchPerMode).toBe(0.95);
     expect(DEFAULT_PHASE0_THRESHOLDS.generalization.minHeldoutExactMatchPerMode).toBe(0.9);
     expect(DEFAULT_PHASE0_THRESHOLDS.generalization.minHeldoutItems).toBe(100);
     expect(DEFAULT_PHASE0_THRESHOLDS.generalization.minTrainItems).toBe(200);
+    expect(DEFAULT_PHASE0_THRESHOLDS.gpuGate.bothControlsMustPassInGatingMode).toBe(true);
     expect(DEFAULT_PHASE0_THRESHOLDS.localSmoke.countsAsPhase0Pass).toBe(false);
   });
 
@@ -81,10 +94,10 @@ describe("C1.8D Phase 0 gate (thresholds v2)", () => {
     expect(noLift.checks.improvementPass).toBe(false);
   });
 
-  it("keeps autonomous training disabled without a v2 GPU pass report", () => {
+  it("keeps autonomous training disabled without a v2.1 GPU pass report", () => {
     const flags = readAutonomousLearningFlags({ reportPath: join(tmpdir(), "missing-phase0-v2.json") });
     expect(flags.autonomousTrainingEnabled).toBe(false);
-    expect(flags.thresholdsVersionRequired).toBe("c18d-phase0-thresholds-v2");
+    expect(flags.thresholdsVersionRequired).toBe("c18d-phase0-thresholds-v2.1");
     expect(() => assertAutonomousTrainingAllowed(flags)).toThrow(/disabled/i);
   });
 
@@ -106,7 +119,25 @@ describe("C1.8D Phase 0 gate (thresholds v2)", () => {
     expect(flags.autonomousTrainingEnabled).toBe(false);
   });
 
-  it("unlocks only from an operator gpu-controls-v2 pass report", () => {
+  it("does not unlock from a v2 both-modes report without v2.1 thresholdsVersion", () => {
+    const dir = mkdtempSync(join(tmpdir(), "c18d-phase0-report-"));
+    tempRoots.push(dir);
+    const reportPath = join(dir, "report.json");
+    writeFileSync(
+      reportPath,
+      JSON.stringify({
+        mode: "gpu-controls-v2",
+        phase0Passed: true,
+        countsAsPhase0Pass: true,
+        thresholdsVersion: "c18d-phase0-thresholds-v2",
+        autonomousTrainingUnlocked: true,
+      }),
+    );
+    const flags = readAutonomousLearningFlags({ reportPath });
+    expect(flags.autonomousTrainingEnabled).toBe(false);
+  });
+
+  it("unlocks only from an operator gpu-controls-v2 pass under thresholds v2.1", () => {
     const dir = mkdtempSync(join(tmpdir(), "c18d-phase0-report-"));
     tempRoots.push(dir);
     mkdirSync(dir, { recursive: true });
@@ -117,7 +148,7 @@ describe("C1.8D Phase 0 gate (thresholds v2)", () => {
         mode: "gpu-controls-v2",
         phase0Passed: true,
         countsAsPhase0Pass: true,
-        thresholdsVersion: "c18d-phase0-thresholds-v2",
+        thresholdsVersion: "c18d-phase0-thresholds-v2.1",
         autonomousTrainingUnlocked: true,
       }),
     );
