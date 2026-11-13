@@ -49,16 +49,54 @@ cd ~/ai-colony
 
 After reviewing the commit-safe manifest, commit it from a trusted Evaluation checkout if desired. Never commit seed files or locked JSONL.
 
-## 1. Stage A — development pilot (ESTIMATES only)
+## 1. Stage A repair — pull, batch-invariance, re-pilots
+
+Use a **fresh** `C18D1_OUT` for every run. Do not overwrite prior Stage A reports.
 
 ```bash
 cd ~/ai-colony
-export C18D1_OUT=~/ai-colony/tmp/c18d1/pilot-$(date +%Y%m%d-%H%M%S)
+git pull
+# confirm commit includes c18d1-batched-eval-v2 / c18d1-grader-v2
+```
+
+### 1a. Batch-invariance gate (mandatory before trusting batched pilots)
+
+```bash
+cd ~/ai-colony
+export C18D1_OUT=~/ai-colony/tmp/c18d1/batch-invariance-$(date +%Y%m%d-%H%M%S)
+export C18D1_PILOT_LIMIT=24
+export C18D1_SKIP_INSTALL=1   # omit on first setup
+./scripts/c18d1-gpu-batch-invariance
+# require: $C18D1_OUT/batch-invariance-report.json → "passed": true
+# criterion: exact generated text match batch_size=1 vs 4 (not accuracy alone)
+```
+
+### 1b. Thinking-disabled pilot (re-run)
+
+```bash
+cd ~/ai-colony
+export C18D1_OUT=~/ai-colony/tmp/c18d1/pilot-td-v2-$(date +%Y%m%d-%H%M%S)
 export C18D1_PILOT_LIMIT=24
 export C18D1_BATCH_SIZE=4
 export C18D1_CONDITION=thinking_disabled_zero_shot
+export C18D1_SKIP_INSTALL=1
 ./scripts/c18d1-gpu-pilot
 # report: $C18D1_OUT/eval-report.json
+# check: mathematicalAccuracy, formatComplianceRate, thinkingModeProtocolViolations,
+#        graderVersion=c18d1-grader-v2, specVersion=c18d1-batched-eval-v2
+```
+
+### 1c. Thinking-enabled pilot (re-run)
+
+```bash
+cd ~/ai-colony
+export C18D1_CONDITION=thinking_enabled_zero_shot
+export C18D1_PILOT_LIMIT=8
+export C18D1_BATCH_SIZE=4
+export C18D1_OUT=~/ai-colony/tmp/c18d1/pilot-te-v2-$(date +%Y%m%d-%H%M%S)
+export C18D1_SKIP_INSTALL=1
+./scripts/c18d1-gpu-pilot
+# must not raise: model_kwargs unused ['generator']
 ```
 
 **Resource estimates (not measured in this Cursor session):**
@@ -66,16 +104,7 @@ export C18D1_CONDITION=thinking_disabled_zero_shot
 - VRAM: ~10–20 GB for Qwen3-8B bf16 + small batch (left-padded).
 - Thinking-enabled pilot will use more tokens/latency; start with disabled for smoke.
 - If OOM: lower `C18D1_BATCH_SIZE` to 1–2.
-
-Optional thinking pilot:
-
-```bash
-cd ~/ai-colony
-export C18D1_CONDITION=thinking_enabled_zero_shot
-export C18D1_PILOT_LIMIT=8
-export C18D1_OUT=~/ai-colony/tmp/c18d1/pilot-think-$(date +%Y%m%d-%H%M%S)
-./scripts/c18d1-gpu-pilot
-```
+- GPU acceptance remains pending until the VM reports above are produced.
 
 ## 2. Stage B — full development baselines
 

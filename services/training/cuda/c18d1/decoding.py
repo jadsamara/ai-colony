@@ -63,6 +63,7 @@ def matched_job_fields(condition: dict[str, Any]) -> dict[str, Any]:
         "temperature": condition.get("temperature"),
         "topP": condition.get("topP"),
         "topK": condition.get("topK"),
+        "repetitionPenalty": condition.get("repetitionPenalty"),
         "maxNewTokens": condition["maxNewTokens"],
         "samplesPerProblem": condition.get("samplesPerProblem", 1),
     }

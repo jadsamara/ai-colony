@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Deterministic SymPy grading for C1.8D.1 algebra families.
+"""Deterministic SymPy grading for C1.8D.1 algebra (grader v2).
 
+Separates mathematical accuracy from format compliance.
 LLM judges are forbidden as the sole source of correctness.
 """
 
@@ -16,7 +17,7 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
-from answer_parser import parse_model_output
+from answer_parser import GRADER_VERSION, parse_model_output
 
 TRANSFORMS = standard_transformations + (implicit_multiplication_application,)
 
@@ -39,20 +40,43 @@ ALL_REALS_TOKENS = {
 }
 
 
-def _normalize_text(text: str) -> str:
+def _normalize_latex_math(text: str) -> str:
+    """Safely normalize a narrow subset of LaTeX math into parseable text.
+
+    Does not evaluate arbitrary TeX or execute code — only textual rewrites.
+    """
     t = (text or "").strip()
+    # \frac{a}{b} -> (a)/(b)  (non-nested simple forms; iterate)
+    for _ in range(8):
+        nxt = re.sub(r"\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}", r"(\1)/(\2)", t)
+        if nxt == t:
+            break
+        t = nxt
+    t = t.replace("\\cdot", "*").replace("\\times", "*")
+    t = t.replace("\\left", "").replace("\\right", "")
+    t = t.replace("\\,", "").replace("\\;", "").replace("\\!", "")
     t = t.replace("\\infty", "oo").replace("∞", "oo")
     t = t.replace("\\cup", "U").replace("∪", "U")
-    t = re.sub(r"\s+", " ", t)
+    t = t.replace("\\pi", "pi").replace("\\%", "/100")
+    t = re.sub(r"\\sqrt\s*\{([^{}]+)\}", r"sqrt(\1)", t)
+    t = t.replace("$", "")
+    t = t.replace("^", "**")
+    t = re.sub(r"\s+", " ", t).strip()
     return t
+
+
+def _normalize_text(text: str) -> str:
+    return _normalize_latex_math(text)
 
 
 def _parse_expr(text: str, local_dict: dict[str, Any] | None = None) -> sp.Expr:
     cleaned = _normalize_text(text)
-    cleaned = cleaned.replace("^", "**")
-    cleaned = cleaned.replace("\\left", "").replace("\\right", "")
-    cleaned = cleaned.replace("$", "")
-    return parse_expr(cleaned, local_dict=local_dict or {"x": sp.Symbol("x")}, transformations=TRANSFORMS)
+    return parse_expr(
+        cleaned,
+        local_dict=local_dict or {"x": sp.Symbol("x"), "pi": sp.pi, "sqrt": sp.sqrt},
+        transformations=TRANSFORMS,
+        evaluate=True,
+    )
 
 
 def _split_root_list(text: str) -> list[str]:
@@ -63,7 +87,7 @@ def _split_root_list(text: str) -> list[str]:
         return []
     parts: list[str] = []
     depth = 0
-    current = []
+    current: list[str] = []
     for ch in cleaned:
         if ch in "([{":
             depth += 1
@@ -150,9 +174,7 @@ def grade_answer(answer_text: str, expected: dict[str, Any]) -> dict[str, Any]:
         if got is None:
             return {"correct": False, "detail": "unparseable_roots"}
         want = {sp.simplify(r) for r in exp["roots"]}
-        # Order-independent; multiplicity collapsed to set equality unless specified.
         if expected.get("multiset"):
-            # Compare sorted simplified strings as a stable multiset proxy.
             want_m = sorted(str(sp.simplify(r)) for r in exp["roots"])
             got_parts = _split_root_list(text)
             try:
@@ -160,7 +182,6 @@ def grade_answer(answer_text: str, expected: dict[str, Any]) -> dict[str, Any]:
             except Exception:
                 return {"correct": False, "detail": "unparseable_roots"}
             return {"correct": want_m == got_m, "detail": "multiset_roots"}
-        # Match by pairwise algebraic equality.
         unmatched = list(want)
         for g in list(got):
             hit = None
@@ -181,7 +202,6 @@ def grade_answer(answer_text: str, expected: dict[str, Any]) -> dict[str, Any]:
         return {"correct": _expr_equal(got, exp["expr"]), "detail": "expression"}
 
     if exp["kind"] == "interval":
-        # Accept interval notation or inequality shorthand via SymPy sets when possible.
         try:
             if text.startswith("(") or text.startswith("["):
                 inner = text.strip()
@@ -215,22 +235,30 @@ def grade_model_output(
     truncated: bool = False,
 ) -> dict[str, Any]:
     parsed = parse_model_output(raw, enable_thinking=enable_thinking, truncated=truncated)
+    base = {
+        "graderVersion": GRADER_VERSION,
+        "parsed": parsed,
+        "formatCompliant": bool(parsed.get("formatCompliant")),
+        "thinkingProtocolViolation": bool(parsed.get("thinkingProtocolViolation")),
+        "mathematicalCorrect": False,
+        "correct": False,
+    }
     if not parsed["ok"]:
         outcome = parsed["outcomeClass"]
-        if outcome == "truncated":
-            label = "truncated"
-        else:
-            label = "invalid"
+        label = "truncated" if outcome == "truncated" else "invalid"
         return {
+            **base,
             "outcome": label,
-            "correct": False,
-            "parsed": parsed,
             "grade": None,
+            "invalidReason": parsed.get("reason"),
         }
-    grade = grade_answer(str(parsed["answer"]), expected)
+    grade = grade_answer(str(parsed["mathText"] or parsed["answer"]), expected)
+    math_ok = bool(grade["correct"])
     return {
-        "outcome": "correct" if grade["correct"] else "wrong",
-        "correct": bool(grade["correct"]),
-        "parsed": parsed,
+        **base,
+        "outcome": "correct" if math_ok else "wrong",
+        "correct": math_ok,
+        "mathematicalCorrect": math_ok,
         "grade": grade,
+        "invalidReason": None,
     }

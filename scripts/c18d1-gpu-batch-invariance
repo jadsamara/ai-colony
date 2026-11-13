@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# C1.8D.1 Stage A — GPU batch-invariance gate (thinking-disabled greedy).
+# Compares exact generated text at batch_size=1 vs batch_size=4.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+PYTHON="${C18D1_PYTHON:-python3}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/batch-invariance-$(date +%Y%m%d-%H%M%S)}"
+VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
+LIMIT="${C18D1_PILOT_LIMIT:-24}"
+
+echo "[c18d1] batch-invariance gate on $(hostname) limit=${LIMIT}"
+command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d1] WARN: nvidia-smi missing"
+
+if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
+  "${PYTHON}" -m venv "${VENV}"
+  # shellcheck disable=SC1091
+  source "${VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-c18d1.txt
+  PYTHON="${VENV}/bin/python"
+fi
+
+"${PYTHON}" services/training/cuda/c18d1/revisions.py --write
+mkdir -p "${OUT}"
+JOB="${OUT}/batch-invariance-job.json"
+python3 - <<PY
+import json
+from pathlib import Path
+pin = json.loads(Path("services/training/cuda/c18d1/pinned_revisions.json").read_text())
+job = {
+  "modelId": pin["modelId"],
+  "tokenizerId": pin["tokenizerId"],
+  "modelRevision": pin["modelRevision"],
+  "tokenizerRevision": pin["tokenizerRevision"],
+  "conditionId": "thinking_disabled_zero_shot",
+  "datasetPath": str(Path("services/training/cuda/c18d1/datasets/dev/id_dev.jsonl").resolve()),
+  "outputDir": "${OUT}",
+  "device": "cuda",
+  "limit": int("${LIMIT}"),
+  "seed": 18,
+  "accessRole": "evaluation",
+  "departmentId": "00000000-0000-4000-8000-000000000017",
+}
+Path("${JOB}").write_text(json.dumps(job, indent=2) + "\n")
+print(json.dumps(job, indent=2))
+PY
+
+"${PYTHON}" services/training/cuda/c18d1/batch_invariance.py --job "${JOB}"
+echo "[c18d1] batch-invariance report: ${OUT}/batch-invariance-report.json"

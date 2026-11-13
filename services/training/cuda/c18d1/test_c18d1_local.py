@@ -8,13 +8,22 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent
 REPO_ROOT = ROOT.parents[3]
 sys.path.insert(0, str(ROOT))
 
 from access_control import LockedTestAccessError, assert_can_read_locked_items, can_read_locked_items
-from answer_parser import parse_model_output
+from answer_parser import GRADER_VERSION, parse_model_output
+from generation_utils import (
+    FINAL_ANSWER_INSTRUCTION,
+    apply_sampling_seed,
+    build_generate_kwargs,
+    filter_unsupported_generate_kwargs,
+    prompt_token_length,
+    slice_new_token_ids,
+)
 from generators import prompt_leaks_split_identity
 from locked_seeds import LockedSeedError, load_locked_stream_seeds
 from revisions import assert_commit_hash, is_commit_hash, require_for_baseline, verify_pinned
@@ -59,10 +68,12 @@ def test_parser_adversarial() -> None:
     raw = "<think></think>\nThe solution is clearly 7."
     parsed = parse_model_output(raw, enable_thinking=True)
     assert parsed["ok"] is False
+    assert parsed["reason"] == "no_answer_line"
 
     raw = "<think></think>\nANSWER: \\frac{1}{2}"
     parsed = parse_model_output(raw, enable_thinking=True)
     assert parsed["ok"] is True
+    assert parsed["formatCompliant"] is True
 
     graded = grade_model_output(
         "<think></think>\nANSWER: not 4 but nearby",
@@ -80,6 +91,73 @@ def test_parser_adversarial() -> None:
 
     parsed = parse_model_output("<think></think>\nANSWER: 1", enable_thinking=False)
     assert parsed["ok"] is False
+    assert parsed["reason"] == "unexpected_think_with_thinking_disabled"
+    assert parsed["thinkingProtocolViolation"] is True
+
+
+def test_unexpected_think_and_no_answer() -> None:
+    parsed = parse_model_output("</think>\nWe solve...\n\\boxed{ANSWER: 1}", enable_thinking=False)
+    assert parsed["ok"] is False
+    assert parsed["reason"] == "unexpected_think_with_thinking_disabled"
+
+    parsed = parse_model_output("Working...\nThe answer is 3.", enable_thinking=False)
+    assert parsed["ok"] is False
+    assert parsed["reason"] == "no_answer_line"
+
+
+def test_boxed_and_latex_math_vs_format() -> None:
+    # Math wrappers allowed for mathematical correctness; format compliance separate.
+    graded = grade_model_output(
+        r"\boxed{ANSWER: \frac{9}{4}}",
+        {"kind": "roots", "values": ["9/4"]},
+        enable_thinking=False,
+    )
+    assert graded["outcome"] == "correct"
+    assert graded["mathematicalCorrect"] is True
+    assert graded["formatCompliant"] is False
+    assert graded["graderVersion"] == GRADER_VERSION
+
+    graded = grade_model_output(
+        "ANSWER: 9/4",
+        {"kind": "roots", "values": ["9/4"]},
+        enable_thinking=False,
+    )
+    assert graded["outcome"] == "correct"
+    assert graded["formatCompliant"] is True
+
+    graded = grade_model_output(
+        "$$ANSWER: \\frac{1}{2}$$",
+        {"kind": "roots", "values": ["1/2"]},
+        enable_thinking=False,
+    )
+    assert graded["outcome"] == "correct"
+    assert graded["formatCompliant"] is False
+
+    # Bare boxed expression without ANSWER: is not a final answer.
+    graded = grade_model_output(
+        r"\boxed{\frac{9}{4}}",
+        {"kind": "roots", "values": ["9/4"]},
+        enable_thinking=False,
+    )
+    assert graded["outcome"] == "invalid"
+    assert graded["invalidReason"] == "no_answer_line"
+
+
+def test_conflicting_and_missing() -> None:
+    graded = grade_model_output(
+        "ANSWER: 1\nANSWER: 2",
+        {"kind": "roots", "values": ["1"]},
+        enable_thinking=False,
+    )
+    assert graded["outcome"] == "invalid"
+    assert graded["parsed"]["reason"] == "conflicting_answer_lines"
+
+    graded = grade_model_output(
+        "",
+        {"kind": "roots", "values": ["1"]},
+        enable_thinking=False,
+    )
+    assert graded["outcome"] == "invalid"
 
 
 def test_grader_core() -> None:
@@ -88,6 +166,117 @@ def test_grader_core() -> None:
     assert grade_answer("all real numbers", {"kind": "all_reals"})["correct"] is True
     assert grade_answer("(-oo, 3)", {"kind": "interval", "left": "-oo", "right": "3", "leftOpen": True, "rightOpen": True})["correct"] is True
     assert grade_answer("x + 1", {"kind": "expression", "value": "1 + x"})["correct"] is True
+    assert grade_answer(r"(9)/(4)", {"kind": "roots", "values": ["9/4"]})["correct"] is True
+
+
+def test_generation_slicing_and_sampling_kwargs() -> None:
+    # Simulate left-padded row: pad pad real real | new new
+    row = [0, 0, 10, 11, 20, 21]
+    # Wrong approach used attention_mask.sum()==2 → would slice from index 2 (prompt contamination).
+    wrong = row[2:]
+    assert wrong == [10, 11, 20, 21]
+    # Correct: padded width prompt_len=4
+    prompt_len = prompt_token_length(4)
+    got = slice_new_token_ids(row, prompt_len)
+    assert list(got) == [20, 21]
+
+    fields = {
+        "maxNewTokens": 512,
+        "doSample": True,
+        "temperature": 0.6,
+        "topP": 0.95,
+        "topK": 20,
+        "repetitionPenalty": 1.0,
+    }
+    kwargs = build_generate_kwargs(fields=fields, pad_token_id=0, eos_token_id=1)
+    assert "generator" not in kwargs
+    assert kwargs["do_sample"] is True
+    assert kwargs["temperature"] == 0.6
+    filtered = filter_unsupported_generate_kwargs({**kwargs, "generator": object()})
+    assert "generator" not in filtered
+
+    class _Cuda:
+        @staticmethod
+        def is_available() -> bool:
+            return False
+
+        @staticmethod
+        def manual_seed_all(_seed: int) -> None:
+            raise AssertionError("should not be called")
+
+    fake_torch = SimpleNamespace(manual_seed=lambda s: None, cuda=_Cuda())
+    meta = apply_sampling_seed(fake_torch, 42, device="cpu")
+    assert meta["generatorKwargUsed"] is False
+    assert meta["seedApplied"] == 42
+
+
+def test_answer_instruction_contract() -> None:
+    assert "ANSWER: <mathematical expression>" in FINAL_ANSWER_INSTRUCTION
+    # Item questions must remain unchanged; instruction is appended by eval only.
+    from batched_eval import build_user_prompt
+
+    item = {"prompt": "Solve for x.\n\nEquation: x = 1\n\nRef: abc"}
+    built = build_user_prompt(item)
+    assert item["prompt"] in built
+    assert built.endswith(FINAL_ANSWER_INSTRUCTION) or FINAL_ANSWER_INSTRUCTION in built
+
+
+def test_chat_template_boundary_contract() -> None:
+    """Document expected Qwen3 thinking-disabled prompt boundary without downloading weights.
+
+    The real template is verified on GPU via templateFingerprint. Locally we assert
+    peft_chat passes enable_thinking through apply_chat_template.
+    """
+    sys.path.insert(0, str(ROOT.parent))
+    from peft_chat import build_chat_texts
+
+    calls: list[dict] = []
+
+    class FakeTok:
+        chat_template = "qwen3-fake"
+
+        def apply_chat_template(self, messages, **kwargs):
+            calls.append({"messages": messages, **kwargs})
+            enable = kwargs.get("enable_thinking")
+            if enable is False:
+                return "<|im_start|>user\nQ<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n"
+            return "<|im_start|>user\nQ<|im_end|>\n<|im_start|>assistant\n"
+
+    prompt, _ = build_chat_texts(FakeTok(), "Q", None, enable_thinking=False)
+    assert calls and calls[0]["enable_thinking"] is False
+    assert calls[0]["add_generation_prompt"] is True
+    # Thinking-disabled template includes empty think block in the *prompt*; generation
+    # must start after it. Slicing bugs decode the closing tag as "new" tokens.
+    assert prompt.endswith("</think>\n") or "</think>" in prompt
+
+    calls.clear()
+    prompt_on, _ = build_chat_texts(FakeTok(), "Q", None, enable_thinking=True)
+    assert calls and calls[0]["enable_thinking"] is True
+    assert "</think>" not in prompt_on or prompt_on.find("<think>") >= 0
+
+
+def test_transformers_523_sampling_compat_source() -> None:
+    source = (ROOT / "batched_eval.py").read_text(encoding="utf-8")
+    # Must not assign a torch Generator into generate kwargs (TF 5.23 rejects it).
+    assert '["generator"]' not in source
+    assert "torch.Generator" not in source
+    kwargs = build_generate_kwargs(
+        fields={
+            "maxNewTokens": 16,
+            "doSample": True,
+            "temperature": 0.6,
+            "topP": 0.95,
+            "topK": 20,
+            "repetitionPenalty": 1.0,
+        },
+        pad_token_id=0,
+        eos_token_id=1,
+    )
+    assert "generator" not in kwargs
+    assert "generator" not in filter_unsupported_generate_kwargs({"generator": object(), **kwargs})
+    utils_src = (ROOT / "generation_utils.py").read_text(encoding="utf-8")
+    assert "filter_unsupported_generate_kwargs" in utils_src
+    assert "banned" in utils_src or "Never passes" in utils_src
 
 
 def test_access_control() -> None:
@@ -154,7 +343,14 @@ def test_locked_generator_refuses_without_external_seed() -> None:
 def main() -> None:
     test_revisions()
     test_parser_adversarial()
+    test_unexpected_think_and_no_answer()
+    test_boxed_and_latex_math_vs_format()
+    test_conflicting_and_missing()
     test_grader_core()
+    test_generation_slicing_and_sampling_kwargs()
+    test_answer_instruction_contract()
+    test_chat_template_boundary_contract()
+    test_transformers_523_sampling_compat_source()
     test_access_control()
     test_dataset_minimums_public()
     test_no_locked_files_tracked_by_git()
