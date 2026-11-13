@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# C1.8D.1 — Full-development noise floor (entire id_dev.jsonl, both modes).
+# Thinking: same-seed (backend nondeterminism) + alternate-seed (sampling variance).
+# Uses grader v3.2 + decoding-v2 (thinking-disabled maxNewTokens=2048).
+# Development only — no locked/Stage C data. STOP after review. No Stage B/pilot here.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+VLLM_PYTHON="${C18D1_VLLM_PYTHON:-${ROOT}/tmp/c18d1/.venv-vllm/bin/python}"
+HF_PYTHON="${C18D1_PYTHON:-python3}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/noise-floor-full-dev-$(date +%Y%m%d-%H%M%S)}"
+SEED="${C18D1_SEED:-18}"
+HF_VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
+DATASET="${C18D1_DATASET:-services/training/cuda/c18d1/datasets/dev/id_dev.jsonl}"
+
+echo "[c18d1] FULL-DEV noise floor dataset=${DATASET} out=${OUT}"
+command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d1] WARN: nvidia-smi missing"
+
+if [[ ! -x "${VLLM_PYTHON}" ]]; then
+  echo "[c18d1] ERROR: C18D1_VLLM_PYTHON not executable: ${VLLM_PYTHON}" >&2
+  exit 3
+fi
+if [[ ! -f "${DATASET}" ]]; then
+  echo "[c18d1] ERROR: dataset missing: ${DATASET}" >&2
+  exit 3
+fi
+
+if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
+  "${HF_PYTHON}" -m venv "${HF_VENV}"
+  # shellcheck disable=SC1091
+  source "${HF_VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-c18d1.txt
+  HF_PYTHON="${HF_VENV}/bin/python"
+fi
+
+"${HF_PYTHON}" services/training/cuda/c18d1/deps_preflight.py
+"${HF_PYTHON}" services/training/cuda/c18d1/revisions.py --write
+mkdir -p "${OUT}"
+
+JOB="${OUT}/noise-floor-full-dev-job.json"
+python3 - <<PY
+import json
+from pathlib import Path
+pin = json.loads(Path("services/training/cuda/c18d1/pinned_revisions.json").read_text())
+job = {
+  "modelId": pin["modelId"],
+  "tokenizerId": pin["tokenizerId"],
+  "modelRevision": pin["modelRevision"],
+  "tokenizerRevision": pin["tokenizerRevision"],
+  "conditionIds": ["thinking_disabled_zero_shot", "thinking_enabled_zero_shot"],
+  "datasetPath": str(Path("${DATASET}").resolve()),
+  "outputDir": "${OUT}",
+  "device": "cuda",
+  "seed": int("${SEED}"),
+  "fullDevelopment": True,
+  "accessRole": "evaluation",
+  "departmentId": "00000000-0000-4000-8000-000000000017",
+}
+Path("${JOB}").write_text(json.dumps(job, indent=2) + "\n")
+print(json.dumps(job, indent=2))
+PY
+
+set +e
+"${VLLM_PYTHON}" services/training/cuda/c18d1/noise_floor.py --job "${JOB}"
+RC=$?
+set -e
+echo "[c18d1] noise-floor-report: ${OUT}/noise-floor-report.json (exit=${RC})"
+echo "[c18d1] Review: graderVersion, decodingConfigVersion, sameSeed vs alternateSeed floors,"
+echo "[c18d1]          overallModelPromotionThreshold, minimumPracticallyMeaningfulImprovement."
+echo "[c18d1] STOP — do not start stratified pilot or Stage B until approved."
+exit "${RC}"

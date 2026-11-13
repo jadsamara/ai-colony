@@ -20,6 +20,7 @@ from decoding import CONDITIONS, matched_job_fields, sampling_seed_schedule
 from generation_utils import (
     EVAL_IMPLEMENTATION_VERSION,
     FINAL_ANSWER_INSTRUCTION,
+    HF_BACKEND_ID,
     OFFICIAL_BACKEND,
     PRIMARY_EVAL_BACKEND,
     REFERENCE_BACKEND,
@@ -207,8 +208,13 @@ def run_hf_benchmark(
     accounting = build_accounting(results, samples_per_problem=samples_per)
     peak = _peak_vram_bytes(torch)
     return {
-        "backend": OFFICIAL_BACKEND,
-        "official": True,
+        "backend": REFERENCE_BACKEND,
+        "backendId": HF_BACKEND_ID,
+        "implementation": "transformers.AutoModelForCausalLM.generate",
+        "role": "cross_backend_reference",
+        "primaryEvalBackend": PRIMARY_EVAL_BACKEND,
+        "referenceBackend": REFERENCE_BACKEND,
+        "official": False,
         "templateFingerprint": tmpl_fp,
         "results": results,
         "accounting": accounting,
@@ -245,7 +251,7 @@ def run_vllm_benchmark(
         pin["tokenizerId"], revision=pin["tokenizerRevision"], trust_remote_code=True,
     )
     tmpl_fp = template_fingerprint(tokenizer)
-    llm = load_vllm_engine(pin)
+    llm, _engine_meta = load_vllm_engine(pin)
     load_ms = int((time.time() - load_t0) * 1000)
 
     prompts = build_prompts(
@@ -484,11 +490,16 @@ def main() -> None:
             batch_size=batch_size,
             dataset_path=dataset_path,
             dataset_content_hash=report["datasetContentHash"],
-            backend=OFFICIAL_BACKEND,
+            backend=REFERENCE_BACKEND,
             template_fingerprint=hf.get("templateFingerprint"),
             condition_id=report["conditionId"],
             seed=seed,
-            extra={"graderVersion": GRADER_VERSION},
+            extra={
+                "graderVersion": GRADER_VERSION,
+                "primaryEvalBackend": PRIMARY_EVAL_BACKEND,
+                "referenceBackend": REFERENCE_BACKEND,
+                "role": "cross_backend_reference",
+            },
         )
 
     if "vllm" in backends:

@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""Final-answer parser for C1.8D.1 Math evaluation (grader v3.1).
+"""Final-answer parser for C1.8D.1 Math evaluation (grader v3.2).
 
 Never search the reasoning trace. Only the final response region
 (after ``</think>`` when thinking is enabled) is considered.
 
-Accepted final-answer markers (v3):
+Accepted final-answer markers (v3.2):
 - a bare ``ANSWER: <expr>`` line, or
-- the **last** ``\\boxed{...}`` in the final region
+- the **last** ``\\boxed{...}`` in the final region, or
+- strict ``ANSWER:`` wrapped in LaTeX ``\\text{...}``
+  (e.g. ``\\text{ANSWER: } (4, 8)`` or ``\\text{ANSWER: no solution}``)
 
-If both are present and canonically disagree → invalid.
+If markers are present and canonically disagree → invalid.
 Format compliance remains the bare ``ANSWER:`` contract and is reported
 separately from mathematical correctness (including which marker was used).
+
+Historical reports under older ``graderVersion`` strings must not be
+silently rescored.
 """
 
 from __future__ import annotations
@@ -28,13 +33,16 @@ ParseStatus = Literal[
     "protocol_violation",
 ]
 
-GRADER_VERSION = "c18d1-grader-v3.1"
+GRADER_VERSION = "c18d1-grader-v3.2"
+GRADER_VERSION_PREVIOUS = "c18d1-grader-v3.1"
 THINK_CLOSE = "</think>"
 THINK_OPEN = "<think>"
 
 STRICT_ANSWER_LINE = re.compile(r"(?im)^\s*ANSWER:\s*(.+?)\s*$")
 ANSWER_TOKEN = re.compile(r"(?i)ANSWER:\s*(.+)$")
 BOXED_START = re.compile(r"\\boxed\s*\{")
+# \text{ANSWER: <inside>}[ optional trailing payload on the same line ]
+TEXT_ANSWER = re.compile(r"(?is)\\text\s*\{\s*ANSWER:\s*([^}]*)\}")
 
 
 def extract_after_thinking(raw: str, *, enable_thinking: bool) -> dict[str, Any]:
@@ -169,6 +177,45 @@ def _answer_lines(final_text: str) -> list[dict[str, Any]]:
     return found
 
 
+def _text_answer_markers(final_text: str) -> list[dict[str, Any]]:
+    """Extract ``\\text{ANSWER: ...}`` markers (grader v3.2).
+
+    Supports payload inside the braces (``\\text{ANSWER: no solution}``) or
+    immediately after an empty/whitespace brace payload
+    (``\\text{ANSWER: } (4, 8)``). Not format-compliant.
+    """
+    found: list[dict[str, Any]] = []
+    text = final_text or ""
+    for match in TEXT_ANSWER.finditer(text):
+        inside = (match.group(1) or "").strip()
+        after = text[match.end() :]
+        # Same-line trailing payload only (do not cross newlines).
+        same_line = after.split("\n", 1)[0]
+        trailing = same_line.strip()
+        if inside:
+            payload = inside
+            raw = match.group(0)
+        elif trailing:
+            payload = trailing
+            raw = (match.group(0) + same_line).strip()
+        else:
+            continue
+        math_text, wrappers = _strip_math_wrappers(payload)
+        if not math_text:
+            continue
+        found.append(
+            {
+                "rawLine": raw,
+                "payload": payload,
+                "mathText": math_text,
+                "wrappers": ["\\text", *wrappers],
+                "strictFormat": False,
+                "source": "text_answer",
+            },
+        )
+    return found
+
+
 def _canonically_equal(a: str | None, b: str | None) -> bool:
     from sympy_grader import answers_canonically_equal
 
@@ -178,6 +225,7 @@ def _canonically_equal(a: str | None, b: str | None) -> bool:
 def parse_answer_lines(final_text: str) -> dict[str, Any]:
     """Parse final-answer markers from the final (post-think) text only."""
     answer_lines = _answer_lines(final_text)
+    text_answers = _text_answer_markers(final_text)
     boxed_list = extract_all_boxed(final_text)
     boxed_cand = None
     if boxed_list:
@@ -205,13 +253,32 @@ def parse_answer_lines(final_text: str) -> dict[str, Any]:
                 "formatCompliant": False,
                 "answerMarkerUsed": "conflict",
                 "reason": "conflicting_answer_lines",
-                "candidates": answer_lines + ([boxed_cand] if boxed_cand else []),
+                "candidates": answer_lines + text_answers + ([boxed_cand] if boxed_cand else []),
             }
         answer_cand = answer_lines[-1]
     else:
         answer_cand = None
 
-    candidates = [c for c in (answer_cand, boxed_cand) if c is not None]
+    if text_answers:
+        unique_text = list(dict.fromkeys(c["mathText"] for c in text_answers if c.get("mathText")))
+        if len(unique_text) > 1:
+            return {
+                "status": "ambiguous",
+                "answers": unique_text,
+                "selected": None,
+                "mathText": None,
+                "strictFormat": False,
+                "formatCompliant": False,
+                "answerMarkerUsed": "conflict",
+                "reason": "conflicting_text_answer_markers",
+                "candidates": answer_lines + text_answers + ([boxed_cand] if boxed_cand else []),
+            }
+        text_cand = text_answers[-1]
+    else:
+        text_cand = None
+
+    # Prefer bare ANSWER line, then \\text{ANSWER:}, then boxed.
+    candidates = [c for c in (answer_cand, text_cand, boxed_cand) if c is not None]
 
     if not candidates:
         stripped = (final_text or "").strip()
@@ -240,25 +307,62 @@ def parse_answer_lines(final_text: str) -> dict[str, Any]:
             "candidates": [],
         }
 
-    if answer_cand and boxed_cand:
-        if not _canonically_equal(answer_cand["mathText"], boxed_cand["mathText"]):
-            return {
-                "status": "ambiguous",
-                "answers": [answer_cand["mathText"], boxed_cand["mathText"]],
-                "selected": None,
-                "mathText": None,
-                "strictFormat": False,
-                "formatCompliant": False,
-                "answerMarkerUsed": "conflict",
-                "reason": "conflicting_answer_and_boxed",
-                "candidates": candidates,
-            }
-        # Agree: prefer ANSWER text for display; marker = both_agree
+    # Canonical conflicts across distinct marker kinds → invalid.
+    if answer_cand and boxed_cand and not _canonically_equal(answer_cand["mathText"], boxed_cand["mathText"]):
+        return {
+            "status": "ambiguous",
+            "answers": [answer_cand["mathText"], boxed_cand["mathText"]],
+            "selected": None,
+            "mathText": None,
+            "strictFormat": False,
+            "formatCompliant": False,
+            "answerMarkerUsed": "conflict",
+            "reason": "conflicting_answer_and_boxed",
+            "candidates": candidates,
+        }
+    if answer_cand and text_cand and not _canonically_equal(answer_cand["mathText"], text_cand["mathText"]):
+        return {
+            "status": "ambiguous",
+            "answers": [answer_cand["mathText"], text_cand["mathText"]],
+            "selected": None,
+            "mathText": None,
+            "strictFormat": False,
+            "formatCompliant": False,
+            "answerMarkerUsed": "conflict",
+            "reason": "conflicting_answer_and_text",
+            "candidates": candidates,
+        }
+    if text_cand and boxed_cand and not _canonically_equal(text_cand["mathText"], boxed_cand["mathText"]):
+        return {
+            "status": "ambiguous",
+            "answers": [text_cand["mathText"], boxed_cand["mathText"]],
+            "selected": None,
+            "mathText": None,
+            "strictFormat": False,
+            "formatCompliant": False,
+            "answerMarkerUsed": "conflict",
+            "reason": "conflicting_text_and_boxed",
+            "candidates": candidates,
+        }
+
+    if answer_cand and text_cand and boxed_cand:
+        chosen = answer_cand
+        marker = "all_agree"
+    elif answer_cand and boxed_cand:
         chosen = answer_cand
         marker = "both_agree"
+    elif answer_cand and text_cand:
+        chosen = answer_cand
+        marker = "answer_and_text_agree"
+    elif text_cand and boxed_cand:
+        chosen = text_cand
+        marker = "text_and_boxed_agree"
     elif answer_cand:
         chosen = answer_cand
         marker = "answer_line"
+    elif text_cand:
+        chosen = text_cand
+        marker = "text_answer"
     else:
         chosen = boxed_cand  # type: ignore[assignment]
         marker = "boxed"

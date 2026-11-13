@@ -23,6 +23,9 @@ DEFAULT_ALPHA = 0.05
 DEFAULT_BOOTSTRAP_REPS = 5000
 # Policy floor for promotion (absolute accuracy points); recorded separately from MDI.
 DEFAULT_PROMOTION_POLICY_FLOOR = 0.02
+# Minimum practically meaningful improvement — distinct from statistical detectability.
+# The 24-item zero-flip MDI (~21.24%) is NOT an automatic promotion threshold.
+DEFAULT_PRACTICAL_MEANINGFUL_IMPROVEMENT = 0.05
 
 
 def clamp01(value: float) -> float:
@@ -356,29 +359,43 @@ def model_promotion_threshold(
     *,
     mdi: float,
     policy_floor: float = DEFAULT_PROMOTION_POLICY_FLOOR,
+    practical_meaningful: float = DEFAULT_PRACTICAL_MEANINGFUL_IMPROVEMENT,
     variability_ci_halfwidth: float | None = None,
+    noise_floor_kind: str = "same_seed_backend_nondeterminism",
 ) -> dict[str, Any]:
     """Actual threshold adapters must beat — distinct from planning MDI.
 
-    promotion_threshold = max(MDI, policy_floor, optional CI half-width).
+    Statistical detectability (MDI) and practical meaningfulness are separated:
+    ``promotion_threshold = max(MDI, practical_meaningful, policy_floor[, CI half-width])``.
+
+    The stratified 24-item zero-flip MDI (~21.24%) is **not** automatically the
+    promotion threshold for full-development runs; full-dev noise floors replace it.
     """
-    parts = [float(mdi), float(policy_floor)]
+    parts = [float(mdi), float(policy_floor), float(practical_meaningful)]
     if variability_ci_halfwidth is not None:
         parts.append(float(variability_ci_halfwidth))
     value = max(parts)
     return {
         "modelPromotionThreshold": value,
+        "minimumPracticallyMeaningfulImprovement": float(practical_meaningful),
+        "statisticalDetectabilityMdi": float(mdi),
+        "noiseFloorKindComparedAgainst": noise_floor_kind,
         "inputs": {
             "mdi": float(mdi),
             "policyFloor": float(policy_floor),
+            "practicalMeaningful": float(practical_meaningful),
             "variabilityCiHalfwidth": variability_ci_halfwidth,
         },
-        "rule": "max(MDI, policy_floor[, bootstrap_|CI|_halfwidth])",
+        "rule": (
+            "max(MDI, practical_meaningful, policy_floor[, bootstrap_CI_halfwidth]); "
+            "do not treat the 24-item 21.24% bound as an automatic full-dev threshold."
+        ),
         "layer": "model_promotion_threshold",
         "note": (
             "Promotion requires observed paired improvement > this threshold with "
             "McNemar (or item-clustered paired test) significant at alpha; "
-            "inconclusive → do not promote."
+            "inconclusive → do not promote. Base-vs-adapter uses the same seed "
+            "schedule; state which noise floor (same-seed vs alternate-seed) applies."
         ),
         "methodsVersion": STAT_METHODS_VERSION,
     }
@@ -438,6 +455,7 @@ def compare_identical_runs(
     promo = model_promotion_threshold(
         mdi=mdi["minimumDetectableImprovement"],
         variability_ci_halfwidth=half,
+        noise_floor_kind="same_seed_backend_nondeterminism",
     )
 
     fam_rows_a = [{"family": ia[k].get("family"), "correct": ia[k].get("correct")} for k in keys]

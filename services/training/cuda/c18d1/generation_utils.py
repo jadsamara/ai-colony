@@ -8,12 +8,14 @@ from __future__ import annotations
 
 from typing import Any
 
-EVAL_IMPLEMENTATION_VERSION = "c18d1-batched-eval-v6"
+EVAL_IMPLEMENTATION_VERSION = "c18d1-batched-eval-v7"
 # Primary evaluator for Stage A/B development baselines and base-vs-adapter eval.
 PRIMARY_EVAL_BACKEND = "vllm-batched"
-OFFICIAL_BACKEND = PRIMARY_EVAL_BACKEND  # alias used by existing report writers
+# Alias retained for older call sites; prefer PRIMARY_EVAL_BACKEND / REFERENCE_BACKEND.
+OFFICIAL_BACKEND = PRIMARY_EVAL_BACKEND
 # Independent exact cross-check (same pins/prompts/conditions); not the primary path.
 REFERENCE_BACKEND = "huggingface-batched"
+HF_BACKEND_ID = REFERENCE_BACKEND
 EXPERIMENTAL_BACKENDS = ()  # historical; vLLM is primary under statistical gate v1
 PROMPT_INSTRUCTION_VERSION = "c18d1-answer-instruction-v2"
 STATISTICAL_GATE_VERSION = "c18d1-statistical-eval-v1"

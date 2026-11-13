@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Deterministic SymPy grading for C1.8D.1 algebra (grader v3.1).
+"""Deterministic SymPy grading for C1.8D.1 algebra (grader v3.2).
 
 Separates mathematical accuracy from format compliance.
 LLM judges are forbidden as the sole source of correctness.
 
 v3.1: interval endpoints compare via symbolic equality (Float −0.5 ≡ Rational −1/2).
+v3.2: answer_parser recognizes ``\\text{ANSWER: ...}`` markers (math vs format still split).
 Historical reports under older graderVersion strings must not be silently rescored.
 """
 
@@ -86,6 +87,15 @@ def _split_root_list(text: str) -> list[str]:
     cleaned = _normalize_text(text)
     if cleaned.startswith("{") and cleaned.endswith("}"):
         cleaned = cleaned[1:-1]
+    # Parenthesized multi-root lists: "(4, 8)" → "4, 8".
+    # Do not unwrap interval-like forms (-oo, a) / (a, oo).
+    if cleaned.startswith("(") and cleaned.endswith(")") and "," in cleaned:
+        inner = cleaned[1:-1].strip()
+        left_s, _, right_s = inner.partition(",")
+        left_n = _normalize_text(left_s).lower()
+        right_n = _normalize_text(right_s).lower()
+        if left_n not in {"-oo", "+-oo"} and right_n not in {"oo", "+oo"}:
+            cleaned = inner
     if not cleaned:
         return []
     parts: list[str] = []
@@ -224,6 +234,13 @@ def canonical_answer_key(answer_text: str | None) -> dict[str, Any]:
         return {"ok": True, "key": "no_solution", "kind": "no_solution"}
     if low in ALL_REALS_TOKENS or text in {"(-oo, oo)", "R"}:
         return {"ok": True, "key": "all_reals", "kind": "all_reals"}
+    # Bracketed interval forms before multi-root / expression parse.
+    iv = _try_parse_interval(text)
+    if iv is not None:
+        lo = "(" if iv.left_open else "["
+        ro = ")" if iv.right_open else "]"
+        key = f"interval:{lo}{iv.left},{iv.right}{ro}"
+        return {"ok": True, "key": key, "kind": "interval"}
     # Prefer multi-root set when commas present at depth 0.
     parts = _split_root_list(text)
     if len(parts) > 1:
@@ -232,13 +249,6 @@ def canonical_answer_key(answer_text: str | None) -> dict[str, Any]:
             return {"ok": True, "key": "roots:" + ",".join(roots), "kind": "roots"}
         except Exception:
             return {"ok": False, "key": None, "kind": "unparseable"}
-    # Bracketed interval forms before generic expression (Tuple) parse.
-    iv = _try_parse_interval(text)
-    if iv is not None:
-        lo = "(" if iv.left_open else "["
-        ro = ")" if iv.right_open else "]"
-        key = f"interval:{lo}{iv.left},{iv.right}{ro}"
-        return {"ok": True, "key": key, "kind": "interval"}
     try:
         expr = sp.simplify(_parse_expr(text))
         return {"ok": True, "key": "expr:" + str(expr), "kind": "expression"}

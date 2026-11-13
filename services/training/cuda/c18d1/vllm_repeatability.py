@@ -168,7 +168,7 @@ def run_vllm_repeatability(job: dict[str, Any]) -> dict[str, Any]:
 
     started = time.time()
     try:
-        llm = load_vllm_engine(pin)
+        llm, _engine_meta = load_vllm_engine(pin)
     except Exception as exc:  # noqa: BLE001
         report = {
             "ok": False,

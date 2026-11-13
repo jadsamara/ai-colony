@@ -58,6 +58,17 @@ So a rise from 21.24% to 31.84% means the latest identical-run pair had **3 item
 
 vLLM at `gpu_memory_utilization≈0.92` can reserve ~88 GiB of 96 GiB (large KV cache). Cross-backend **must** finish and exit the vLLM process before loading HF in `.venv-gpu`. See `shutdown_vllm_engine` and `scripts/c18d1-gpu-cross-backend` phases `vllm` → `hf` → `compare`.
 
+## Configuration changelog (intentional)
+
+| Change | Version | Note |
+|---|---|---|
+| Grader recognizes `\\text{ANSWER: ...}` | `c18d1-grader-v3.2` | Math may be correct while formatCompliant stays false; do not rescore old reports |
+| Thinking-disabled `maxNewTokens` 512→2048 | `c18d1-decoding-v2` | v1 (512) preserved as `THINKING_DISABLED_V1` |
+| HF report backend label | reference = `huggingface-batched` | Must never be labeled `vllm-batched` |
+| Full-dev noise floor | same-seed + alternate-seed (thinking) | 24-item 21.24% MDI is **not** automatic promotion threshold; practical meaningful improvement is separate |
+
+Base-vs-adapter comparisons use the **same seed schedule** and are judged against the **same-seed** noise floor.
+
 ## Adapter claims
 
 - Base and adapter evaluated in the **same session**, same backend; adapter via vLLM LoRA.

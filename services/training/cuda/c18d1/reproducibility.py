@@ -12,12 +12,14 @@ from generation_utils import (
     BATCHING_POLICY,
     EVAL_IMPLEMENTATION_VERSION,
     OFFICIAL_BACKEND,
+    PRIMARY_EVAL_BACKEND,
     PROMPT_INSTRUCTION_VERSION,
+    REFERENCE_BACKEND,
 )
 from answer_parser import GRADER_VERSION
 
 
-MANIFEST_VERSION = "c18d1-repro-manifest-v1"
+MANIFEST_VERSION = "c18d1-repro-manifest-v2"
 
 
 def file_sha256(path: Path) -> str | None:
@@ -49,8 +51,13 @@ def build_reproducibility_manifest(
         "evaluationImplementationVersion": EVAL_IMPLEMENTATION_VERSION,
         "graderVersion": GRADER_VERSION,
         "promptInstructionVersion": PROMPT_INSTRUCTION_VERSION,
+        "primaryEvalBackend": PRIMARY_EVAL_BACKEND,
+        "referenceBackend": REFERENCE_BACKEND,
+        # officialBackend retained as alias of primary for older readers.
         "officialBackend": OFFICIAL_BACKEND,
         "backend": backend,
+        "backendIsPrimary": backend == PRIMARY_EVAL_BACKEND,
+        "backendIsReference": backend == REFERENCE_BACKEND,
         "backendIsOfficial": backend == OFFICIAL_BACKEND,
         "modelId": pinned.get("modelId"),
         "tokenizerId": pinned.get("tokenizerId"),

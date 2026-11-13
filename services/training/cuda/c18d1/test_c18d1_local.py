@@ -254,6 +254,87 @@ def test_grader_core() -> None:
     assert grade_answer(r"(9)/(4)", {"kind": "roots", "values": ["9/4"]})["correct"] is True
 
 
+def test_grader_v32_text_answer_markers() -> None:
+    """Five previously invalid \\text{ANSWER:} forms + negative cases."""
+    from answer_parser import GRADER_VERSION_PREVIOUS
+    from generation_utils import HF_BACKEND_ID
+
+    assert GRADER_VERSION == "c18d1-grader-v3.2"
+    assert GRADER_VERSION_PREVIOUS == "c18d1-grader-v3.1"
+
+    positives = [
+        (r"\text{ANSWER: } (4, 8)", {"kind": "roots", "values": ["4", "8"]}),
+        (r"\text{ANSWER: no solution}", {"kind": "no_solution"}),
+        (
+            r"\text{ANSWER: } (-oo, -1/2)",
+            {"kind": "interval", "left": "-oo", "right": "-1/2", "leftOpen": True, "rightOpen": True},
+        ),
+        (r"$\text{ANSWER: } 9/4$", {"kind": "roots", "values": ["9/4"]}),
+        (r"\text{ANSWER: } all real numbers", {"kind": "all_reals"}),
+    ]
+    for raw, expected in positives:
+        graded = grade_model_output(raw, expected, enable_thinking=False)
+        assert graded["outcome"] == "correct", raw
+        assert graded["mathematicalCorrect"] is True
+        assert graded["formatCompliant"] is False  # not bare ANSWER:
+        assert graded["answerMarkerUsed"] == "text_answer"
+        assert graded["graderVersion"] == GRADER_VERSION
+        assert graded["invalidReason"] is None
+
+    # Thinking-enabled: marker only after </think>
+    graded = grade_model_output(
+        "<think>noise \\text{ANSWER: } 99</think>\n\\text{ANSWER: } 3",
+        {"kind": "roots", "values": ["3"]},
+        enable_thinking=True,
+    )
+    assert graded["outcome"] == "correct"
+
+    negatives = [
+        r"\text{HINT: } (4, 8)",
+        r"\text{ANS: } 4",
+        r"\text{answer is } 4",
+        "The answer is (4, 8)",
+        r"\textbf{ANSWER: } 4",  # not \text
+    ]
+    for raw in negatives:
+        parsed = parse_model_output(raw, enable_thinking=False)
+        assert parsed["ok"] is False, raw
+        assert parsed["parseStatus"] in {"missing", "empty", "malformed"}
+
+    # Conflict: bare ANSWER vs disagreeing \text{ANSWER:}
+    graded = grade_model_output(
+        "ANSWER: 1\n\\text{ANSWER: } 2",
+        {"kind": "roots", "values": ["1"]},
+        enable_thinking=False,
+    )
+    assert graded["outcome"] == "invalid"
+
+    # Shared grader for vLLM + HF paths
+    import vllm_eval
+    import batched_eval
+    import sympy_grader as sg
+
+    assert vllm_eval.GRADER_VERSION == GRADER_VERSION == sg.GRADER_VERSION
+    assert "grade_model_output" in batched_eval.__dict__.get("__all__", []) or hasattr(
+        batched_eval, "grade_model_output",
+    ) or "from sympy_grader import grade_model_output" in Path(
+        batched_eval.__file__,
+    ).read_text(encoding="utf-8")
+    assert "from sympy_grader import grade_model_output" in Path(vllm_eval.__file__).read_text(encoding="utf-8")
+
+    # HF report must not be labeled vllm-batched
+    src = Path(ROOT / "backend_benchmark.py").read_text(encoding="utf-8")
+    # run_hf_benchmark return uses REFERENCE_BACKEND, not OFFICIAL_BACKEND for backend id
+    assert '"backend": REFERENCE_BACKEND' in src or "'backend': REFERENCE_BACKEND" in src
+    assert HF_BACKEND_ID == "huggingface-batched"
+    # Guard against regression: HF return block must not assign OFFICIAL_BACKEND to backend
+    import re as _re
+
+    hf_fn = src[src.index("def run_hf_benchmark") : src.index("def run_vllm_benchmark")]
+    assert "REFERENCE_BACKEND" in hf_fn
+    assert not _re.search(r'"backend":\s*OFFICIAL_BACKEND', hf_fn)
+
+
 def test_interval_float_vs_rational_endpoints() -> None:
     """Regression: (-∞, -0.5) must grade correct vs expected Rational -1/2.
 
@@ -468,12 +549,17 @@ def test_batch_invariance_metrics() -> None:
 
     assert BATCHING_POLICY["baseAndAdapterIdenticalBatching"] is True
     assert BATCHING_POLICY["batchInvarianceGateVersion"] == GATE_VERSION_V3
-    assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v6"
+    assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v7"
     assert PRIMARY_EVAL_BACKEND == "vllm-batched"
     assert OFFICIAL_BACKEND == PRIMARY_EVAL_BACKEND
     assert REFERENCE_BACKEND == "huggingface-batched"
     assert STATISTICAL_GATE_VERSION == "c18d1-statistical-eval-v1"
-    assert GRADER_VERSION == "c18d1-grader-v3.1"
+    assert GRADER_VERSION == "c18d1-grader-v3.2"
+    from decoding import DECODING_CONFIG_VERSION, THINKING_DISABLED, THINKING_DISABLED_V1
+
+    assert DECODING_CONFIG_VERSION == "c18d1-decoding-v2"
+    assert THINKING_DISABLED["maxNewTokens"] == 2048
+    assert THINKING_DISABLED_V1["maxNewTokens"] == 512
 
 
 def test_dev_provenance_valid_and_forged() -> None:
@@ -918,6 +1004,7 @@ def main() -> None:
     test_no_locked_files_tracked_by_git()
     test_prompts_have_no_split_identity()
     test_paired_stats_and_statistical_gate()
+    test_grader_v32_text_answer_markers()
     test_interval_float_vs_rational_endpoints()
     test_locked_generator_refuses_without_external_seed()
     print("c18d1 local tests ok")

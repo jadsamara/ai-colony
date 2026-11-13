@@ -138,19 +138,21 @@ export C18D1_SEED=18
 export C18D1_PILOT_LIMIT=24
 ```
 
-### Step 1 — Noise floor (both modes, identical-run ×2)
+### Step 1 — Full-development noise floor (both modes)
 
-Use a **fresh** `C18D1_OUT`. Do not overwrite prior `c18d1-paired-stats-v1` reports.
+Use a **fresh** `C18D1_OUT`. Entire `id_dev.jsonl` (500 items). Grader v3.2 + decoding-v2 (non-thinking 2048).  
+Thinking reports **same-seed** (backend nondeterminism; promotion comparator) and **alternate-seed** (sampling variance).  
+Do **not** treat the stratified 24-item 21.24% MDI as an automatic promotion threshold.
 
 ```bash
-export C18D1_OUT=~/ai-colony/tmp/c18d1/noise-floor-v2-$(date +%Y%m%d-%H%M%S)
-./scripts/c18d1-gpu-noise-floor
+export C18D1_OUT=~/ai-colony/tmp/c18d1/noise-floor-full-dev-$(date +%Y%m%d-%H%M%S)
+./scripts/c18d1-gpu-noise-floor-full-dev
 # review: $C18D1_OUT/noise-floor-report.json
-#   methodsVersion=c18d1-paired-stats-v2
-#   itemLevel layers: observedNoiseFloor, variabilityConfidenceInterval,
-#     minimumDetectableImprovement, modelPromotionThreshold
-#   thinking: independentItemCount=items (not responses×3)
-# STOP — do not continue to cross-backend until reviewed
+#   graderVersion=c18d1-grader-v3.2, decodingConfigVersion=c18d1-decoding-v2
+#   sameSeedNoiseFloor vs alternateSeedNoiseFloor (thinking)
+#   overallModelPromotionThreshold, minimumPracticallyMeaningfulImprovement
+#   truncationByFamily / tokens — STOP for independent review
+# Do NOT start stratified pilot or Stage B until approved
 export C18D1_NOISE_FLOOR_REPORT=$C18D1_OUT/noise-floor-report.json
 ```
 

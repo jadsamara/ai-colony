@@ -15,13 +15,25 @@ from pathlib import Path
 from typing import Any
 
 from answer_parser import GRADER_VERSION
-from decoding import CONDITIONS, matched_job_fields
+from decoding import (
+    CONDITIONS,
+    DECODING_CONFIG_VERSION,
+    alternate_sampling_base_seed,
+    matched_job_fields,
+)
 from generation_utils import (
+    EVAL_IMPLEMENTATION_VERSION,
     PRIMARY_EVAL_BACKEND,
     REFERENCE_BACKEND,
     STATISTICAL_GATE_VERSION,
 )
-from paired_stats import STAT_METHODS_VERSION, STAT_METHODS_VERSION_V1, compare_identical_runs
+from paired_stats import (
+    DEFAULT_PRACTICAL_MEANINGFUL_IMPROVEMENT,
+    STAT_METHODS_VERSION,
+    STAT_METHODS_VERSION_V1,
+    compare_identical_runs,
+    model_promotion_threshold,
+)
 from revisions import PINNED_QWEN3_8B, require_for_baseline, verify_pinned
 from statistical_gate import GATE_ADOPTED_REASON, GATE_VERSION
 from vllm_eval import evaluate_condition_on_engine, _load_jsonl, _write_json
@@ -80,60 +92,143 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
         _write_json(out / "noise-floor-report.json", report)
         return report
 
+    def _run_summary(cond: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "passAt1": cond["accounting"]["passAt1"],
+            "timing": cond["timing"],
+            "truncationByFamily": cond["truncationByFamily"],
+            "prefixArtifactItemSamples": cond["prefixArtifactItemSamples"],
+            "totalGeneratedTokens": cond.get("totalGeneratedTokens"),
+            "tokensPerSecond": cond.get("tokensPerSecond"),
+        }
+
+    def _pair_block(
+        results_a: list[dict[str, Any]],
+        results_b: list[dict[str, Any]],
+        *,
+        kind: str,
+        seed_a: int,
+        seed_b: int,
+    ) -> dict[str, Any]:
+        cmp = compare_identical_runs(results_a, results_b, bootstrap_seed=seed_a)
+        item_level = cmp["itemLevel"]
+        ci = item_level["variabilityConfidenceInterval"]["signedDifferenceCI"]
+        half = 0.5 * abs(float(ci["high"]) - float(ci["low"]))
+        promo = model_promotion_threshold(
+            mdi=item_level["minimumDetectableImprovement"]["minimumDetectableImprovement"],
+            variability_ci_halfwidth=half,
+            noise_floor_kind=kind,
+        )
+        return {
+            "noiseFloorKind": kind,
+            "baseSeedA": seed_a,
+            "baseSeedB": seed_b,
+            "comparison": cmp,
+            "observedNoiseFloor": item_level["observedNoiseFloor"],
+            "variabilityConfidenceInterval": item_level["variabilityConfidenceInterval"],
+            "minimumDetectableImprovement": item_level["minimumDetectableImprovement"],
+            "modelPromotionThreshold": promo,
+            "perFamily": cmp.get("perFamily"),
+        }
+
     by_condition: dict[str, Any] = {}
     wall_t0 = time.time()
     for cid in condition_ids:
         fields = matched_job_fields(CONDITIONS[cid])
         if fields.get("enableThinking") and int(fields["samplesPerProblem"]) < 3:
             fields = {**fields, "samplesPerProblem": 3}
-        runs = []
-        for run_idx in (1, 2):
-            cond = evaluate_condition_on_engine(
+        # Same-seed pair (backend nondeterminism)
+        run1 = evaluate_condition_on_engine(
+            llm=llm,
+            items=items,
+            tokenizer=tokenizer,
+            condition_id=cid,
+            fields=fields,
+            base_seed=seed,
+            build_chat_texts=build_chat_texts,
+            adapter_path=None,
+        )
+        _write_json(
+            out / f"item-results-{cid}-same-seed-run1.json",
+            {"access": "evaluation_only", "noiseFloorKind": "same_seed_backend_nondeterminism", "run": 1, "results": run1["results"]},
+        )
+        run2 = evaluate_condition_on_engine(
+            llm=llm,
+            items=items,
+            tokenizer=tokenizer,
+            condition_id=cid,
+            fields=fields,
+            base_seed=seed,
+            build_chat_texts=build_chat_texts,
+            adapter_path=None,
+        )
+        _write_json(
+            out / f"item-results-{cid}-same-seed-run2.json",
+            {"access": "evaluation_only", "noiseFloorKind": "same_seed_backend_nondeterminism", "run": 2, "results": run2["results"]},
+        )
+        same_seed = _pair_block(
+            run1["results"],
+            run2["results"],
+            kind="same_seed_backend_nondeterminism",
+            seed_a=seed,
+            seed_b=seed,
+        )
+        entry: dict[str, Any] = {
+            "decoding": fields,
+            "decodingConfigVersion": fields.get("decodingConfigVersion", DECODING_CONFIG_VERSION),
+            "samplesPerProblem": int(fields["samplesPerProblem"]),
+            "run1": _run_summary(run1),
+            "run2": _run_summary(run2),
+            "sameSeedNoiseFloor": same_seed,
+            # Primary fields for promotion analysis: same-seed (matches base-vs-adapter schedule).
+            "comparison": same_seed["comparison"],
+            "observedNoiseFloor": same_seed["observedNoiseFloor"],
+            "variabilityConfidenceInterval": same_seed["variabilityConfidenceInterval"],
+            "minimumDetectableImprovement": same_seed["minimumDetectableImprovement"],
+            "modelPromotionThreshold": same_seed["modelPromotionThreshold"],
+            "promotionNoiseFloorKind": "same_seed_backend_nondeterminism",
+            "requestManifestSample": (run1.get("requestManifests") or [None])[0],
+        }
+
+        if fields.get("enableThinking"):
+            alt_seed = alternate_sampling_base_seed(seed)
+            run_alt = evaluate_condition_on_engine(
                 llm=llm,
                 items=items,
                 tokenizer=tokenizer,
                 condition_id=cid,
                 fields=fields,
-                base_seed=seed,
+                base_seed=alt_seed,
                 build_chat_texts=build_chat_texts,
                 adapter_path=None,
             )
             _write_json(
-                out / f"item-results-{cid}-run{run_idx}.json",
-                {"access": "evaluation_only", "run": run_idx, "results": cond["results"]},
+                out / f"item-results-{cid}-alt-seed-run.json",
+                {
+                    "access": "evaluation_only",
+                    "noiseFloorKind": "alternate_seed_sampling_variance",
+                    "baseSeed": alt_seed,
+                    "results": run_alt["results"],
+                },
             )
-            runs.append(cond)
+            alt = _pair_block(
+                run1["results"],
+                run_alt["results"],
+                kind="alternate_seed_sampling_variance",
+                seed_a=seed,
+                seed_b=alt_seed,
+            )
+            entry["alternateSeedNoiseFloor"] = alt
+            entry["alternateSeedRun"] = _run_summary(run_alt)
+            entry["thinkingNoiseFloorNote"] = (
+                "sameSeedNoiseFloor = backend nondeterminism under identical seed schedule "
+                "(used for base-vs-adapter). alternateSeedNoiseFloor = sampling variance "
+                "across different seed schedules (diagnostic; not the default promotion comparator)."
+            )
 
-        cmp = compare_identical_runs(
-            runs[0]["results"],
-            runs[1]["results"],
-            bootstrap_seed=seed,
-        )
-        item_level = cmp["itemLevel"]
-        by_condition[cid] = {
-            "decoding": fields,
-            "samplesPerProblem": int(fields["samplesPerProblem"]),
-            "run1": {
-                "passAt1": runs[0]["accounting"]["passAt1"],
-                "timing": runs[0]["timing"],
-                "truncationByFamily": runs[0]["truncationByFamily"],
-                "prefixArtifactItemSamples": runs[0]["prefixArtifactItemSamples"],
-            },
-            "run2": {
-                "passAt1": runs[1]["accounting"]["passAt1"],
-                "timing": runs[1]["timing"],
-                "truncationByFamily": runs[1]["truncationByFamily"],
-                "prefixArtifactItemSamples": runs[1]["prefixArtifactItemSamples"],
-            },
-            "comparison": cmp,
-            "observedNoiseFloor": item_level["observedNoiseFloor"],
-            "variabilityConfidenceInterval": item_level["variabilityConfidenceInterval"],
-            "minimumDetectableImprovement": item_level["minimumDetectableImprovement"],
-            "modelPromotionThreshold": item_level["modelPromotionThreshold"],
-            "requestManifestSample": (runs[0].get("requestManifests") or [None])[0],
-        }
+        by_condition[cid] = entry
 
-    # Overall: conservative max across conditions (item-level)
+    # Overall: conservative max of same-seed MDIs / promotion thresholds across conditions
     mdis = [
         by_condition[c]["minimumDetectableImprovement"]["minimumDetectableImprovement"]
         for c in condition_ids
@@ -155,11 +250,14 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
         "gateVersion": GATE_VERSION,
         "adoptedReason": GATE_ADOPTED_REASON,
         "statisticalGateVersion": STATISTICAL_GATE_VERSION,
+        "evaluationImplementationVersion": EVAL_IMPLEMENTATION_VERSION,
+        "decodingConfigVersion": DECODING_CONFIG_VERSION,
         "methodsVersion": STAT_METHODS_VERSION,
         "methodsVersionSupersedes": STAT_METHODS_VERSION_V1,
         "preservePriorReports": (
-            "Do not overwrite noise-floor reports written under c18d1-paired-stats-v1; "
-            "use a fresh C18D1_OUT directory for this rerun."
+            "Do not overwrite prior noise-floor reports; use a fresh C18D1_OUT. "
+            "Do not treat the stratified 24-item 21.24% MDI as an automatic full-dev "
+            "promotion threshold."
         ),
         "primaryEvalBackend": PRIMARY_EVAL_BACKEND,
         "referenceBackend": REFERENCE_BACKEND,
@@ -170,6 +268,9 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
         "datasetContentHash": dataset_content_hash(items),
         "developmentProvenance": provenance,
         "itemCount": len(items),
+        "fullDevelopment": bool(job.get("fullDevelopment")) or (
+            manifest_path is None and "id_dev.jsonl" in str(dataset_path)
+        ),
         "seed": seed,
         "samplerImplementation": engine_meta.get("samplerImplementation"),
         "timing": {
@@ -180,19 +281,32 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
         "conditions": by_condition,
         "overallMinimumDetectableImprovement": overall_mdi,
         "overallModelPromotionThreshold": overall_promo,
+        "minimumPracticallyMeaningfulImprovement": DEFAULT_PRACTICAL_MEANINGFUL_IMPROVEMENT,
+        "promotionComparator": (
+            "same_seed_backend_nondeterminism — base-vs-adapter must use the same "
+            "seed schedule; alternate-seed floor is sampling-variance diagnostic only."
+        ),
         "noiseFloorRecorded": True,
         "flipRatesReported": True,
         "artifactsClear": artifacts_clear,
+        "lockedDataAccessed": False,
         "layerDefinitions": {
             "observedNoiseFloor": "Measured identical-run item-level |Δacc| and flip rates",
             "variabilityConfidenceInterval": "Item-clustered paired bootstrap CI on signed Δacc",
-            "minimumDetectableImprovement": "Planning MDI under alpha/power (not promotion alone)",
-            "modelPromotionThreshold": "max(MDI, policy floor, CI half-width) for adapter claims",
+            "minimumDetectableImprovement": "Statistical detectability under alpha/power (planning)",
+            "minimumPracticallyMeaningfulImprovement": (
+                "Separate practical floor; not implied by 24-item MDI alone"
+            ),
+            "modelPromotionThreshold": (
+                "max(MDI, practical_meaningful, policy_floor, CI half-width); "
+                "state noiseFloorKindComparedAgainst"
+            ),
         },
         "note": (
             "Replaces exact repeatability for vLLM primary acceptance. "
             "Equal aggregate accuracies / zero flips are not evidence of zero noise. "
-            "Thinking-mode samples are clustered by item (not 72 independent problems)."
+            "Thinking-mode samples are clustered by item. "
+            f"Grader {GRADER_VERSION}; decoding {DECODING_CONFIG_VERSION}."
         ),
     }
     _write_json(out / "noise-floor-report.json", report)
