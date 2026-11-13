@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""vLLM same-config repeatability + cross-submit invariance diagnostics.
+"""vLLM same-config repeatability diagnostics (HISTORICAL acceptance path).
 
-vLLM continuous batching varies batch composition. This gate reports whether
-same-config repeatability passes for greedy and fixed-seed sampled modes.
-vLLM is NOT eligible as the official backend unless repeatability passes.
+Superseded for primary-backend acceptance by ``c18d1-statistical-eval-v1``
+(see ``noise_floor.py``, ``cross_backend_check.py``, ``statistical_gate.py``).
+This runner is retained for diagnostics; do not treat its
+``eligibleAsOfficialBackend`` as the current promotion criterion.
 
-Does not overwrite HF Gate v3 evidence. Development items only.
+Does not overwrite historical Gate v2/v3 evidence. Development items only.
 """
 
 from __future__ import annotations

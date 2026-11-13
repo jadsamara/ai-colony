@@ -119,87 +119,78 @@ export C18D1_SKIP_INSTALL=1
 
 Gate v3 GPU PASS is recorded in `C1_8D_1_BATCH_INVARIANCE_GATE_V3_GPU_PASS.md` (operator-measured).
 
-## 1d. Development foundation — stratified pilot + vLLM (STOP after review)
+## 1d. vLLM primary — statistical gate sequence (STOP after each)
 
-Do **not** start Stage B/C. Fresh dirs only. Official backend remains HF.
+**Primary backend:** `vllm-batched` (`c18d1-statistical-eval-v1`).  
+**Reference:** `huggingface-batched` (cross-check only).  
+Exact greedy repeatability is **historical** (do not use as primary acceptance).
 
-Generated `tmp/…/selection/stratified_pilot.jsonl` files are accepted only with a verified
-`stratified_selection_manifest.json` bound to `datasets/dev` (shared provenance validator).
-
-If `C18D1_SKIP_INSTALL=1`, ensure the venv already has **sympy** (and torch/transformers);
-scripts run `deps_preflight.py` first.
+Fresh `C18D1_OUT` every run. Development items only. No locked access. No adapter promotion.
 
 ```bash
 cd ~/ai-colony && git pull
-
-# If prior SKIP_INSTALL left sympy missing:
-#   source ~/ai-colony/tmp/c18d1/.venv-gpu/bin/activate
-#   pip install -r services/training/cuda/requirements-c18d1.txt
-
-# Stratified Stage A (HF official) — 10 families × 3 difficulties
-export C18D1_OUT=~/ai-colony/tmp/c18d1/stratified-pilot-$(date +%Y%m%d-%H%M%S)
-export C18D1_PER_CELL=1
-export C18D1_BATCH_SIZE=4
-export C18D1_CONDITION=thinking_disabled_zero_shot
-export C18D1_SKIP_INSTALL=1
-./scripts/c18d1-gpu-stratified-pilot
-# review: $C18D1_OUT/eval/eval-report.json, projections.json, reproducibility-manifest.json
-
-# HF vs vLLM thinking-enabled benchmark (vLLM uses a SEPARATE venv)
-export C18D1_OUT=~/ai-colony/tmp/c18d1/backend-bench-$(date +%Y%m%d-%H%M%S)
-export C18D1_PILOT_LIMIT=8
-export C18D1_MAX_NEW_TOKENS=2048
-export C18D1_SAMPLES_PER_PROBLEM=1
-export C18D1_BACKENDS=huggingface,vllm
 export C18D1_VENV=~/ai-colony/tmp/c18d1/.venv-gpu
 export C18D1_VLLM_VENV=~/ai-colony/tmp/c18d1/.venv-vllm
 export C18D1_VLLM_PYTHON=~/ai-colony/tmp/c18d1/.venv-vllm/bin/python
-export C18D1_SKIP_INSTALL=1   # unset on first vLLM venv create
-./scripts/c18d1-gpu-backend-benchmark
-# review: $C18D1_OUT/backend-benchmark-report.json (graderVersion=c18d1-grader-v3.1)
-
-# vLLM same-config repeatability (C18D1_VLLM_PYTHON only — never .venv-gpu)
-# 24-item isolated run: stratified 10×3 development cells (per-cell=1 → up to 30;
-# LIMIT=24 caps). Pinned Qwen3-8B via pinned_revisions.json; seed=18; HF stays official.
-export C18D1_OUT=~/ai-colony/tmp/c18d1/vllm-isolated-$(date +%Y%m%d-%H%M%S)
-export C18D1_PILOT_LIMIT=24
+export C18D1_PYTHON=~/ai-colony/tmp/c18d1/.venv-gpu/bin/python
+export C18D1_SKIP_INSTALL=1   # unset on first venv create
 export C18D1_SEED=18
-export C18D1_MAX_NEW_TOKENS=512
-export C18D1_VLLM_PYTHON=~/ai-colony/tmp/c18d1/.venv-vllm/bin/python
-export C18D1_SKIP_INSTALL=1
-./scripts/c18d1-gpu-vllm-repeatability
-# review: $C18D1_OUT/vllm-repeatability-report.json
-#   passed / eligibleAsOfficialBackend (reproducibility only — does NOT promote backend)
-#   greedySameConfigRepeatability.coverageNote (agreement ≠ correctness)
-#   officialBackend must remain huggingface-batched
-#   graderVersion on fresh evals: c18d1-grader-v3.1
+export C18D1_PILOT_LIMIT=24
 ```
 
-**STOP** after these three runs for human review. No Stage B/C, locked access, training, or adapter promotion.
-
-## 2. Stage B — full development baselines
+### Step 1 — Noise floor (both modes, identical-run ×2)
 
 ```bash
-cd ~/ai-colony
-export C18D1_OUT=~/ai-colony/tmp/c18d1/dev-baselines-$(date +%Y%m%d-%H%M%S)
-export C18D1_BATCH_SIZE=4
-./scripts/c18d1-gpu-dev-baselines
+export C18D1_OUT=~/ai-colony/tmp/c18d1/noise-floor-$(date +%Y%m%d-%H%M%S)
+./scripts/c18d1-gpu-noise-floor
+# review: $C18D1_OUT/noise-floor-report.json
+#   overallMinimumDetectableImprovement, per-condition flip rates, samplerImplementation
+# STOP — do not continue until reviewed
+export C18D1_NOISE_FLOOR_REPORT=$C18D1_OUT/noise-floor-report.json
 ```
 
-Freeze strongest practical baseline from **development** metrics only. Do not open locked tests.
-
-## 3. Stage C — locked baselines (after freeze)
+### Step 2 — Cross-backend check (vLLM vs HF)
 
 ```bash
-cd ~/ai-colony
-export C18D1_BENCHMARK_FROZEN=1
-export C18D1_LOCKED_DATA_DIR=/var/lib/ai-colony/evaluation/c18d1-locked-v2
-export C18D1_CONDITION=thinking_enabled_zero_shot   # or frozen choice
-export C18D1_OUT=/var/lib/ai-colony/evaluation/c18d1-locked-v2/results/baselines-$(date +%Y%m%d-%H%M%S)
-./scripts/c18d1-gpu-locked-baselines
+export C18D1_OUT=~/ai-colony/tmp/c18d1/cross-backend-$(date +%Y%m%d-%H%M%S)
+export C18D1_CONDITION=thinking_disabled_zero_shot
+# C18D1_NOISE_FLOOR_REPORT must still point at Step 1 report
+./scripts/c18d1-gpu-cross-backend
+# review: $C18D1_OUT/cross-backend-report.json → statisticalGate.passed
+# STOP — do not continue until reviewed
 ```
 
-Publish aggregates only. Keep item-level artifacts under `/var/lib/ai-colony/evaluation/…`.
+### Step 3 — Stratified pilot (vLLM, both modes)
+
+```bash
+export C18D1_OUT=~/ai-colony/tmp/c18d1/vllm-stratified-pilot-$(date +%Y%m%d-%H%M%S)
+export C18D1_PER_CELL=1
+./scripts/c18d1-gpu-vllm-stratified-pilot
+# review: $C18D1_OUT/eval/eval-report.json
+#   conditions.thinking_* truncationByFamily, samplerImplementation, graderVersion=c18d1-grader-v3.1
+# STOP — do not continue until reviewed
+```
+
+### Step 4 — Stage B full development baselines (vLLM)
+
+```bash
+export C18D1_OUT=~/ai-colony/tmp/c18d1/vllm-dev-baselines-$(date +%Y%m%d-%H%M%S)
+./scripts/c18d1-gpu-vllm-dev-baselines
+# review: $C18D1_OUT/eval/eval-report.json (both modes unless C18D1_CONDITION set)
+# STOP — freeze strongest practical baseline from development metrics only
+```
+
+## 2. Stage C — locked (NOT before first adapter)
+
+**Correction:** Stage C locked evaluation runs in the **same session** as the first trained adapter (base and adapter back-to-back on vLLM). Do **not** run locked baselines alone before that.
+
+When ready (after a trained adapter exists):
+
+```bash
+# Same session: base eval → adapter LoRA eval → locked audit under Evaluation ACL
+# Exact job JSON will be provided with the first adapter run; keep locked data under
+# /var/lib/ai-colony/evaluation/c18d1-locked-v2 and publish aggregates only.
+```
 
 ## 4. Phase 0 v3 report
 

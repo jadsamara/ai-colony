@@ -49,26 +49,25 @@ See `C1_8D_1_BATCH_INVARIANCE_GATE_V3.md`. Canonical SymPy answer agreement + gr
 
 **Historical:** Do not silently rescore prior reports; they remain under their recorded `graderVersion`. Fresh runs use `c18d1-grader-v3.1`.
 
-## Repeatability gate coverage (agreement ≠ correctness)
+## Repeatability gate coverage (agreement ≠ correctness) — historical
 
-Gate / vLLM repeatability pass criteria are **cross-run agreement** (graded outcome + canonical answer). They are not an accuracy gate:
+Gate v3 / early vLLM repeatability measured **cross-run agreement**, not accuracy. That path is **superseded** for primary acceptance by `c18d1-statistical-eval-v1` (noise floor + MDI + cross-backend). Historical reports remain unchanged.
 
-- Two runs that both emit `(-∞, -0.5)` and both grade wrong (pre-v3.1) still **agree** → repeatability can pass.
-- Exact-text mismatches without outcome/canonical disagreement are reported and do not alone fail.
-- Batch one-at-a-time vs batched is a composition diagnostic, not alone decisive for official eligibility.
-- `eligibleAsOfficialBackend=true` is a reproducibility signal only; official backend remains `huggingface-batched` until explicit promotion.
+**Current policy:** primary backend = `vllm-batched`; reference = `huggingface-batched`. See `C1_8D_1_STATISTICAL_EVAL_GATE_V1.md`.
 
-## Eval batching policy (`c18d1-batched-eval-v4`)
+## Eval batching policy
 
-Batch size and batch composition are fixed per evaluation configuration. Base and adapter are always evaluated with identical batching. Item order, prompts, grader, decoding, and model revision are fixed for a given eval config.
+Batch size and batch composition are fixed per evaluation configuration. Base and adapter are always evaluated with identical batching. Item order, prompts, grader, decoding, and model revision are fixed for a given eval config. vLLM primary submits one `generate()` per sample index with per-request seeds.
 
 ## Versioning
 
 | Component | Version |
 |-----------|---------|
-| Evaluation implementation | `c18d1-batched-eval-v4` |
-| Batch-invariance gate (current) | `c18d1-batch-invariance-v3` |
-| Batch-invariance gate (preserved) | `c18d1-batch-invariance-v2` |
+| Evaluation implementation | `c18d1-batched-eval-v6` |
+| Statistical gate (current primary) | `c18d1-statistical-eval-v1` |
+| Batch-invariance gate (preserved) | `c18d1-batch-invariance-v3` / `v2` |
+| Primary backend | `vllm-batched` |
+| Reference backend | `huggingface-batched` |
 | Grader (current) | `c18d1-grader-v3.1` |
 | Grader (preserved) | `c18d1-grader-v3` / `c18d1-grader-v2` |
 | Answer instruction | `c18d1-answer-instruction-v2` |

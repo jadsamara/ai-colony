@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Benchmark Hugging Face vs experimental vLLM for thinking-enabled Qwen3-8B.
+"""Benchmark Hugging Face (reference) vs vLLM (primary) for Qwen3-8B.
 
-Official backend remains huggingface-batched. This script never silently
-replaces it. Development items only; no locked access.
+Primary eval is vLLM under statistical gate v1; HF is the cross-check.
+Development items only; no locked access.
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ from generation_utils import (
     EVAL_IMPLEMENTATION_VERSION,
     FINAL_ANSWER_INSTRUCTION,
     OFFICIAL_BACKEND,
+    PRIMARY_EVAL_BACKEND,
+    REFERENCE_BACKEND,
     apply_sampling_seed,
     assert_left_padding,
     build_generate_kwargs,
@@ -315,8 +317,8 @@ def run_vllm_benchmark(
             "vllm": getattr(__import__("vllm"), "__version__", None),
         },
         "eligibilityNote": (
-            "vLLM continuous batching varies batch composition. Not official unless "
-            "same-config repeatability passes (see vllm_repeatability.py)."
+            "vLLM is the primary evaluator under c18d1-statistical-eval-v1 "
+            "(noise floor + cross-backend). Exact repeatability is historical."
         ),
     }
 
@@ -358,6 +360,13 @@ def _run_vllm_via_separate_interpreter(job: dict[str, Any], out: Path) -> dict[s
             "vllmPython": vllm_python,
             "backendStatus": BACKEND_STATUS,
         }
+    # Persist full logs for failure visibility
+    log_dir = out / "vllm-subprocess-logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / "stdout.log").write_text(proc.stdout or "", encoding="utf-8")
+    (log_dir / "stderr.log").write_text(proc.stderr or "", encoding="utf-8")
+    from subprocess_visibility import last_n_lines
+
     if proc.returncode != 0 or not fragment.exists():
         return {
             "backend": VLLM_BACKEND,
@@ -366,6 +375,10 @@ def _run_vllm_via_separate_interpreter(job: dict[str, Any], out: Path) -> dict[s
             "error": f"vllm_subprocess_failed_rc={proc.returncode}",
             "stderr": (proc.stderr or "")[-4000:],
             "stdout": (proc.stdout or "")[-2000:],
+            "stderrLast40Lines": last_n_lines(proc.stderr, 40),
+            "stdoutLast40Lines": last_n_lines(proc.stdout, 40),
+            "stdoutLog": str(log_dir / "stdout.log"),
+            "stderrLog": str(log_dir / "stderr.log"),
             "vllmPython": vllm_python,
             "backendStatus": BACKEND_STATUS,
         }
@@ -425,6 +438,8 @@ def main() -> None:
         "benchmark": "c18d1-backend-benchmark-v2",
         "evaluationImplementationVersion": EVAL_IMPLEMENTATION_VERSION,
         "graderVersion": GRADER_VERSION,
+        "primaryEvalBackend": PRIMARY_EVAL_BACKEND,
+        "referenceBackend": REFERENCE_BACKEND,
         "officialBackend": OFFICIAL_BACKEND,
         "conditionId": job.get("conditionId") or "thinking_enabled_zero_shot",
         "decoding": fields,
@@ -439,8 +454,8 @@ def main() -> None:
         "vllmPython": job.get("vllmPython"),
         "runs": {},
         "note": (
-            "Does not replace official HF backend. Development items only. "
-            "vLLM must run from a separate interpreter (C18D1_VLLM_PYTHON)."
+            "vLLM is primary under statistical gate v1; HF is the cross-check. "
+            "Development items only. vLLM uses C18D1_VLLM_PYTHON."
         ),
     }
 
@@ -503,6 +518,10 @@ def main() -> None:
                 raise SystemExit(2) from exc
         else:
             report["runs"]["vllm"] = _run_vllm_via_separate_interpreter(job, out)
+            if not report["runs"]["vllm"].get("ok", True):
+                report["ok"] = False
+                report["stderrLast40Lines"] = report["runs"]["vllm"].get("stderrLast40Lines")
+                report["stdoutLast40Lines"] = report["runs"]["vllm"].get("stdoutLast40Lines")
 
     # Side-by-side summary when both present
     if "huggingface" in report["runs"] and report["runs"].get("vllm", {}).get("accounting"):
@@ -536,7 +555,10 @@ def main() -> None:
         }
 
     _write_json(out / "backend-benchmark-report.json", report)
-    print(json.dumps({"ok": True, "outputDir": str(out), "backends": list(report["runs"].keys())}, indent=2))
+    print(json.dumps({"ok": report.get("ok", True), "outputDir": str(out), "backends": list(report["runs"].keys())}, indent=2))
+    if not report.get("ok", True):
+        # Failure visibility: last 40 lines already on the vLLM run fragment
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

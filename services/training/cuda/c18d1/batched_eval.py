@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Batched Hugging Face evaluation for C1.8D.1 Math baselines (official backend).
+"""Batched Hugging Face evaluation for C1.8D.1 (independent cross-backend reference).
 
-Official backend: huggingface-batched. vLLM is experimental (see backend_benchmark /
-vllm_repeatability) and must not silently replace this path.
+Primary evaluation backend is vLLM (`vllm_eval.py`) under statistical gate v1.
+This HF path remains the exact cross-check and must not be deleted.
 
 Does not touch production Ollama containers.
 """
@@ -25,7 +25,9 @@ from generation_utils import (
     EVAL_IMPLEMENTATION_VERSION,
     FINAL_ANSWER_INSTRUCTION,
     OFFICIAL_BACKEND,
+    PRIMARY_EVAL_BACKEND,
     PROMPT_INSTRUCTION_VERSION,
+    REFERENCE_BACKEND,
     apply_sampling_seed,
     assert_left_padding,
     build_generate_kwargs,
@@ -331,11 +333,14 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
         "evaluationImplementationVersion": EVAL_IMPLEMENTATION_VERSION,
         "graderVersion": GRADER_VERSION,
         "promptInstructionVersion": PROMPT_INSTRUCTION_VERSION,
-        "backend": OFFICIAL_BACKEND,
+        "backend": REFERENCE_BACKEND,
+        "primaryEvalBackend": PRIMARY_EVAL_BACKEND,
+        "referenceBackend": REFERENCE_BACKEND,
         "vllmUsed": False,
-        "vllmDeferredReason": (
-            "Official backend remains huggingface-batched. vLLM is experimental; "
-            "see backend_benchmark.py / vllm_repeatability.py. Do not silently replace HF."
+        "role": "cross_backend_reference",
+        "note": (
+            "HF batched is the independent cross-check. Primary Stage A/B and "
+            "base-vs-adapter evaluation use vLLM under c18d1-statistical-eval-v1."
         ),
         "model": require_for_baseline({**job, **pin}),
         "pinned": pin,
@@ -411,7 +416,7 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
             batch_size=batch_size,
             dataset_path=dataset_path,
             dataset_content_hash=dataset_content_hash(items),
-            backend=OFFICIAL_BACKEND,
+            backend=REFERENCE_BACKEND,
             template_fingerprint=tmpl_fp,
             condition_id=job["conditionId"],
             seed=base_seed,

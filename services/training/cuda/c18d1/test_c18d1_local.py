@@ -40,6 +40,9 @@ from generation_utils import (
     EVAL_IMPLEMENTATION_VERSION,
     FINAL_ANSWER_INSTRUCTION,
     OFFICIAL_BACKEND,
+    PRIMARY_EVAL_BACKEND,
+    REFERENCE_BACKEND,
+    STATISTICAL_GATE_VERSION,
     apply_sampling_seed,
     build_generate_kwargs,
     filter_unsupported_generate_kwargs,
@@ -465,8 +468,11 @@ def test_batch_invariance_metrics() -> None:
 
     assert BATCHING_POLICY["baseAndAdapterIdenticalBatching"] is True
     assert BATCHING_POLICY["batchInvarianceGateVersion"] == GATE_VERSION_V3
-    assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v5"
-    assert OFFICIAL_BACKEND == "huggingface-batched"
+    assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v6"
+    assert PRIMARY_EVAL_BACKEND == "vllm-batched"
+    assert OFFICIAL_BACKEND == PRIMARY_EVAL_BACKEND
+    assert REFERENCE_BACKEND == "huggingface-batched"
+    assert STATISTICAL_GATE_VERSION == "c18d1-statistical-eval-v1"
     assert GRADER_VERSION == "c18d1-grader-v3.1"
 
 
@@ -689,6 +695,133 @@ def test_prompts_have_no_split_identity() -> None:
             assert "Instance:" not in item["prompt"]
 
 
+def test_paired_stats_and_statistical_gate() -> None:
+    from paired_stats import (
+        adapter_improvement_decision,
+        compare_identical_runs,
+        cross_backend_agreement,
+        graded_outcome_flip_rate,
+        minimum_detectable_improvement,
+        paired_counts,
+        wilson_interval,
+    )
+    from statistical_gate import GATE_VERSION, adapter_claim_gate, gate_pass_statistical_v1
+    from decoding import sampling_seed_schedule
+    from vllm_backend import build_request_manifest, sampling_params_kwargs
+    from subprocess_visibility import last_n_lines
+
+    w = wilson_interval(5, 10)
+    assert 0.0 <= w["low"] <= w["high"] <= 1.0
+    paired = paired_counts([True, True, False, False], [True, False, True, False])
+    assert paired["baselineOnly"] == 1
+    assert paired["candidateOnly"] == 1
+    assert paired["mcnemarPValue"] == 1.0
+
+    flips = graded_outcome_flip_rate(["correct", "wrong", "correct"], ["correct", "correct", "wrong"])
+    assert flips["flipCount"] == 2
+    assert abs(flips["flipRate"] - 2 / 3) < 1e-9
+
+    rows_a = [
+        {"itemId": "a", "sampleIndex": 0, "family": "linear", "correct": True, "outcome": "correct"},
+        {"itemId": "b", "sampleIndex": 0, "family": "linear", "correct": False, "outcome": "wrong"},
+    ]
+    rows_b = [
+        {"itemId": "a", "sampleIndex": 0, "family": "linear", "correct": True, "outcome": "correct"},
+        {"itemId": "b", "sampleIndex": 0, "family": "linear", "correct": True, "outcome": "correct"},
+    ]
+    cmp = compare_identical_runs(rows_a, rows_b)
+    assert cmp["pairedSampleSize"] == 2
+    assert cmp["gradedOutcomeFlips"]["flipCount"] == 1
+    # Equal aggregate accuracy is NOT claimed as zero noise when flips exist
+    assert cmp["absoluteAccuracyDifference"] == 0.5 or cmp["gradedOutcomeFlips"]["flipRate"] > 0
+
+    mdi = minimum_detectable_improvement(
+        noise_abs_accuracy_diff=cmp["absoluteAccuracyDifference"],
+        flip_rate=cmp["gradedOutcomeFlips"]["flipRate"],
+        sample_size=cmp["pairedSampleSize"],
+    )
+    assert mdi["minimumDetectableImprovement"] >= cmp["absoluteAccuracyDifference"]
+    assert "assumptions" in mdi
+
+    decision_ok = adapter_improvement_decision(
+        base_correct=[False] * 20 + [True] * 10,
+        adapter_correct=[True] * 20 + [True] * 10,
+        mdi=0.05,
+        minimum_samples=3,
+    )
+    assert decision_ok["observedImprovement"] > 0.05
+    # May or may not be significant depending on discordant pattern; just check schema
+    assert decision_ok["decision"] in {"improve", "inconclusive"}
+
+    decision_bad = adapter_improvement_decision(
+        base_correct=[True, False, True],
+        adapter_correct=[True, False, True],
+        mdi=0.01,
+    )
+    assert decision_bad["decision"] == "inconclusive"
+    assert decision_bad["inconclusive"] is True
+
+    xb = cross_backend_agreement(
+        vllm_correct=[True, True, False],
+        hf_correct=[True, False, False],
+        noise_floor_abs_diff=0.5,
+    )
+    assert "withinTolerance" in xb
+    assert "nonsignificant" in xb["note"].lower() or "not" in xb["note"].lower()
+
+    gate_ok = gate_pass_statistical_v1(
+        artifacts_clear=True,
+        noise_floor_recorded=True,
+        flip_rates_reported=True,
+        cross_backend_pass=True,
+    )
+    assert gate_ok["passed"] is True
+    assert gate_ok["gateVersion"] == GATE_VERSION == STATISTICAL_GATE_VERSION
+    gate_fail = gate_pass_statistical_v1(
+        artifacts_clear=True,
+        noise_floor_recorded=True,
+        flip_rates_reported=True,
+        cross_backend_pass=False,
+    )
+    assert gate_fail["passed"] is False
+    assert "cross_backend_agreement_failed_or_missing" in gate_fail["blockers"]
+
+    claim = adapter_claim_gate(
+        statistical_gate_passed=True,
+        improvement_decision=decision_bad,
+        same_session_base_adapter=True,
+        samples_per_item_thinking=3,
+    )
+    assert claim["passed"] is False
+
+    # Seed schedule + request manifest integrity
+    assert sampling_seed_schedule(18, 0, 0) != sampling_seed_schedule(18, 1, 0)
+    assert sampling_seed_schedule(18, 0, 0) != sampling_seed_schedule(18, 0, 1)
+    items = [
+        {"id": "x", "prompt": "p1", "expected": {"kind": "roots", "values": ["1"]}},
+        {"id": "y", "prompt": "p2", "expected": {"kind": "roots", "values": ["2"]}},
+    ]
+    fields = {"enableThinking": False, "doSample": True, "temperature": 0.6, "maxNewTokens": 512}
+    man = build_request_manifest(
+        items=items,
+        prompts=["hello", "world"],
+        fields=fields,
+        base_seed=18,
+        sample_index=0,
+    )
+    assert man["batchSubmit"] is True
+    assert man["requestCount"] == 2
+    assert man["requests"][0]["samplingSeed"] == sampling_seed_schedule(18, 0, 0)
+    assert man["requests"][1]["samplingSeed"] == sampling_seed_schedule(18, 1, 0)
+    kwargs = sampling_params_kwargs(fields, seed=42)
+    assert kwargs["seed"] == 42
+    assert kwargs["max_tokens"] == 512
+
+    lines = last_n_lines("\n".join(str(i) for i in range(100)), 40)
+    assert len(lines) == 40
+    assert lines[-1] == "99"
+
+
 def test_locked_generator_refuses_without_external_seed() -> None:
     saved = {
         key: os.environ.pop(key, None)
@@ -724,6 +857,8 @@ def main() -> None:
     test_dataset_minimums_public()
     test_no_locked_files_tracked_by_git()
     test_prompts_have_no_split_identity()
+    test_paired_stats_and_statistical_gate()
+    test_interval_float_vs_rational_endpoints()
     test_locked_generator_refuses_without_external_seed()
     print("c18d1 local tests ok")
 

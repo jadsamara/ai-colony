@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# C1.8D.1 — Stratified Stage A pilot on vLLM primary (both modes).
+# Stop after review. Development only.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+VLLM_PYTHON="${C18D1_VLLM_PYTHON:-${ROOT}/tmp/c18d1/.venv-vllm/bin/python}"
+HF_PYTHON="${C18D1_PYTHON:-${ROOT}/tmp/c18d1/.venv-gpu/bin/python}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/vllm-stratified-pilot-$(date +%Y%m%d-%H%M%S)}"
+PER_CELL="${C18D1_PER_CELL:-1}"
+SEED="${C18D1_SEED:-18}"
+LIMIT="${C18D1_PILOT_LIMIT:-}"
+
+echo "[c18d1] vLLM stratified pilot per_cell=${PER_CELL} out=${OUT}"
+command -v nvidia-smi >/dev/null && nvidia-smi || true
+
+if [[ ! -x "${VLLM_PYTHON}" ]]; then
+  echo "[c18d1] ERROR: C18D1_VLLM_PYTHON not executable" >&2
+  exit 3
+fi
+
+"${HF_PYTHON}" services/training/cuda/c18d1/deps_preflight.py
+"${HF_PYTHON}" services/training/cuda/c18d1/revisions.py --write
+mkdir -p "${OUT}"
+SEL="${OUT}/selection"
+"${HF_PYTHON}" services/training/cuda/c18d1/stratified_selection.py \
+  --dataset services/training/cuda/c18d1/datasets/dev/id_dev.jsonl \
+  --output-dir "${SEL}" \
+  --per-cell "${PER_CELL}" \
+  --seed "${SEED}"
+
+JOB="${OUT}/pilot-job.json"
+python3 - <<PY
+import json
+from pathlib import Path
+pin = json.loads(Path("services/training/cuda/c18d1/pinned_revisions.json").read_text())
+job = {
+  "modelId": pin["modelId"],
+  "tokenizerId": pin["tokenizerId"],
+  "modelRevision": pin["modelRevision"],
+  "tokenizerRevision": pin["tokenizerRevision"],
+  "conditionIds": ["thinking_disabled_zero_shot", "thinking_enabled_zero_shot"],
+  "datasetPath": str(Path("${SEL}/stratified_pilot.jsonl").resolve()),
+  "selectionManifestPath": str(Path("${SEL}/stratified_selection_manifest.json").resolve()),
+  "outputDir": "${OUT}/eval",
+  "device": "cuda",
+  "seed": int("${SEED}"),
+  "accessRole": "evaluation",
+  "departmentId": "00000000-0000-4000-8000-000000000017",
+}
+limit = "${LIMIT}".strip()
+if limit:
+  job["limit"] = int(limit)
+Path("${JOB}").write_text(json.dumps(job, indent=2) + "\n")
+print(json.dumps(job, indent=2))
+PY
+
+set +e
+"${VLLM_PYTHON}" services/training/cuda/c18d1/vllm_eval.py --job "${JOB}"
+RC=$?
+set -e
+echo "[c18d1] eval-report: ${OUT}/eval/eval-report.json (exit=${RC})"
+echo "[c18d1] STOP — review both modes before Stage B."
+exit "${RC}"

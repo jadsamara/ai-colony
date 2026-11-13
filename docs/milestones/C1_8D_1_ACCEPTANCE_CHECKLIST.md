@@ -11,19 +11,22 @@
 - [x] Strict parser + adversarial local tests
 - [x] Locked-access unit tests (Evaluation-only)
 - [x] Tests: no locked files tracked; prompts lack split tags; locked gen refuses without seed
-- [x] Batched HF evaluator implemented (not yet GPU-run)
-- [x] Stage A/B/C scripts + result templates
+- [x] Batched HF evaluator implemented (reference cross-check)
+- [x] vLLM primary eval + statistical gate v1 + noise floor + cross-backend
+- [x] Stage A/B scripts (vLLM) + result templates
 - [x] Autonomous Math training flag remains `false`
 - [x] Production Ollama / DB / volumes untouched by this work
 
 ## Pending GPU acceptance (operator)
 
 - [ ] `./scripts/c18d1-resolve-revisions` on GPU VM
-- [ ] Stage A pilot completes; VRAM / tok/s / truncation recorded
-- [ ] Stage B full development baselines recorded
+- [ ] Noise floor (both modes) + MDI recorded
+- [ ] Cross-backend check passes within noise-floor tolerance
+- [ ] Stratified pilot (vLLM, both modes); truncation per family recorded
+- [ ] Stage B full development baselines (vLLM) recorded
 - [ ] Strongest practical baseline frozen from **dev only**
-- [ ] Stage C locked ID + OOD + regression under frozen config
-- [ ] Metrics include accuracy, uncertainty, invalid/truncated, timing, tokens
+- [ ] Stage C locked ID + OOD + regression **only in same session as first trained adapter**
+- [ ] Metrics include accuracy, uncertainty, invalid/truncated, timing, tokens, samplerImplementation
 - [ ] Copy Phase 0 v3 real report to `C1_8D_PHASE0_GPU_RESULT_V3.json` (do not invent)
 
 ## Must remain false

@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# C1.8D.1 — vLLM vs HF cross-backend check (stratified dev subset).
+# Requires noise-floor report path for tolerance. Stop after review.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+VLLM_PYTHON="${C18D1_VLLM_PYTHON:-${ROOT}/tmp/c18d1/.venv-vllm/bin/python}"
+HF_PYTHON="${C18D1_PYTHON:-${ROOT}/tmp/c18d1/.venv-gpu/bin/python}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/cross-backend-$(date +%Y%m%d-%H%M%S)}"
+LIMIT="${C18D1_PILOT_LIMIT:-24}"
+SEED="${C18D1_SEED:-18}"
+CONDITION="${C18D1_CONDITION:-thinking_disabled_zero_shot}"
+NOISE_REPORT="${C18D1_NOISE_FLOOR_REPORT:?Set C18D1_NOISE_FLOOR_REPORT to noise-floor-report.json}"
+
+echo "[c18d1] cross-backend condition=${CONDITION} limit=${LIMIT} out=${OUT}"
+command -v nvidia-smi >/dev/null && nvidia-smi || true
+
+if [[ ! -x "${VLLM_PYTHON}" ]]; then
+  echo "[c18d1] ERROR: C18D1_VLLM_PYTHON not executable" >&2
+  exit 3
+fi
+if [[ ! -f "${NOISE_REPORT}" ]]; then
+  echo "[c18d1] ERROR: noise floor report missing: ${NOISE_REPORT}" >&2
+  exit 3
+fi
+
+"${HF_PYTHON}" services/training/cuda/c18d1/deps_preflight.py
+"${HF_PYTHON}" services/training/cuda/c18d1/revisions.py --write
+mkdir -p "${OUT}"
+SEL="${OUT}/selection"
+"${HF_PYTHON}" services/training/cuda/c18d1/stratified_selection.py \
+  --dataset services/training/cuda/c18d1/datasets/dev/id_dev.jsonl \
+  --output-dir "${SEL}" \
+  --per-cell 1 \
+  --seed "${SEED}"
+
+JOB="${OUT}/cross-backend-job.json"
+python3 - <<PY
+import json
+from pathlib import Path
+pin = json.loads(Path("services/training/cuda/c18d1/pinned_revisions.json").read_text())
+job = {
+  "modelId": pin["modelId"],
+  "tokenizerId": pin["tokenizerId"],
+  "modelRevision": pin["modelRevision"],
+  "tokenizerRevision": pin["tokenizerRevision"],
+  "conditionId": "${CONDITION}",
+  "datasetPath": str(Path("${SEL}/stratified_pilot.jsonl").resolve()),
+  "selectionManifestPath": str(Path("${SEL}/stratified_selection_manifest.json").resolve()),
+  "outputDir": "${OUT}",
+  "device": "cuda",
+  "batchSize": int("${C18D1_BATCH_SIZE:-4}"),
+  "limit": int("${LIMIT}"),
+  "seed": int("${SEED}"),
+  "hfPython": "${HF_PYTHON}",
+  "noiseFloorReportPath": str(Path("${NOISE_REPORT}").resolve()),
+  "accessRole": "evaluation",
+  "departmentId": "00000000-0000-4000-8000-000000000017",
+}
+Path("${JOB}").write_text(json.dumps(job, indent=2) + "\n")
+print(json.dumps(job, indent=2))
+PY
+
+set +e
+"${VLLM_PYTHON}" services/training/cuda/c18d1/cross_backend_check.py --job "${JOB}"
+RC=$?
+set -e
+echo "[c18d1] cross-backend-report: ${OUT}/cross-backend-report.json (exit=${RC})"
+echo "[c18d1] STOP — review statisticalGate.passed before stratified pilot."
+exit "${RC}"

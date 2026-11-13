@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# C1.8D.1 — Stage B full development baselines on vLLM primary.
+# Stop after review. No locked access. Stage C waits for first adapter session.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+VLLM_PYTHON="${C18D1_VLLM_PYTHON:-${ROOT}/tmp/c18d1/.venv-vllm/bin/python}"
+HF_PYTHON="${C18D1_PYTHON:-${ROOT}/tmp/c18d1/.venv-gpu/bin/python}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/vllm-dev-baselines-$(date +%Y%m%d-%H%M%S)}"
+SEED="${C18D1_SEED:-18}"
+CONDITION="${C18D1_CONDITION:-}"  # empty → both modes
+
+echo "[c18d1] Stage B vLLM dev baselines out=${OUT}"
+command -v nvidia-smi >/dev/null && nvidia-smi || true
+
+if [[ ! -x "${VLLM_PYTHON}" ]]; then
+  echo "[c18d1] ERROR: C18D1_VLLM_PYTHON not executable" >&2
+  exit 3
+fi
+
+"${HF_PYTHON}" services/training/cuda/c18d1/deps_preflight.py
+"${HF_PYTHON}" services/training/cuda/c18d1/revisions.py --write
+mkdir -p "${OUT}"
+
+JOB="${OUT}/baselines-job.json"
+python3 - <<PY
+import json
+from pathlib import Path
+pin = json.loads(Path("services/training/cuda/c18d1/pinned_revisions.json").read_text())
+cond = "${CONDITION}".strip()
+condition_ids = [cond] if cond else ["thinking_disabled_zero_shot", "thinking_enabled_zero_shot"]
+job = {
+  "modelId": pin["modelId"],
+  "tokenizerId": pin["tokenizerId"],
+  "modelRevision": pin["modelRevision"],
+  "tokenizerRevision": pin["tokenizerRevision"],
+  "conditionIds": condition_ids,
+  "datasetPath": str(Path("services/training/cuda/c18d1/datasets/dev/id_dev.jsonl").resolve()),
+  "outputDir": "${OUT}/eval",
+  "device": "cuda",
+  "seed": int("${SEED}"),
+  "accessRole": "evaluation",
+  "departmentId": "00000000-0000-4000-8000-000000000017",
+}
+Path("${JOB}").write_text(json.dumps(job, indent=2) + "\n")
+print(json.dumps(job, indent=2))
+PY
+
+set +e
+"${VLLM_PYTHON}" services/training/cuda/c18d1/vllm_eval.py --job "${JOB}"
+RC=$?
+set -e
+echo "[c18d1] Stage B eval-report: ${OUT}/eval/eval-report.json (exit=${RC})"
+echo "[c18d1] STOP — Stage C (locked) runs only in the same session as the first trained adapter."
+exit "${RC}"
