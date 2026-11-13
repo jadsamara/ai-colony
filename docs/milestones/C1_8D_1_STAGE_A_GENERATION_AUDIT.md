@@ -39,6 +39,25 @@ Operator GPU run under commit `86fc7f7` **failed** (logit diffs ≈0.5–1.5 inc
 
 See `C1_8D_1_BATCH_INVARIANCE_GATE_V3.md`. Canonical SymPy answer agreement + graded-outcome agreement + same-config bs4 repeatability. Logit/KL diagnostics only (no hard logit threshold). Exact text reported, not required.
 
+## Interval float/rational grading defect (grader v3.1)
+
+**Finding:** For inequality expected `{kind:interval, left:-oo, right:-1/2, …}`, model answer `(-∞, -0.5)` was graded wrong under grader ≤v3 despite being mathematically correct.
+
+**Root cause:** Interval grading used SymPy `Interval ==`. Endpoint `-0.5` parsed as `Float` while expected `-1/2` is `Rational`; those intervals are not `==`. Unicode `∞` already normalized to `oo` — this was **not** a documented `-oo/oo` format restriction.
+
+**Fix (grader v3.1):** Parse endpoints via `nsimplify(..., rational=True)` and compare intervals with symbolic endpoint equality (`_intervals_equal`). Canonical keys prefer bracketed interval forms before Tuple expression parse.
+
+**Historical:** Do not silently rescore prior reports; they remain under their recorded `graderVersion`. Fresh runs use `c18d1-grader-v3.1`.
+
+## Repeatability gate coverage (agreement ≠ correctness)
+
+Gate / vLLM repeatability pass criteria are **cross-run agreement** (graded outcome + canonical answer). They are not an accuracy gate:
+
+- Two runs that both emit `(-∞, -0.5)` and both grade wrong (pre-v3.1) still **agree** → repeatability can pass.
+- Exact-text mismatches without outcome/canonical disagreement are reported and do not alone fail.
+- Batch one-at-a-time vs batched is a composition diagnostic, not alone decisive for official eligibility.
+- `eligibleAsOfficialBackend=true` is a reproducibility signal only; official backend remains `huggingface-batched` until explicit promotion.
+
 ## Eval batching policy (`c18d1-batched-eval-v4`)
 
 Batch size and batch composition are fixed per evaluation configuration. Base and adapter are always evaluated with identical batching. Item order, prompts, grader, decoding, and model revision are fixed for a given eval config.
@@ -50,7 +69,8 @@ Batch size and batch composition are fixed per evaluation configuration. Base an
 | Evaluation implementation | `c18d1-batched-eval-v4` |
 | Batch-invariance gate (current) | `c18d1-batch-invariance-v3` |
 | Batch-invariance gate (preserved) | `c18d1-batch-invariance-v2` |
-| Grader | `c18d1-grader-v2` |
+| Grader (current) | `c18d1-grader-v3.1` |
+| Grader (preserved) | `c18d1-grader-v3` / `c18d1-grader-v2` |
 | Answer instruction | `c18d1-answer-instruction-v2` |
 
 Prior Stage A pilot / gate reports must remain untouched; re-runs use fresh output directories.

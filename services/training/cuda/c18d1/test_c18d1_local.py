@@ -251,6 +251,43 @@ def test_grader_core() -> None:
     assert grade_answer(r"(9)/(4)", {"kind": "roots", "values": ["9/4"]})["correct"] is True
 
 
+def test_interval_float_vs_rational_endpoints() -> None:
+    """Regression: (-∞, -0.5) must grade correct vs expected Rational -1/2.
+
+    Pre-v3.1 used SymPy Interval == which treats Float(-0.5) ≠ Rational(-1/2).
+    This is a grading defect, not a documented format restriction (∞ already normalizes).
+    """
+    expected = {
+        "kind": "interval",
+        "left": "-oo",
+        "right": "-1/2",
+        "leftOpen": True,
+        "rightOpen": True,
+    }
+    for ans in (
+        "(-oo, -1/2)",
+        "(-∞, -1/2)",
+        "(-oo, -0.5)",
+        "(-∞, -0.5)",
+        "ANSWER: (-∞, -0.5)",
+    ):
+        if ans.startswith("ANSWER:"):
+            graded = grade_model_output(ans, expected, enable_thinking=False)
+            assert graded["outcome"] == "correct", ans
+            assert graded["graderVersion"] == GRADER_VERSION
+        else:
+            assert grade_answer(ans, expected)["correct"] is True, ans
+
+    # Wrong openness or wrong endpoint still fails.
+    assert grade_answer("(-oo, -0.5]", expected)["correct"] is False
+    assert grade_answer("(-oo, -1)", expected)["correct"] is False
+    assert grade_answer("[-1, 0)", expected)["correct"] is False
+
+    # Canonical equality across float/rational interval forms.
+    assert answers_canonically_equal("(-∞, -0.5)", "(-oo, -1/2)")["equal"] is True
+    assert answers_canonically_equal("(-oo, -0.5)", "(-oo, 0)")["equal"] is False
+
+
 def test_generation_slicing_and_sampling_kwargs() -> None:
     # Simulate left-padded row: pad pad real real | new new
     row = [0, 0, 10, 11, 20, 21]
@@ -430,7 +467,7 @@ def test_batch_invariance_metrics() -> None:
     assert BATCHING_POLICY["batchInvarianceGateVersion"] == GATE_VERSION_V3
     assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v5"
     assert OFFICIAL_BACKEND == "huggingface-batched"
-    assert GRADER_VERSION == "c18d1-grader-v3"
+    assert GRADER_VERSION == "c18d1-grader-v3.1"
 
 
 def test_dev_provenance_valid_and_forged() -> None:

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Deterministic SymPy grading for C1.8D.1 algebra (grader v3).
+"""Deterministic SymPy grading for C1.8D.1 algebra (grader v3.1).
 
 Separates mathematical accuracy from format compliance.
 LLM judges are forbidden as the sole source of correctness.
+
+v3.1: interval endpoints compare via symbolic equality (Float −0.5 ≡ Rational −1/2).
+Historical reports under older graderVersion strings must not be silently rescored.
 """
 
 from __future__ import annotations
@@ -103,6 +106,40 @@ def _split_root_list(text: str) -> list[str]:
     return [p for p in parts if p]
 
 
+def _parse_endpoint(raw: str) -> sp.Expr:
+    """Parse an interval endpoint; prefer exact rationals for finite decimals."""
+    s = _normalize_text(str(raw)).strip()
+    if s in {"-oo", "-∞"}:
+        return -sp.oo
+    if s in {"oo", "∞", "+oo", "+∞"}:
+        return sp.oo
+    expr = _parse_expr(s)
+    try:
+        # -0.5 → -1/2 so Interval construction matches Rational expected ends.
+        return sp.nsimplify(expr, rational=True)
+    except Exception:
+        return expr
+
+
+def _try_parse_interval(text: str) -> sp.Interval | None:
+    inner = _normalize_text(text).strip()
+    if len(inner) < 3 or inner[0] not in "([" or inner[-1] not in ")]":
+        return None
+    left_open = inner[0] == "("
+    right_open = inner[-1] == ")"
+    body = inner[1:-1]
+    try:
+        left_s, right_s = [p.strip() for p in body.split(",", 1)]
+    except ValueError:
+        return None
+    try:
+        left = _parse_endpoint(left_s)
+        right = _parse_endpoint(right_s)
+        return sp.Interval(left, right, left_open=left_open, right_open=right_open)
+    except Exception:
+        return None
+
+
 def parse_expected(expected: dict[str, Any]) -> dict[str, Any]:
     kind = expected["kind"]
     if kind == "roots":
@@ -116,8 +153,8 @@ def parse_expected(expected: dict[str, Any]) -> dict[str, Any]:
         return {
             "kind": "interval",
             "interval": sp.Interval(
-                _parse_expr(str(expected["left"])) if expected["left"] not in {"-oo", "-∞"} else -sp.oo,
-                _parse_expr(str(expected["right"])) if expected["right"] not in {"oo", "∞"} else sp.oo,
+                _parse_endpoint(str(expected["left"])),
+                _parse_endpoint(str(expected["right"])),
                 left_open=bool(expected.get("leftOpen", False)),
                 right_open=bool(expected.get("rightOpen", False)),
             ),
@@ -156,6 +193,21 @@ def _expr_equal(a: sp.Expr, b: sp.Expr) -> bool:
         return False
 
 
+def _endpoint_equal(a: sp.Expr, b: sp.Expr) -> bool:
+    if a in (-sp.oo, sp.oo) or b in (-sp.oo, sp.oo):
+        return a == b
+    return _expr_equal(a, b)
+
+
+def _intervals_equal(got: sp.Interval, want: sp.Interval) -> bool:
+    """True when openness and endpoints match mathematically (not raw SymPy ==)."""
+    if bool(got.left_open) != bool(want.left_open):
+        return False
+    if bool(got.right_open) != bool(want.right_open):
+        return False
+    return _endpoint_equal(got.left, want.left) and _endpoint_equal(got.right, want.right)
+
+
 def canonical_answer_key(answer_text: str | None) -> dict[str, Any]:
     """Stable symbolic key for comparing two model answers without the expected value.
 
@@ -180,21 +232,17 @@ def canonical_answer_key(answer_text: str | None) -> dict[str, Any]:
             return {"ok": True, "key": "roots:" + ",".join(roots), "kind": "roots"}
         except Exception:
             return {"ok": False, "key": None, "kind": "unparseable"}
+    # Bracketed interval forms before generic expression (Tuple) parse.
+    iv = _try_parse_interval(text)
+    if iv is not None:
+        lo = "(" if iv.left_open else "["
+        ro = ")" if iv.right_open else "]"
+        key = f"interval:{lo}{iv.left},{iv.right}{ro}"
+        return {"ok": True, "key": key, "kind": "interval"}
     try:
         expr = sp.simplify(_parse_expr(text))
         return {"ok": True, "key": "expr:" + str(expr), "kind": "expression"}
     except Exception:
-        # Interval-like textual forms
-        try:
-            if text[0] in "([" and text[-1] in ")]":
-                body = text[1:-1]
-                left_s, right_s = [p.strip() for p in body.split(",", 1)]
-                left = -sp.oo if left_s in {"-oo", "-∞"} else sp.simplify(_parse_expr(left_s))
-                right = sp.oo if right_s in {"oo", "∞"} else sp.simplify(_parse_expr(right_s))
-                key = f"interval:{text[0]}{left},{right}{text[-1]}"
-                return {"ok": True, "key": key, "kind": "interval"}
-        except Exception:
-            pass
         return {"ok": False, "key": f"raw:{text}", "kind": "opaque"}
 
 
@@ -217,6 +265,11 @@ def answers_canonically_equal(a: str | None, b: str | None) -> dict[str, Any]:
             equal = _expr_equal(_parse_expr(str(a)), _parse_expr(str(b)))
         except Exception:
             equal = False
+    if not equal and ka["kind"] == "interval" and kb["kind"] == "interval":
+        ia = _try_parse_interval(str(a))
+        ib = _try_parse_interval(str(b))
+        if ia is not None and ib is not None:
+            equal = _intervals_equal(ia, ib)
     return {"equal": bool(equal), "keyA": ka, "keyB": kb}
 
 
@@ -266,20 +319,12 @@ def grade_answer(answer_text: str, expected: dict[str, Any]) -> dict[str, Any]:
         return {"correct": _expr_equal(got, exp["expr"]), "detail": "expression"}
 
     if exp["kind"] == "interval":
-        try:
+        got = _try_parse_interval(text)
+        if got is None:
             if text.startswith("(") or text.startswith("["):
-                inner = text.strip()
-                left_open = inner[0] == "("
-                right_open = inner[-1] == ")"
-                body = inner[1:-1]
-                left_s, right_s = [p.strip() for p in body.split(",", 1)]
-                left = -sp.oo if left_s in {"-oo", "-∞"} else _parse_expr(left_s)
-                right = sp.oo if right_s in {"oo", "∞"} else _parse_expr(right_s)
-                got = sp.Interval(left, right, left_open=left_open, right_open=right_open)
-                return {"correct": got == exp["interval"], "detail": "interval"}
-        except Exception:
-            return {"correct": False, "detail": "unparseable_interval"}
-        return {"correct": False, "detail": "interval_format"}
+                return {"correct": False, "detail": "unparseable_interval"}
+            return {"correct": False, "detail": "interval_format"}
+        return {"correct": _intervals_equal(got, exp["interval"]), "detail": "interval"}
 
     if exp["kind"] == "relation":
         try:

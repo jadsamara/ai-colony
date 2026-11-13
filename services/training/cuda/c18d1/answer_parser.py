@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Final-answer parser for C1.8D.1 Math evaluation (grader v3).
+"""Final-answer parser for C1.8D.1 Math evaluation (grader v3.1).
 
 Never search the reasoning trace. Only the final response region
 (after ``</think>`` when thinking is enabled) is considered.
@@ -28,7 +28,7 @@ ParseStatus = Literal[
     "protocol_violation",
 ]
 
-GRADER_VERSION = "c18d1-grader-v3"
+GRADER_VERSION = "c18d1-grader-v3.1"
 THINK_CLOSE = "</think>"
 THINK_OPEN = "<think>"
 

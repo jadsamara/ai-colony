@@ -61,6 +61,7 @@ def _compare_runs(
     canon_dis = 0
     text_mis = 0
     prefix = 0
+    both_correct = 0
     for item, a, b in zip(items, texts_a, texts_b):
         sa = _summarize(a, item["expected"], enable_thinking=enable_thinking)
         sb = _summarize(b, item["expected"], enable_thinking=enable_thinking)
@@ -69,6 +70,8 @@ def _compare_runs(
         )
         if arts:
             prefix += 1
+        if sa["correct"] and sb["correct"]:
+            both_correct += 1
         outcome_ok = sa["outcome"] == sb["outcome"]
         canon = answers_canonically_equal(sa.get("mathText"), sb.get("mathText"))
         if sa["outcome"] in {"invalid", "truncated"} and sb["outcome"] in {"invalid", "truncated"}:
@@ -104,10 +107,16 @@ def _compare_runs(
         "gradedOutcomeDisagreementCount": outcome_dis,
         "canonicalAnswerDisagreementCount": canon_dis,
         "prefixArtifactItemCount": prefix,
+        "bothRunsCorrectCount": both_correct,
         "differences": diffs[:64],
         "failureRule": (
             "Any graded-outcome or canonical-answer disagreement is a reproducibility failure. "
             "Exact text mismatches are reported but do not alone fail this check."
+        ),
+        "coverageNote": (
+            "Repeatability measures agreement across runs, not absolute correctness. "
+            "Two runs can pass while both grade the same wrong answer (or the same "
+            "grader false-negative). Inspect correct/outcome fields separately for accuracy."
         ),
     }
 
@@ -245,8 +254,11 @@ def run_vllm_repeatability(job: dict[str, Any]) -> dict[str, Any]:
         "eligibleAsOfficialBackend": eligible,
         "eligibilityRule": (
             "vLLM eligible as official only if greedy and fixed-seed sampled "
-            "same-config repeatability both pass (graded outcomes + canonical answers)."
+            "same-config repeatability both pass (graded outcomes + canonical answers). "
+            "Eligibility is a reproducibility signal only; Hugging Face remains the "
+            "official evaluator until an explicit promotion decision. Agreement ≠ correctness."
         ),
+        "officialBackendUnchanged": True,
         "passed": eligible,
         "gateReference": GATE_VERSION_V3,
         "evaluationImplementationVersion": EVAL_IMPLEMENTATION_VERSION,
