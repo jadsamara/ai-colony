@@ -1,0 +1,362 @@
+{
+  "autonomousTrainingUnlocked": true,
+  "autonomousUnlockNote": "Scheduler must independently re-validate counts/bounds; do not trust this boolean alone.",
+  "bothControlsPassedInGatingMode": true,
+  "comparisonMethod": "conservative_worst_case_bounds",
+  "countsAsPhase0Pass": true,
+  "freshAdapters": true,
+  "gatingMode": "thinking_disabled",
+  "generalization": {
+    "gatingMode": {
+      "adapter": {
+        "correct": 100,
+        "countsConsistent": true,
+        "invalid": 0,
+        "invalidRate": 0.0,
+        "lowerBoundAccuracy": 1.0,
+        "noFinalAnswerCount": 0,
+        "observedAccuracy": 1.0,
+        "sampleSize": 100,
+        "truncatedCount": 0,
+        "upperBoundAccuracy": 1.0,
+        "wrong": 0
+      },
+      "adapterFingerprint": "9a067a56ce0aa7e8faff1cbf1ce5d062596e1fc8d2833d921028245f10b4f8dd",
+      "adapterLoaded": true,
+      "adapterLowerBoundAccuracy": 1.0,
+      "adapterWeightsChanged": true,
+      "affectsGate": true,
+      "base": {
+        "correct": 0,
+        "countsConsistent": true,
+        "invalid": 0,
+        "invalidRate": 0.0,
+        "lowerBoundAccuracy": 0.0,
+        "noFinalAnswerCount": 0,
+        "observedAccuracy": 0.0,
+        "sampleSize": 100,
+        "truncatedCount": 0,
+        "upperBoundAccuracy": 0.0,
+        "wrong": 100
+      },
+      "baseUpperBoundAccuracy": 0.0,
+      "checks": {
+        "adapterLoaded": true,
+        "adapterWeightDelta": true,
+        "conservativeImprovementPass": true,
+        "countsConsistent": true,
+        "heldoutLowerBoundPass": true,
+        "sampleSizeOk": true
+      },
+      "conservativeImprovement": 1.0,
+      "diagnosticPassed": true,
+      "matchedDecoding": {
+        "doSample": false,
+        "enableThinking": false,
+        "maxNewTokens": 256
+      },
+      "observedAdapterAccuracy": 1.0,
+      "observedBaseAccuracy": 0.0,
+      "observedImprovement": 1.0,
+      "passed": true,
+      "resolvedModelRevision": null,
+      "resolvedTokenizerRevision": "Qwen/Qwen3-8B",
+      "role": "gating",
+      "sampleSize": 100,
+      "templateFingerprint": {
+        "adapter": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+        "base": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+        "train": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+      },
+      "thinkingMode": "thinking_disabled"
+    },
+    "modes": [
+      {
+        "adapter": {
+          "correct": 100,
+          "countsConsistent": true,
+          "invalid": 0,
+          "invalidRate": 0.0,
+          "lowerBoundAccuracy": 1.0,
+          "noFinalAnswerCount": 0,
+          "observedAccuracy": 1.0,
+          "sampleSize": 100,
+          "truncatedCount": 0,
+          "upperBoundAccuracy": 1.0,
+          "wrong": 0
+        },
+        "adapterFingerprint": "9a067a56ce0aa7e8faff1cbf1ce5d062596e1fc8d2833d921028245f10b4f8dd",
+        "adapterLoaded": true,
+        "adapterLowerBoundAccuracy": 1.0,
+        "adapterWeightsChanged": true,
+        "affectsGate": true,
+        "base": {
+          "correct": 0,
+          "countsConsistent": true,
+          "invalid": 0,
+          "invalidRate": 0.0,
+          "lowerBoundAccuracy": 0.0,
+          "noFinalAnswerCount": 0,
+          "observedAccuracy": 0.0,
+          "sampleSize": 100,
+          "truncatedCount": 0,
+          "upperBoundAccuracy": 0.0,
+          "wrong": 100
+        },
+        "baseUpperBoundAccuracy": 0.0,
+        "checks": {
+          "adapterLoaded": true,
+          "adapterWeightDelta": true,
+          "conservativeImprovementPass": true,
+          "countsConsistent": true,
+          "heldoutLowerBoundPass": true,
+          "sampleSizeOk": true
+        },
+        "conservativeImprovement": 1.0,
+        "diagnosticPassed": true,
+        "matchedDecoding": {
+          "doSample": false,
+          "enableThinking": false,
+          "maxNewTokens": 256
+        },
+        "observedAdapterAccuracy": 1.0,
+        "observedBaseAccuracy": 0.0,
+        "observedImprovement": 1.0,
+        "passed": true,
+        "resolvedModelRevision": null,
+        "resolvedTokenizerRevision": "Qwen/Qwen3-8B",
+        "role": "gating",
+        "sampleSize": 100,
+        "templateFingerprint": {
+          "adapter": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+          "base": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+          "train": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+        },
+        "thinkingMode": "thinking_disabled"
+      }
+    ],
+    "passedInGatingMode": true
+  },
+  "immutableArtifacts": {
+    "generalization": {
+      "adapterFingerprint": "9a067a56ce0aa7e8faff1cbf1ce5d062596e1fc8d2833d921028245f10b4f8dd",
+      "adapterPath": "/home/info/ai-colony/tmp/c18d-phase0/gpu-controls-v3-20261113-171309/generalization_v2/train/adapter",
+      "resolvedModelRevision": null,
+      "resolvedTokenizerRevision": "Qwen/Qwen3-8B",
+      "seed": 18,
+      "templateFingerprint": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+    },
+    "memorization": {
+      "adapterFingerprint": "dc88947a3fd8ff62b8e2af7606bebec24e3397f8d9ec9460b9f2a7313ac7e8a8",
+      "adapterPath": "/home/info/ai-colony/tmp/c18d-phase0/gpu-controls-v3-20261113-171309/memorization/train/adapter",
+      "resolvedModelRevision": null,
+      "resolvedTokenizerRevision": "Qwen/Qwen3-8B",
+      "seed": 18,
+      "templateFingerprint": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+    }
+  },
+  "memorization": {
+    "gatingMode": {
+      "adapter": {
+        "correct": 8,
+        "countsConsistent": true,
+        "invalid": 0,
+        "invalidRate": 0.0,
+        "lowerBoundAccuracy": 1.0,
+        "noFinalAnswerCount": 0,
+        "observedAccuracy": 1.0,
+        "sampleSize": 8,
+        "truncatedCount": 0,
+        "upperBoundAccuracy": 1.0,
+        "wrong": 0
+      },
+      "adapterFingerprint": "dc88947a3fd8ff62b8e2af7606bebec24e3397f8d9ec9460b9f2a7313ac7e8a8",
+      "adapterLoaded": true,
+      "adapterLowerBoundAccuracy": 1.0,
+      "adapterWeightsChanged": true,
+      "affectsGate": true,
+      "base": {
+        "correct": 0,
+        "countsConsistent": true,
+        "invalid": 5,
+        "invalidRate": 0.625,
+        "lowerBoundAccuracy": 0.0,
+        "noFinalAnswerCount": 0,
+        "observedAccuracy": 0.0,
+        "sampleSize": 8,
+        "truncatedCount": 5,
+        "upperBoundAccuracy": 0.625,
+        "wrong": 3
+      },
+      "baseUpperBoundAccuracy": 0.625,
+      "checks": {
+        "adapterLoaded": true,
+        "adapterLowerBoundPass": true,
+        "adapterWeightDelta": true,
+        "countsConsistent": true,
+        "sampleSizeOk": true
+      },
+      "conservativeImprovement": 0.375,
+      "diagnosticPassed": true,
+      "matchedDecoding": {
+        "doSample": false,
+        "enableThinking": false,
+        "maxNewTokens": 256
+      },
+      "observedAdapterAccuracy": 1.0,
+      "observedBaseAccuracy": 0.0,
+      "observedImprovement": 1.0,
+      "passed": true,
+      "resolvedModelRevision": null,
+      "resolvedTokenizerRevision": "Qwen/Qwen3-8B",
+      "role": "gating",
+      "sampleSize": 8,
+      "templateFingerprint": {
+        "adapter": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+        "base": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+        "train": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+      },
+      "thinkingMode": "thinking_disabled"
+    },
+    "modes": [
+      {
+        "adapter": {
+          "correct": 8,
+          "countsConsistent": true,
+          "invalid": 0,
+          "invalidRate": 0.0,
+          "lowerBoundAccuracy": 1.0,
+          "noFinalAnswerCount": 0,
+          "observedAccuracy": 1.0,
+          "sampleSize": 8,
+          "truncatedCount": 0,
+          "upperBoundAccuracy": 1.0,
+          "wrong": 0
+        },
+        "adapterFingerprint": "dc88947a3fd8ff62b8e2af7606bebec24e3397f8d9ec9460b9f2a7313ac7e8a8",
+        "adapterLoaded": true,
+        "adapterLowerBoundAccuracy": 1.0,
+        "adapterWeightsChanged": true,
+        "affectsGate": true,
+        "base": {
+          "correct": 0,
+          "countsConsistent": true,
+          "invalid": 5,
+          "invalidRate": 0.625,
+          "lowerBoundAccuracy": 0.0,
+          "noFinalAnswerCount": 0,
+          "observedAccuracy": 0.0,
+          "sampleSize": 8,
+          "truncatedCount": 5,
+          "upperBoundAccuracy": 0.625,
+          "wrong": 3
+        },
+        "baseUpperBoundAccuracy": 0.625,
+        "checks": {
+          "adapterLoaded": true,
+          "adapterLowerBoundPass": true,
+          "adapterWeightDelta": true,
+          "countsConsistent": true,
+          "sampleSizeOk": true
+        },
+        "conservativeImprovement": 0.375,
+        "diagnosticPassed": true,
+        "matchedDecoding": {
+          "doSample": false,
+          "enableThinking": false,
+          "maxNewTokens": 256
+        },
+        "observedAdapterAccuracy": 1.0,
+        "observedBaseAccuracy": 0.0,
+        "observedImprovement": 1.0,
+        "passed": true,
+        "resolvedModelRevision": null,
+        "resolvedTokenizerRevision": "Qwen/Qwen3-8B",
+        "role": "gating",
+        "sampleSize": 8,
+        "templateFingerprint": {
+          "adapter": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+          "base": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+          "train": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+        },
+        "thinkingMode": "thinking_disabled"
+      }
+    ],
+    "passedInGatingMode": true
+  },
+  "mode": "gpu-controls-v3",
+  "modelId": "Qwen/Qwen3-8B",
+  "note": "On independently validated pass, copy to docs/milestones/C1_8D_PHASE0_GPU_RESULT_V3.json. Gate uses thinking_disabled + conservative bounds; prior v2/v2.1 reports remain unchanged.",
+  "ollamaTouched": false,
+  "phase0Passed": true,
+  "seed": 18,
+  "specVersion": "c18d-phase0-report-v3",
+  "status": "pass",
+  "thinkingEnabledSkipReason": "Default for v3 GPU controls; evaluator retained. v2.1 diagnostic: generalization adapter 85% invalid and memorization adapter 100% invalid in thinking_enabled \u2014 causality not established.",
+  "thinkingEnabledSkipped": true,
+  "thresholdsVersion": "c18d-phase0-thresholds-v3",
+  "timing": {
+    "eval": {
+      "generalization:thinking_disabled:adapter": {
+        "evalMs": 18417,
+        "modelLoadMs": 2970,
+        "runnerWallClockMs": 23931,
+        "wallClockMs": 21388
+      },
+      "generalization:thinking_disabled:base": {
+        "evalMs": 84968,
+        "modelLoadMs": 2581,
+        "runnerWallClockMs": 90071,
+        "wallClockMs": 87549
+      },
+      "memorization:thinking_disabled:adapter": {
+        "evalMs": 1552,
+        "modelLoadMs": 2845,
+        "runnerWallClockMs": 6942,
+        "wallClockMs": 4398
+      },
+      "memorization:thinking_disabled:base": {
+        "evalMs": 26326,
+        "modelLoadMs": 2577,
+        "runnerWallClockMs": 31501,
+        "wallClockMs": 28903
+      }
+    },
+    "evalMsTotal": 131263,
+    "modelLoadMsTotal": 15874,
+    "train": {
+      "generalization": {
+        "modelLoadMs": 2447,
+        "runnerWallClockMs": 85344,
+        "trainMs": 79605,
+        "wallClockMs": 82588
+      },
+      "memorization": {
+        "modelLoadMs": 2454,
+        "runnerWallClockMs": 38189,
+        "trainMs": 32444,
+        "wallClockMs": 35439
+      }
+    },
+    "trainMsTotal": 112049
+  },
+  "trainingConfig": {
+    "batchSize": 1,
+    "enableThinking": false,
+    "generalizationSteps": 200,
+    "gradAccum": 4,
+    "learningRate": 0.0002,
+    "loraAlpha": 16,
+    "loraRank": 8,
+    "maxSeqLen": 192,
+    "memorizationSteps": 80,
+    "unchangedFromV21": true
+  },
+  "v21DiagnosticCarryForward": {
+    "causality": "Do not claim thinking-mode degradation is conclusively caused by training until a properly controlled comparison establishes causality.",
+    "generalizationAdapterInvalidRate": 0.85,
+    "memorizationAdapterInvalidRate": 1.0,
+    "source": "v2.1 GPU thinking_enabled informational eval"
+  },
+  "wallClockMs": 275983
+}
