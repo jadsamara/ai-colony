@@ -92,7 +92,7 @@ def test_parser_adversarial() -> None:
     raw = "<think></think>\nThe solution is clearly 7."
     parsed = parse_model_output(raw, enable_thinking=True)
     assert parsed["ok"] is False
-    assert parsed["reason"] == "no_answer_line"
+    assert parsed["reason"] == "no_answer_marker"
 
     raw = "<think></think>\nANSWER: \\frac{1}{2}"
     parsed = parse_model_output(raw, enable_thinking=True)
@@ -126,11 +126,11 @@ def test_unexpected_think_and_no_answer() -> None:
 
     parsed = parse_model_output("Working...\nThe answer is 3.", enable_thinking=False)
     assert parsed["ok"] is False
-    assert parsed["reason"] == "no_answer_line"
+    assert parsed["reason"] == "no_answer_marker"
 
 
 def test_boxed_and_latex_math_vs_format() -> None:
-    # Math wrappers allowed for mathematical correctness; format compliance separate.
+    # Grader v3: last \boxed{...} OR ANSWER: in the final region.
     graded = grade_model_output(
         r"\boxed{ANSWER: \frac{9}{4}}",
         {"kind": "roots", "values": ["9/4"]},
@@ -140,6 +140,7 @@ def test_boxed_and_latex_math_vs_format() -> None:
     assert graded["mathematicalCorrect"] is True
     assert graded["formatCompliant"] is False
     assert graded["graderVersion"] == GRADER_VERSION
+    assert graded["answerMarkerUsed"] in {"boxed", "both_agree"}
 
     graded = grade_model_output(
         "ANSWER: 9/4",
@@ -148,23 +149,80 @@ def test_boxed_and_latex_math_vs_format() -> None:
     )
     assert graded["outcome"] == "correct"
     assert graded["formatCompliant"] is True
+    assert graded["answerMarkerUsed"] == "answer_line"
 
+    # Bare boxed final (operator failure mode) is mathematically gradable.
     graded = grade_model_output(
-        "$$ANSWER: \\frac{1}{2}$$",
-        {"kind": "roots", "values": ["1/2"]},
+        r"\boxed{(-\infty, -\frac{13}{25}]}",
+        {
+            "kind": "interval",
+            "left": "-oo",
+            "right": "-13/25",
+            "leftOpen": True,
+            "rightOpen": False,
+        },
         enable_thinking=False,
     )
     assert graded["outcome"] == "correct"
     assert graded["formatCompliant"] is False
+    assert graded["answerMarkerUsed"] == "boxed"
 
-    # Bare boxed expression without ANSWER: is not a final answer.
     graded = grade_model_output(
         r"\boxed{\frac{9}{4}}",
         {"kind": "roots", "values": ["9/4"]},
         enable_thinking=False,
     )
+    assert graded["outcome"] == "correct"
+    assert graded["answerMarkerUsed"] == "boxed"
+
+
+def test_grader_v3_adversarial_markers() -> None:
+    # Boxed only in working / pre-final is ignored when thinking separates regions.
+    raw = (
+        "<think>\nWorking with \\boxed{1}\n</think>\n"
+        "Therefore\n\\boxed{(-\\infty, -\\frac{13}{25}]}"
+    )
+    graded = grade_model_output(
+        raw,
+        {
+            "kind": "interval",
+            "left": "-oo",
+            "right": "-13/25",
+            "leftOpen": True,
+            "rightOpen": False,
+        },
+        enable_thinking=True,
+    )
+    assert graded["outcome"] == "correct"
+    assert graded["answerMarkerUsed"] == "boxed"
+
+    # Different boxed in working vs final — only final boxed counts.
+    raw = "<think>\\boxed{99}</think>\n\\boxed{3}"
+    graded = grade_model_output(
+        raw,
+        {"kind": "roots", "values": ["3"]},
+        enable_thinking=True,
+    )
+    assert graded["outcome"] == "correct"
+
+    # ANSWER vs final boxed conflict → invalid
+    graded = grade_model_output(
+        "ANSWER: 1\n\\boxed{2}",
+        {"kind": "roots", "values": ["1"]},
+        enable_thinking=False,
+    )
     assert graded["outcome"] == "invalid"
-    assert graded["invalidReason"] == "no_answer_line"
+    assert graded["invalidReason"] == "conflicting_answer_and_boxed"
+
+    # Canonically agreeing ANSWER + boxed → ok, format may still be compliant via ANSWER
+    graded = grade_model_output(
+        "ANSWER: 9/4\n\\boxed{\\frac{9}{4}}",
+        {"kind": "roots", "values": ["9/4"]},
+        enable_thinking=False,
+    )
+    assert graded["outcome"] == "correct"
+    assert graded["answerMarkerUsed"] == "both_agree"
+    assert graded["formatCompliant"] is True
 
 
 def test_conflicting_and_missing() -> None:
@@ -372,6 +430,7 @@ def test_batch_invariance_metrics() -> None:
     assert BATCHING_POLICY["batchInvarianceGateVersion"] == GATE_VERSION_V3
     assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v5"
     assert OFFICIAL_BACKEND == "huggingface-batched"
+    assert GRADER_VERSION == "c18d1-grader-v3"
 
 
 def test_dev_provenance_valid_and_forged() -> None:

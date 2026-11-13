@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # C1.8D.1 — HF vs experimental vLLM benchmark (thinking-enabled, development only).
+# HF uses C18D1_PYTHON / .venv-gpu. vLLM uses C18D1_VLLM_PYTHON / .venv-vllm only.
 # Does NOT replace the official HF backend. No locked access. No Stage B/C.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
 PYTHON="${C18D1_PYTHON:-python3}"
+VLLM_PYTHON="${C18D1_VLLM_PYTHON:-${ROOT}/tmp/c18d1/.venv-vllm/bin/python}"
 OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/backend-bench-$(date +%Y%m%d-%H%M%S)}"
 VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
+VLLM_VENV="${C18D1_VLLM_VENV:-${ROOT}/tmp/c18d1/.venv-vllm}"
 LIMIT="${C18D1_PILOT_LIMIT:-8}"
 BATCH="${C18D1_BATCH_SIZE:-4}"
 SEED="${C18D1_SEED:-18}"
@@ -16,6 +19,7 @@ SAMPLES="${C18D1_SAMPLES_PER_PROBLEM:-1}"
 BACKENDS="${C18D1_BACKENDS:-huggingface,vllm}"
 
 echo "[c18d1] backend benchmark backends=${BACKENDS} limit=${LIMIT} out=${OUT}"
+echo "[c18d1] HF python=${PYTHON}  vLLM python=${VLLM_PYTHON}"
 command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d1] WARN: nvidia-smi missing"
 
 if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
@@ -24,17 +28,25 @@ if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
   source "${VENV}/bin/activate"
   pip install -U pip
   pip install -r services/training/cuda/requirements-c18d1.txt
-  # Experimental: install vLLM only when requested
-  if [[ "${BACKENDS}" == *vllm* ]]; then
-    pip install "vllm>=0.6.0" || echo "[c18d1] WARN: vllm install failed; HF-only run still valid"
-  fi
   PYTHON="${VENV}/bin/python"
+  if [[ "${BACKENDS}" == *vllm* ]]; then
+    "${PYTHON:-python3}" -m venv "${VLLM_VENV}" || python3 -m venv "${VLLM_VENV}"
+    # shellcheck disable=SC1091
+    source "${VLLM_VENV}/bin/activate"
+    pip install -U pip
+    pip install -r services/training/cuda/requirements-c18d1.txt
+    pip install "vllm>=0.6.0" || echo "[c18d1] WARN: vllm install failed in .venv-vllm"
+    VLLM_PYTHON="${VLLM_VENV}/bin/python"
+    # return to HF venv for selection / HF run
+    # shellcheck disable=SC1091
+    source "${VENV}/bin/activate"
+    PYTHON="${VENV}/bin/python"
+  fi
 fi
 
 "${PYTHON}" services/training/cuda/c18d1/deps_preflight.py
 "${PYTHON}" services/training/cuda/c18d1/revisions.py --write
 mkdir -p "${OUT}"
-# Stratified subset under tmp — accepted only with verified selection manifest
 SEL="${OUT}/selection"
 "${PYTHON}" services/training/cuda/c18d1/stratified_selection.py \
   --dataset services/training/cuda/c18d1/datasets/dev/id_dev.jsonl \
@@ -66,6 +78,8 @@ job = {
   "maxNewTokens": int("${MAX_NEW}"),
   "samplesPerProblem": int("${SAMPLES}"),
   "backends": backends,
+  "hfPython": "${PYTHON}",
+  "vllmPython": "${VLLM_PYTHON}",
   "accessRole": "evaluation",
   "departmentId": "00000000-0000-4000-8000-000000000017",
 }
@@ -74,5 +88,8 @@ print(json.dumps(job, indent=2))
 PY
 
 "${PYTHON}" services/training/cuda/c18d1/backend_benchmark.py --job "${JOB}"
+"${PYTHON}" services/training/cuda/c18d1/projections.py \
+  --from-hf-thinking-pilot \
+  --output "${OUT}/stage-bc-projections.json" || true
 echo "[c18d1] backend benchmark: ${OUT}/backend-benchmark-report.json"
 echo "[c18d1] STOP — review before further work."

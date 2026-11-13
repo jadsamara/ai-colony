@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -307,6 +309,7 @@ def run_vllm_benchmark(
         "totalGeneratedTokens": total_new_tokens,
         "tokensPerSecond": (total_new_tokens / (eval_ms / 1000.0)) if eval_ms else None,
         "peakVramBytes": _peak_vram_bytes(torch),
+        "pythonExecutable": sys.executable,
         "libraries": {
             "torch": torch.__version__,
             "vllm": getattr(__import__("vllm"), "__version__", None),
@@ -318,9 +321,64 @@ def run_vllm_benchmark(
     }
 
 
+def _run_vllm_via_separate_interpreter(job: dict[str, Any], out: Path) -> dict[str, Any]:
+    """Execute vLLM benchmark in C18D1_VLLM_PYTHON — never the HF venv."""
+    vllm_python = job.get("vllmPython") or ""
+    if not vllm_python:
+        return {
+            "backend": VLLM_BACKEND,
+            "official": False,
+            "ok": False,
+            "error": "vllmPython / C18D1_VLLM_PYTHON not set",
+            "backendStatus": BACKEND_STATUS,
+            "note": "vLLM must use a separate venv (e.g. tmp/c18d1/.venv-vllm).",
+        }
+    fragment = out / "vllm-run-fragment.json"
+    child_job = dict(job)
+    child_job["backends"] = ["vllm"]
+    child_job_path = out / "vllm-only-job.json"
+    _write_json(child_job_path, child_job)
+    cmd = [
+        str(vllm_python),
+        str(Path(__file__).resolve()),
+        "--job",
+        str(child_job_path),
+        "--vllm-only",
+        "--write-fragment",
+        str(fragment),
+    ]
+    try:
+        proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    except OSError as exc:
+        return {
+            "backend": VLLM_BACKEND,
+            "official": False,
+            "ok": False,
+            "error": f"failed_to_exec_vllm_python: {exc}",
+            "vllmPython": vllm_python,
+            "backendStatus": BACKEND_STATUS,
+        }
+    if proc.returncode != 0 or not fragment.exists():
+        return {
+            "backend": VLLM_BACKEND,
+            "official": False,
+            "ok": False,
+            "error": f"vllm_subprocess_failed_rc={proc.returncode}",
+            "stderr": (proc.stderr or "")[-4000:],
+            "stdout": (proc.stdout or "")[-2000:],
+            "vllmPython": vllm_python,
+            "backendStatus": BACKEND_STATUS,
+        }
+    payload = json.loads(fragment.read_text(encoding="utf-8"))
+    payload["vllmPython"] = vllm_python
+    return payload
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--job", type=Path, required=True)
+    parser.add_argument("--vllm-only", action="store_true", help="Run only the vLLM backend (separate venv).")
+    parser.add_argument("--write-fragment", type=Path, default=None)
     args = parser.parse_args()
     job = json.loads(args.job.read_text(encoding="utf-8"))
     for key in ("modelId", "modelRevision", "tokenizerRevision"):
@@ -357,11 +415,16 @@ def main() -> None:
     batch_size = int(job.get("batchSize") or 4)
     device = job.get("device") or "cuda"
     backends = job.get("backends") or ["huggingface", "vllm"]
+    if args.vllm_only:
+        backends = ["vllm"]
+
+    from answer_parser import GRADER_VERSION
 
     report: dict[str, Any] = {
         "ok": True,
-        "benchmark": "c18d1-backend-benchmark-v1",
+        "benchmark": "c18d1-backend-benchmark-v2",
         "evaluationImplementationVersion": EVAL_IMPLEMENTATION_VERSION,
+        "graderVersion": GRADER_VERSION,
         "officialBackend": OFFICIAL_BACKEND,
         "conditionId": job.get("conditionId") or "thinking_enabled_zero_shot",
         "decoding": fields,
@@ -372,15 +435,33 @@ def main() -> None:
         "itemCount": len(items),
         "batchSize": batch_size,
         "seed": seed,
+        "hfPython": sys.executable if not args.vllm_only else job.get("hfPython"),
+        "vllmPython": job.get("vllmPython"),
         "runs": {},
-        "note": "Does not replace official HF backend. Development items only.",
+        "note": (
+            "Does not replace official HF backend. Development items only. "
+            "vLLM must run from a separate interpreter (C18D1_VLLM_PYTHON)."
+        ),
     }
 
-    if "huggingface" in backends or "hf" in backends:
+    if ("huggingface" in backends or "hf" in backends) and not args.vllm_only:
         hf = run_hf_benchmark(
             items=items, fields=fields, pin=pin, batch_size=batch_size, seed=seed, device=device,
         )
-        report["runs"]["huggingface"] = {k: v for k, v in hf.items() if k != "results"}
+        hf_public = {k: v for k, v in hf.items() if k != "results"}
+        hf_public["pythonExecutable"] = sys.executable
+        try:
+            import torch as _torch
+            import transformers as _tf
+
+            hf_public["libraries"] = {
+                **(hf_public.get("libraries") or {}),
+                "torch": _torch.__version__,
+                "transformers": _tf.__version__,
+            }
+        except ImportError:
+            pass
+        report["runs"]["huggingface"] = hf_public
         _write_json(out / "hf-item-results.json", {"access": "evaluation_only", "results": hf["results"]})
         report["reproducibility"] = build_reproducibility_manifest(
             pinned=pin,
@@ -392,21 +473,36 @@ def main() -> None:
             template_fingerprint=hf.get("templateFingerprint"),
             condition_id=report["conditionId"],
             seed=seed,
+            extra={"graderVersion": GRADER_VERSION},
         )
 
     if "vllm" in backends:
-        try:
-            vl = run_vllm_benchmark(items=items, fields=fields, pin=pin, seed=seed)
-            report["runs"]["vllm"] = {k: v for k, v in vl.items() if k != "results"}
-            _write_json(out / "vllm-item-results.json", {"access": "evaluation_only", "results": vl["results"]})
-        except Exception as exc:  # noqa: BLE001 — record failure for GPU review
-            report["runs"]["vllm"] = {
-                "backend": VLLM_BACKEND,
-                "official": False,
-                "ok": False,
-                "error": f"{type(exc).__name__}: {exc}",
-                "backendStatus": BACKEND_STATUS,
-            }
+        if args.vllm_only:
+            # Running inside the dedicated vLLM interpreter.
+            try:
+                vl = run_vllm_benchmark(items=items, fields=fields, pin=pin, seed=seed)
+                fragment = {k: v for k, v in vl.items() if k != "results"}
+                fragment["ok"] = True
+                fragment["graderVersion"] = GRADER_VERSION
+                _write_json(out / "vllm-item-results.json", {"access": "evaluation_only", "results": vl["results"]})
+                if args.write_fragment:
+                    _write_json(args.write_fragment, fragment)
+                report["runs"]["vllm"] = fragment
+            except Exception as exc:  # noqa: BLE001
+                fragment = {
+                    "backend": VLLM_BACKEND,
+                    "official": False,
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "backendStatus": BACKEND_STATUS,
+                    "pythonExecutable": sys.executable,
+                }
+                if args.write_fragment:
+                    _write_json(args.write_fragment, fragment)
+                report["runs"]["vllm"] = fragment
+                raise SystemExit(2) from exc
+        else:
+            report["runs"]["vllm"] = _run_vllm_via_separate_interpreter(job, out)
 
     # Side-by-side summary when both present
     if "huggingface" in report["runs"] and report["runs"].get("vllm", {}).get("accounting"):

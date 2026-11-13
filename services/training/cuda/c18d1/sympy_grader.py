@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic SymPy grading for C1.8D.1 algebra (grader v2).
+"""Deterministic SymPy grading for C1.8D.1 algebra (grader v3).
 
 Separates mathematical accuracy from format compliance.
 LLM judges are forbidden as the sole source of correctness.
@@ -303,6 +303,7 @@ def grade_model_output(
         "graderVersion": GRADER_VERSION,
         "parsed": parsed,
         "formatCompliant": bool(parsed.get("formatCompliant")),
+        "answerMarkerUsed": parsed.get("answerMarkerUsed"),
         "thinkingProtocolViolation": bool(parsed.get("thinkingProtocolViolation")),
         "mathematicalCorrect": False,
         "correct": False,

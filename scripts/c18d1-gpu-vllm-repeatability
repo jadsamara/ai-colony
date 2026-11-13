@@ -1,37 +1,54 @@
 #!/usr/bin/env bash
 # C1.8D.1 — vLLM same-config repeatability (greedy + fixed-seed sampled).
+# Uses C18D1_VLLM_PYTHON / .venv-vllm only — never the HF .venv-gpu.
 # Continuous batching varies composition; vLLM is not official unless this passes.
-# Does not overwrite HF Gate v3 evidence. Development only. No Stage B/C.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
-PYTHON="${C18D1_PYTHON:-python3}"
+HF_PYTHON="${C18D1_PYTHON:-python3}"
+VLLM_PYTHON="${C18D1_VLLM_PYTHON:-${ROOT}/tmp/c18d1/.venv-vllm/bin/python}"
 OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/vllm-repeatability-$(date +%Y%m%d-%H%M%S)}"
-VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
+VLLM_VENV="${C18D1_VLLM_VENV:-${ROOT}/tmp/c18d1/.venv-vllm}"
+HF_VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
 LIMIT="${C18D1_PILOT_LIMIT:-24}"
 SEED="${C18D1_SEED:-18}"
 MAX_NEW="${C18D1_MAX_NEW_TOKENS:-512}"
 
 echo "[c18d1] vLLM repeatability limit=${LIMIT} out=${OUT}"
+echo "[c18d1] vLLM python=${VLLM_PYTHON}"
 command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d1] WARN: nvidia-smi missing"
 
 if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
-  "${PYTHON}" -m venv "${VENV}"
+  # HF venv: selection + sympy only
+  "${HF_PYTHON}" -m venv "${HF_VENV}"
   # shellcheck disable=SC1091
-  source "${VENV}/bin/activate"
+  source "${HF_VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-c18d1.txt
+  HF_PYTHON="${HF_VENV}/bin/python"
+  # Separate vLLM venv
+  python3 -m venv "${VLLM_VENV}"
+  # shellcheck disable=SC1091
+  source "${VLLM_VENV}/bin/activate"
   pip install -U pip
   pip install -r services/training/cuda/requirements-c18d1.txt
   pip install "vllm>=0.6.0"
-  PYTHON="${VENV}/bin/python"
+  VLLM_PYTHON="${VLLM_VENV}/bin/python"
 fi
 
-"${PYTHON}" services/training/cuda/c18d1/deps_preflight.py
-"${PYTHON}" services/training/cuda/c18d1/revisions.py --write
+if [[ ! -x "${VLLM_PYTHON}" ]]; then
+  echo "[c18d1] ERROR: C18D1_VLLM_PYTHON not executable: ${VLLM_PYTHON}" >&2
+  echo "  Create ~/ai-colony/tmp/c18d1/.venv-vllm and install vllm there." >&2
+  exit 3
+fi
+
+"${HF_PYTHON}" services/training/cuda/c18d1/deps_preflight.py
+"${VLLM_PYTHON}" -c "import vllm, torch; print('vllm', getattr(vllm,'__version__',None), 'torch', torch.__version__)"
+"${HF_PYTHON}" services/training/cuda/c18d1/revisions.py --write
 mkdir -p "${OUT}"
-# Verified stratified selection (same provenance rules as backend benchmark)
 SEL="${OUT}/selection"
-"${PYTHON}" services/training/cuda/c18d1/stratified_selection.py \
+"${HF_PYTHON}" services/training/cuda/c18d1/stratified_selection.py \
   --dataset services/training/cuda/c18d1/datasets/dev/id_dev.jsonl \
   --output-dir "${SEL}" \
   --per-cell 1 \
@@ -56,6 +73,7 @@ job = {
   "limit": int("${LIMIT}"),
   "seed": int("${SEED}"),
   "maxNewTokens": int("${MAX_NEW}"),
+  "vllmPython": "${VLLM_PYTHON}",
   "accessRole": "evaluation",
   "departmentId": "00000000-0000-4000-8000-000000000017",
 }
@@ -64,7 +82,7 @@ print(json.dumps(job, indent=2))
 PY
 
 set +e
-"${PYTHON}" services/training/cuda/c18d1/vllm_repeatability.py --job "${JOB}"
+"${VLLM_PYTHON}" services/training/cuda/c18d1/vllm_repeatability.py --job "${JOB}"
 RC=$?
 set -e
 echo "[c18d1] vLLM repeatability report: ${OUT}/vllm-repeatability-report.json (exit=${RC})"

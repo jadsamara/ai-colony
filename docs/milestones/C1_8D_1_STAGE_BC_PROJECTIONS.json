@@ -1,0 +1,63 @@
+{
+  "projectionVersion": "c18d1-projections-v2",
+  "ok": true,
+  "flag": "lower_bound_pending_longer_thinking_and_8192_cap",
+  "basis": {
+    "source": "operator_gpu_backend_benchmark_thinking_enabled",
+    "backend": "huggingface-batched",
+    "conditionId": "thinking_enabled_zero_shot",
+    "itemCount": 8,
+    "samplesPerProblem": 1,
+    "sampleSize": 8,
+    "maxNewTokensMeasured": 2048,
+    "correct": 7,
+    "truncated": 0,
+    "tokensPerSecondApprox": 69,
+    "meanGeneratedTokensApprox": 860,
+    "meanSecondsPerSampleApprox": 12.6,
+    "msPerSample": 12600,
+    "note": "Measured on stratified development subset (8 items). Not a full Stage B/C run."
+  },
+  "targets": [
+    {
+      "name": "stage_b_dev",
+      "itemCount": 500,
+      "samplesPerProblem": 1,
+      "sampleSize": 500,
+      "pointEstimateGpuHours": 1.75,
+      "lowGpuHours": 1.225,
+      "highGpuHours": 4.375,
+      "pointEstimateWallClockHours": 1.75,
+      "assumption": "12.6 s/sample × 500; thinking high band ×2.5"
+    },
+    {
+      "name": "stage_b_dev_pass_at_3",
+      "itemCount": 500,
+      "samplesPerProblem": 3,
+      "sampleSize": 1500,
+      "pointEstimateGpuHours": 5.25,
+      "lowGpuHours": 3.675,
+      "highGpuHours": 13.125,
+      "pointEstimateWallClockHours": 5.25,
+      "assumption": "12.6 s/sample × 1500 samples"
+    },
+    {
+      "name": "stage_c_locked_scale",
+      "itemCount": 1300,
+      "samplesPerProblem": 1,
+      "sampleSize": 1300,
+      "pointEstimateGpuHours": 4.55,
+      "lowGpuHours": 3.185,
+      "highGpuHours": 11.375,
+      "pointEstimateWallClockHours": 4.55,
+      "assumption": "12.6 s/sample × 1300; locked scale estimate only — not executed"
+    }
+  ],
+  "caveats": [
+    "Lower bound: measured at max_new_tokens=2048; Stage policy for thinking is 8192 — hard families may run much longer.",
+    "Stratified 8-item subset may under-represent hard-family thinking length.",
+    "Does not invent throughput; scaled from measured ~12.6 s/sample only.",
+    "vLLM not included in this basis (was not installed during the measured HF run).",
+    "No Stage B/C execution has been performed."
+  ]
+}

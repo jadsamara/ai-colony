@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Strict final-answer parser for C1.8D.1 Math evaluation (grader v2).
+"""Final-answer parser for C1.8D.1 Math evaluation (grader v3).
 
-Never search the reasoning trace for a correct answer when the final answer
-is missing. Never silently pick whichever of several answers matches expected.
+Never search the reasoning trace. Only the final response region
+(after ``</think>`` when thinking is enabled) is considered.
 
-Mathematical extraction may unwrap narrowly allowed wrappers around an
-``ANSWER:`` payload. Format compliance requires a bare ``ANSWER:`` line.
+Accepted final-answer markers (v3):
+- a bare ``ANSWER: <expr>`` line, or
+- the **last** ``\\boxed{...}`` in the final region
+
+If both are present and canonically disagree → invalid.
+Format compliance remains the bare ``ANSWER:`` contract and is reported
+separately from mathematical correctness (including which marker was used).
 """
 
 from __future__ import annotations
@@ -23,12 +28,13 @@ ParseStatus = Literal[
     "protocol_violation",
 ]
 
-GRADER_VERSION = "c18d1-grader-v2"
+GRADER_VERSION = "c18d1-grader-v3"
 THINK_CLOSE = "</think>"
 THINK_OPEN = "<think>"
 
 STRICT_ANSWER_LINE = re.compile(r"(?im)^\s*ANSWER:\s*(.+?)\s*$")
 ANSWER_TOKEN = re.compile(r"(?i)ANSWER:\s*(.+)$")
+BOXED_START = re.compile(r"\\boxed\s*\{")
 
 
 def extract_after_thinking(raw: str, *, enable_thinking: bool) -> dict[str, Any]:
@@ -87,106 +93,126 @@ def _strip_math_wrappers(payload: str) -> tuple[str, list[str]]:
                 applied.append(name)
                 changed = True
                 break
-        boxed = re.match(r"^\\boxed\s*\{(.*)\}\s*$", text, flags=re.DOTALL)
-        if boxed:
-            text = boxed.group(1).strip()
-            applied.append("\\boxed")
-            changed = True
+        if text.startswith("\\boxed"):
+            inner = _extract_boxed_at(text, 0)
+            if inner is not None:
+                text = inner.strip()
+                applied.append("\\boxed")
+                changed = True
     return text, applied
 
 
-def _candidate_from_answer_payload(
-    *,
-    raw_line: str,
-    payload: str,
-    wrappers: list[str],
-    source: str,
-) -> dict[str, Any]:
-    inner, extra = _strip_math_wrappers(payload)
-    all_wrappers = [*wrappers, *extra]
-    return {
-        "rawLine": raw_line,
-        "payload": payload,
-        "mathText": inner,
-        "wrappers": all_wrappers,
-        "strictFormat": len(all_wrappers) == 0 and bool(inner),
-        "source": source,
-    }
+def _extract_boxed_at(text: str, start: int) -> str | None:
+    """Extract balanced ``\\boxed{...}`` content starting at ``start`` (at \\boxed)."""
+    match = BOXED_START.match(text, start)
+    if not match:
+        return None
+    i = match.end()
+    depth = 1
+    out: list[str] = []
+    while i < len(text) and depth > 0:
+        ch = text[i]
+        if ch == "{":
+            depth += 1
+            out.append(ch)
+        elif ch == "}":
+            depth -= 1
+            if depth > 0:
+                out.append(ch)
+        else:
+            out.append(ch)
+        i += 1
+    if depth != 0:
+        return None
+    return "".join(out)
 
 
-def _candidate_answer_strings(final_text: str) -> list[dict[str, Any]]:
-    """Collect final-answer candidates that contain an ANSWER: token.
+def extract_all_boxed(final_text: str) -> list[str]:
+    """Return contents of every balanced ``\\boxed{...}`` in the final region only."""
+    text = final_text or ""
+    found: list[str] = []
+    for match in BOXED_START.finditer(text):
+        inner = _extract_boxed_at(text, match.start())
+        if inner is not None:
+            found.append(inner.strip())
+    return found
 
-    Only the final (post-think) region is scanned. Bare boxed expressions
-    without ANSWER: are not accepted — that would interpret non-contract text.
-    """
-    candidates: list[dict[str, Any]] = []
+
+def _payload_from_boxed_inner(inner: str) -> tuple[str, list[str], str]:
+    """Return (math_text, wrappers, source) from boxed inner content."""
+    ans = ANSWER_TOKEN.search(inner)
+    if ans:
+        math_text, extra = _strip_math_wrappers(ans.group(1).strip())
+        return math_text, ["\\boxed", *extra], "boxed_answer_token"
+    math_text, extra = _strip_math_wrappers(inner)
+    return math_text, ["\\boxed", *extra], "boxed_expression"
+
+
+def _answer_lines(final_text: str) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = []
     for line in (final_text or "").splitlines():
         strict = STRICT_ANSWER_LINE.match(line)
-        if strict:
-            candidates.append(
-                _candidate_from_answer_payload(
-                    raw_line=line.strip(),
-                    payload=strict.group(1).strip(),
-                    wrappers=[],
-                    source="strict_answer_line",
-                ),
-            )
+        if not strict:
             continue
-
-        stripped = line.strip()
-        boxed = re.match(r"^\\boxed\s*\{(.*)\}\s*$", stripped, flags=re.DOTALL)
-        if boxed:
-            inner = boxed.group(1).strip()
-            ans = ANSWER_TOKEN.search(inner)
-            if ans:
-                candidates.append(
-                    _candidate_from_answer_payload(
-                        raw_line=stripped,
-                        payload=ans.group(1).strip(),
-                        wrappers=["\\boxed"],
-                        source="boxed_answer_token",
-                    ),
-                )
-            continue
-
-        for pattern, wrapper_name, source in (
-            (r"^\$\$(.*)\$\$$", "$$", "dollar_answer_token"),
-            (r"^\\\[(.*)\\\]$", "\\[\\]", "bracket_answer_token"),
-        ):
-            match = re.match(pattern, stripped, flags=re.DOTALL)
-            if not match:
-                continue
-            inner = match.group(1).strip()
-            ans = ANSWER_TOKEN.search(inner)
-            if ans:
-                candidates.append(
-                    _candidate_from_answer_payload(
-                        raw_line=stripped,
-                        payload=ans.group(1).strip(),
-                        wrappers=[wrapper_name],
-                        source=source,
-                    ),
-                )
-            break
-    return candidates
+        payload = strict.group(1).strip()
+        math_text, wrappers = _strip_math_wrappers(payload)
+        found.append(
+            {
+                "rawLine": line.strip(),
+                "payload": payload,
+                "mathText": math_text,
+                "wrappers": wrappers,
+                "strictFormat": len(wrappers) == 0 and bool(math_text),
+                "source": "strict_answer_line",
+            },
+        )
+    return found
 
 
-def _is_format_compliant(candidates: list[dict[str, Any]]) -> bool:
-    """Exact contract: one or more identical bare ANSWER lines, no wrappers."""
-    if not candidates:
-        return False
-    if any(c.get("wrappers") for c in candidates):
-        return False
-    if not all(c.get("source") == "strict_answer_line" and c.get("strictFormat") for c in candidates):
-        return False
-    math_values = [c["mathText"] for c in candidates]
-    return len(set(math_values)) == 1
+def _canonically_equal(a: str | None, b: str | None) -> bool:
+    from sympy_grader import answers_canonically_equal
+
+    return bool(answers_canonically_equal(a, b)["equal"])
 
 
 def parse_answer_lines(final_text: str) -> dict[str, Any]:
-    """Parse final-answer candidates from the final (post-think) text only."""
-    candidates = _candidate_answer_strings(final_text)
+    """Parse final-answer markers from the final (post-think) text only."""
+    answer_lines = _answer_lines(final_text)
+    boxed_list = extract_all_boxed(final_text)
+    boxed_cand = None
+    if boxed_list:
+        inner = boxed_list[-1]  # last boxed in final region only
+        math_text, wrappers, source = _payload_from_boxed_inner(inner)
+        boxed_cand = {
+            "rawLine": f"\\boxed{{{inner}}}",
+            "payload": inner,
+            "mathText": math_text,
+            "wrappers": wrappers,
+            "strictFormat": False,
+            "source": source,
+        }
+
+    # Conflicting ANSWER lines among themselves → invalid (never pick the lucky one).
+    if answer_lines:
+        unique_answers = list(dict.fromkeys(c["mathText"] for c in answer_lines if c.get("mathText")))
+        if len(unique_answers) > 1:
+            return {
+                "status": "ambiguous",
+                "answers": unique_answers,
+                "selected": None,
+                "mathText": None,
+                "strictFormat": False,
+                "formatCompliant": False,
+                "answerMarkerUsed": "conflict",
+                "reason": "conflicting_answer_lines",
+                "candidates": answer_lines + ([boxed_cand] if boxed_cand else []),
+            }
+        answer_cand = answer_lines[-1]
+    else:
+        answer_cand = None
+
+    candidates = [c for c in (answer_cand, boxed_cand) if c is not None]
+
     if not candidates:
         stripped = (final_text or "").strip()
         if not stripped:
@@ -197,6 +223,7 @@ def parse_answer_lines(final_text: str) -> dict[str, Any]:
                 "mathText": None,
                 "strictFormat": False,
                 "formatCompliant": False,
+                "answerMarkerUsed": None,
                 "reason": "empty_final_text",
                 "candidates": [],
             }
@@ -207,26 +234,35 @@ def parse_answer_lines(final_text: str) -> dict[str, Any]:
             "mathText": None,
             "strictFormat": False,
             "formatCompliant": False,
-            "reason": "no_answer_line",
+            "answerMarkerUsed": None,
+            "reason": "no_answer_marker",
             "finalTextPreview": stripped[:200],
             "candidates": [],
         }
 
-    math_values = [c["mathText"] for c in candidates if c.get("mathText")]
-    unique_math = list(dict.fromkeys(math_values))
-    if len(unique_math) > 1:
-        return {
-            "status": "ambiguous",
-            "answers": unique_math,
-            "selected": None,
-            "mathText": None,
-            "strictFormat": False,
-            "formatCompliant": False,
-            "reason": "conflicting_answer_lines",
-            "candidates": candidates,
-        }
+    if answer_cand and boxed_cand:
+        if not _canonically_equal(answer_cand["mathText"], boxed_cand["mathText"]):
+            return {
+                "status": "ambiguous",
+                "answers": [answer_cand["mathText"], boxed_cand["mathText"]],
+                "selected": None,
+                "mathText": None,
+                "strictFormat": False,
+                "formatCompliant": False,
+                "answerMarkerUsed": "conflict",
+                "reason": "conflicting_answer_and_boxed",
+                "candidates": candidates,
+            }
+        # Agree: prefer ANSWER text for display; marker = both_agree
+        chosen = answer_cand
+        marker = "both_agree"
+    elif answer_cand:
+        chosen = answer_cand
+        marker = "answer_line"
+    else:
+        chosen = boxed_cand  # type: ignore[assignment]
+        marker = "boxed"
 
-    chosen = candidates[-1]
     if not chosen.get("mathText"):
         return {
             "status": "malformed",
@@ -235,19 +271,29 @@ def parse_answer_lines(final_text: str) -> dict[str, Any]:
             "mathText": None,
             "strictFormat": False,
             "formatCompliant": False,
+            "answerMarkerUsed": marker,
             "reason": "empty_answer_payload",
             "candidates": candidates,
         }
+
+    format_compliant = bool(
+        answer_cand
+        and answer_cand.get("strictFormat")
+        and answer_cand.get("source") == "strict_answer_line"
+        and not (answer_cand.get("wrappers")),
+    )
     return {
         "status": "ok",
-        "answers": unique_math,
+        "answers": [chosen["mathText"]],
         "selected": chosen["mathText"],
         "mathText": chosen["mathText"],
         "strictFormat": bool(chosen.get("strictFormat")),
-        "formatCompliant": _is_format_compliant(candidates),
-        "reason": None if len(candidates) == 1 else "multiple_identical_math_answers",
+        "formatCompliant": format_compliant,
+        "answerMarkerUsed": marker,
+        "reason": None,
         "candidates": candidates,
         "wrappers": chosen.get("wrappers") or [],
+        "boxedCountInFinal": len(boxed_list),
     }
 
 
@@ -267,6 +313,7 @@ def parse_model_output(raw: str, *, enable_thinking: bool, truncated: bool = Fal
             "finalText": think.get("finalText") or "",
             "thinkingProtocolViolation": bool(think.get("thinkingProtocolViolation")),
             "formatCompliant": False,
+            "answerMarkerUsed": None,
             "graderVersion": GRADER_VERSION,
         }
     if truncated and not (think.get("finalText") or "").strip():
@@ -282,6 +329,7 @@ def parse_model_output(raw: str, *, enable_thinking: bool, truncated: bool = Fal
             "finalText": "",
             "thinkingProtocolViolation": False,
             "formatCompliant": False,
+            "answerMarkerUsed": None,
             "graderVersion": GRADER_VERSION,
         }
     parsed = parse_answer_lines(str(think["finalText"]))
@@ -299,6 +347,7 @@ def parse_model_output(raw: str, *, enable_thinking: bool, truncated: bool = Fal
             "finalText": think["finalText"],
             "thinkingProtocolViolation": False,
             "formatCompliant": False,
+            "answerMarkerUsed": parsed.get("answerMarkerUsed"),
             "candidates": parsed.get("candidates") or [],
             "graderVersion": GRADER_VERSION,
         }
@@ -314,6 +363,7 @@ def parse_model_output(raw: str, *, enable_thinking: bool, truncated: bool = Fal
         "finalText": think["finalText"],
         "thinkingProtocolViolation": False,
         "formatCompliant": bool(parsed.get("formatCompliant")),
+        "answerMarkerUsed": parsed.get("answerMarkerUsed"),
         "wrappers": parsed.get("wrappers") or [],
         "candidates": parsed.get("candidates") or [],
         "graderVersion": GRADER_VERSION,

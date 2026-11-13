@@ -145,23 +145,27 @@ export C18D1_SKIP_INSTALL=1
 ./scripts/c18d1-gpu-stratified-pilot
 # review: $C18D1_OUT/eval/eval-report.json, projections.json, reproducibility-manifest.json
 
-# HF vs vLLM thinking-enabled benchmark (experimental; does not replace HF)
+# HF vs vLLM thinking-enabled benchmark (vLLM uses a SEPARATE venv)
 export C18D1_OUT=~/ai-colony/tmp/c18d1/backend-bench-$(date +%Y%m%d-%H%M%S)
 export C18D1_PILOT_LIMIT=8
 export C18D1_MAX_NEW_TOKENS=2048
 export C18D1_SAMPLES_PER_PROBLEM=1
 export C18D1_BACKENDS=huggingface,vllm
-export C18D1_SKIP_INSTALL=1
+export C18D1_VENV=~/ai-colony/tmp/c18d1/.venv-gpu
+export C18D1_VLLM_VENV=~/ai-colony/tmp/c18d1/.venv-vllm
+export C18D1_VLLM_PYTHON=~/ai-colony/tmp/c18d1/.venv-vllm/bin/python
+export C18D1_SKIP_INSTALL=1   # unset on first vLLM venv create
 ./scripts/c18d1-gpu-backend-benchmark
-# review: $C18D1_OUT/backend-benchmark-report.json
+# review: $C18D1_OUT/backend-benchmark-report.json (graderVersion=c18d1-grader-v3)
 
-# vLLM same-config repeatability (greedy + fixed-seed sampled)
+# vLLM same-config repeatability (C18D1_VLLM_PYTHON only — never .venv-gpu)
 export C18D1_OUT=~/ai-colony/tmp/c18d1/vllm-repeatability-$(date +%Y%m%d-%H%M%S)
 export C18D1_PILOT_LIMIT=24
 export C18D1_MAX_NEW_TOKENS=512
+export C18D1_VLLM_PYTHON=~/ai-colony/tmp/c18d1/.venv-vllm/bin/python
 export C18D1_SKIP_INSTALL=1
 ./scripts/c18d1-gpu-vllm-repeatability
-# review: eligibleAsOfficialBackend in vllm-repeatability-report.json (pass or fail — report either way)
+# review: eligibleAsOfficialBackend; libraries.vllm / libraries.torch recorded
 ```
 
 **STOP** after these three runs for human review. No Stage B/C, locked access, training, or adapter promotion.

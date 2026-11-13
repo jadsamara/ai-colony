@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -266,6 +267,11 @@ def run_vllm_repeatability(job: dict[str, Any]) -> dict[str, Any]:
         },
         "sampledFixedSeedSameConfigRepeatability": sampled_cmp,
         "elapsedMs": elapsed_ms,
+        "pythonExecutable": sys.executable,
+        "libraries": {
+            "torch": getattr(__import__("torch"), "__version__", None),
+            "vllm": getattr(__import__("vllm"), "__version__", None),
+        },
         "historicalNote": (
             "HF Gate v3 PASS evidence is preserved separately; this report does not overwrite it."
         ),
