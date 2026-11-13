@@ -26,6 +26,21 @@ Exact same-config text/outcome repeatability is **not** the acceptance criterion
 3. Derive a **minimum detectable improvement (MDI)** with documented assumptions (see `paired_stats.minimum_detectable_improvement`).
 4. Equal aggregate accuracies are **not** evidence of zero noise.
 
+### Statistical methods v2 (`c18d1-paired-stats-v2`)
+
+Primary inference units are **items**, not raw responses. Thinking-mode `samplesPerProblem=3` are clustered within item.
+
+Distinguish four layers in every noise-floor report:
+
+| Layer | Meaning |
+|---|---|
+| **Observed noise floor** | Measured item-level \|Δacc\| and item flip rates from the identical-run pair |
+| **Variability CI** | Item-clustered paired bootstrap percentile CI on the **signed** mean accuracy difference |
+| **MDI** | Planning minimum detectable improvement under α/power; discordant rate uses max(observed, Wilson upper, rule-of-three `3/n` when flips=0) so zero flips do **not** yield near-zero MDI |
+| **Model promotion threshold** | `max(MDI, policy floor, bootstrap CI half-width)` — what adapters must beat |
+
+`differenceWilson` on discordant composition is **deprecated** as a signed-difference CI. Prior reports under `c18d1-paired-stats-v1` are preserved (fresh `C18D1_OUT` for reruns).
+
 ## Adapter claims
 
 - Base and adapter evaluated in the **same session**, same backend; adapter via vLLM LoRA.

@@ -21,7 +21,7 @@ from generation_utils import (
     REFERENCE_BACKEND,
     STATISTICAL_GATE_VERSION,
 )
-from paired_stats import compare_identical_runs, minimum_detectable_improvement
+from paired_stats import STAT_METHODS_VERSION, STAT_METHODS_VERSION_V1, compare_identical_runs
 from revisions import PINNED_QWEN3_8B, require_for_baseline, verify_pinned
 from statistical_gate import GATE_ADOPTED_REASON, GATE_VERSION
 from vllm_eval import evaluate_condition_on_engine, _load_jsonl, _write_json
@@ -104,14 +104,15 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
             )
             runs.append(cond)
 
-        cmp = compare_identical_runs(runs[0]["results"], runs[1]["results"])
-        mdi = minimum_detectable_improvement(
-            noise_abs_accuracy_diff=cmp["absoluteAccuracyDifference"],
-            flip_rate=cmp["gradedOutcomeFlips"]["flipRate"],
-            sample_size=cmp["pairedSampleSize"],
+        cmp = compare_identical_runs(
+            runs[0]["results"],
+            runs[1]["results"],
+            bootstrap_seed=seed,
         )
+        item_level = cmp["itemLevel"]
         by_condition[cid] = {
             "decoding": fields,
+            "samplesPerProblem": int(fields["samplesPerProblem"]),
             "run1": {
                 "passAt1": runs[0]["accounting"]["passAt1"],
                 "timing": runs[0]["timing"],
@@ -125,13 +126,24 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
                 "prefixArtifactItemSamples": runs[1]["prefixArtifactItemSamples"],
             },
             "comparison": cmp,
-            "minimumDetectableImprovement": mdi,
+            "observedNoiseFloor": item_level["observedNoiseFloor"],
+            "variabilityConfidenceInterval": item_level["variabilityConfidenceInterval"],
+            "minimumDetectableImprovement": item_level["minimumDetectableImprovement"],
+            "modelPromotionThreshold": item_level["modelPromotionThreshold"],
             "requestManifestSample": (runs[0].get("requestManifests") or [None])[0],
         }
 
-    # Overall MDI: use max across conditions (conservative)
-    mdis = [by_condition[c]["minimumDetectableImprovement"]["minimumDetectableImprovement"] for c in condition_ids]
+    # Overall: conservative max across conditions (item-level)
+    mdis = [
+        by_condition[c]["minimumDetectableImprovement"]["minimumDetectableImprovement"]
+        for c in condition_ids
+    ]
+    promos = [
+        by_condition[c]["modelPromotionThreshold"]["modelPromotionThreshold"]
+        for c in condition_ids
+    ]
     overall_mdi = max(mdis) if mdis else 0.0
+    overall_promo = max(promos) if promos else 0.0
     artifacts_clear = all(
         by_condition[c]["run1"]["prefixArtifactItemSamples"] == 0
         and by_condition[c]["run2"]["prefixArtifactItemSamples"] == 0
@@ -143,6 +155,12 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
         "gateVersion": GATE_VERSION,
         "adoptedReason": GATE_ADOPTED_REASON,
         "statisticalGateVersion": STATISTICAL_GATE_VERSION,
+        "methodsVersion": STAT_METHODS_VERSION,
+        "methodsVersionSupersedes": STAT_METHODS_VERSION_V1,
+        "preservePriorReports": (
+            "Do not overwrite noise-floor reports written under c18d1-paired-stats-v1; "
+            "use a fresh C18D1_OUT directory for this rerun."
+        ),
         "primaryEvalBackend": PRIMARY_EVAL_BACKEND,
         "referenceBackend": REFERENCE_BACKEND,
         "graderVersion": GRADER_VERSION,
@@ -161,12 +179,20 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
         },
         "conditions": by_condition,
         "overallMinimumDetectableImprovement": overall_mdi,
+        "overallModelPromotionThreshold": overall_promo,
         "noiseFloorRecorded": True,
         "flipRatesReported": True,
         "artifactsClear": artifacts_clear,
+        "layerDefinitions": {
+            "observedNoiseFloor": "Measured identical-run item-level |Δacc| and flip rates",
+            "variabilityConfidenceInterval": "Item-clustered paired bootstrap CI on signed Δacc",
+            "minimumDetectableImprovement": "Planning MDI under alpha/power (not promotion alone)",
+            "modelPromotionThreshold": "max(MDI, policy floor, CI half-width) for adapter claims",
+        },
         "note": (
             "Replaces exact repeatability for vLLM primary acceptance. "
-            "Equal aggregate accuracies are not evidence of zero noise."
+            "Equal aggregate accuracies / zero flips are not evidence of zero noise. "
+            "Thinking-mode samples are clustered by item (not 72 independent problems)."
         ),
     }
     _write_json(out / "noise-floor-report.json", report)
@@ -184,7 +210,18 @@ def main() -> None:
     report = run_noise_floor(job)
     if not report.get("ok"):
         raise SystemExit(2)
-    print(json.dumps({"ok": True, "outputDir": job["outputDir"], "mdi": report.get("overallMinimumDetectableImprovement")}, indent=2))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "outputDir": job["outputDir"],
+                "methodsVersion": report.get("methodsVersion"),
+                "mdi": report.get("overallMinimumDetectableImprovement"),
+                "promotionThreshold": report.get("overallModelPromotionThreshold"),
+            },
+            indent=2,
+        ),
+    )
 
 
 if __name__ == "__main__":

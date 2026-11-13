@@ -140,12 +140,17 @@ export C18D1_PILOT_LIMIT=24
 
 ### Step 1 — Noise floor (both modes, identical-run ×2)
 
+Use a **fresh** `C18D1_OUT`. Do not overwrite prior `c18d1-paired-stats-v1` reports.
+
 ```bash
-export C18D1_OUT=~/ai-colony/tmp/c18d1/noise-floor-$(date +%Y%m%d-%H%M%S)
+export C18D1_OUT=~/ai-colony/tmp/c18d1/noise-floor-v2-$(date +%Y%m%d-%H%M%S)
 ./scripts/c18d1-gpu-noise-floor
 # review: $C18D1_OUT/noise-floor-report.json
-#   overallMinimumDetectableImprovement, per-condition flip rates, samplerImplementation
-# STOP — do not continue until reviewed
+#   methodsVersion=c18d1-paired-stats-v2
+#   itemLevel layers: observedNoiseFloor, variabilityConfidenceInterval,
+#     minimumDetectableImprovement, modelPromotionThreshold
+#   thinking: independentItemCount=items (not responses×3)
+# STOP — do not continue to cross-backend until reviewed
 export C18D1_NOISE_FLOOR_REPORT=$C18D1_OUT/noise-floor-report.json
 ```
 

@@ -91,18 +91,15 @@ def run_cross_backend(job: dict[str, Any]) -> dict[str, Any]:
     noise_floor_abs = float(job.get("noiseFloorAbsDiff") or 0.0)
     if job.get("noiseFloorReportPath"):
         nf = json.loads(Path(job["noiseFloorReportPath"]).read_text(encoding="utf-8"))
-        # Prefer matching condition; else overall MDI component abs diff max
         cond = (nf.get("conditions") or {}).get(condition_id) or {}
-        cmp = cond.get("comparison") or {}
-        if cmp.get("absoluteAccuracyDifference") is not None:
-            noise_floor_abs = float(cmp["absoluteAccuracyDifference"])
-        elif nf.get("overallMinimumDetectableImprovement") is not None:
-            # Fall back: use MDI as conservative tolerance only if abs diff missing
-            noise_floor_abs = float(nf["overallMinimumDetectableImprovement"])
-        job_tol = nf.get("conditions", {}).get(condition_id, {}).get("comparison", {}).get("gradedOutcomeFlips", {})
-        # Prefer max(abs_diff, flip_rate) as tolerance informed by noise floor
-        flip = float((cmp.get("gradedOutcomeFlips") or {}).get("flipRate") or 0.0)
-        noise_floor_abs = max(noise_floor_abs, flip)
+        # Prefer model promotion threshold / MDI (v2); fall back to observed floors
+        promo = (cond.get("modelPromotionThreshold") or {}).get("modelPromotionThreshold")
+        mdi = (cond.get("minimumDetectableImprovement") or {}).get("minimumDetectableImprovement")
+        obs = (cond.get("observedNoiseFloor") or {}).get("absoluteAccuracyDifference")
+        overall_promo = nf.get("overallModelPromotionThreshold")
+        overall_mdi = nf.get("overallMinimumDetectableImprovement")
+        candidates = [x for x in (promo, mdi, obs, overall_promo, overall_mdi, noise_floor_abs) if x is not None]
+        noise_floor_abs = float(max(candidates)) if candidates else noise_floor_abs
 
     tokenizer = AutoTokenizer.from_pretrained(
         pin["tokenizerId"], revision=pin["tokenizerRevision"], trust_remote_code=True,
