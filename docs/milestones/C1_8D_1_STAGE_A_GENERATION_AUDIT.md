@@ -24,17 +24,35 @@
 ## Hypotheses (not treated as proven)
 
 - Residual true thinking-protocol violations may still occur after the slicing fix if the model emits think tags despite `enable_thinking=False`. Those must remain reported separately, not stripped.
-- Greedy batched decode can still differ across batch sizes due to attention/position handling or nondeterministic CUDA kernels; the batch-invariance gate checks exact text on GPU (pending outside Cursor).
+
+## GPU batch-invariance observation (operator-reported; not claimed from Cursor)
+
+- After the slicing fix: **18/24** exact text matches, **6** wording mismatches; **no** prefix/template artifacts.
+- Divergences look like first-token / mid-text greedy wording flips under bf16; position_ids misalignment was not ruled out until gate v2 checks.
+
+## Batch-invariance gate v2 pass criteria
+
+Exact text match is **reported**, not required. Pass requires:
+
+1. No prefix/template artifacts (`</think>`, `<think>`, chat specials, leading `assistant`)
+2. Position ids for padded rows equal the unpadded content span `[0..L-1]`
+3. Graded outcome (+ parsed math answer) agreement on all items
+4. First generated-token logit max abs diff ≤ **`5e-2`** (stated bf16 noise band)
+
+## Eval batching policy (`c18d1-batched-eval-v3`)
+
+Batch size and batch composition are fixed per evaluation configuration. Base and adapter are always evaluated with identical batching, because batch shape can change greedy wording under bf16.
 
 ## Versioning
 
 | Component | Version |
 |-----------|---------|
-| Evaluation implementation | `c18d1-batched-eval-v2` |
+| Evaluation implementation | `c18d1-batched-eval-v3` |
+| Batch-invariance gate | `c18d1-batch-invariance-v2` |
 | Grader | `c18d1-grader-v2` |
 | Answer instruction | `c18d1-answer-instruction-v2` |
 
-Prior Stage A pilot reports must remain untouched; re-runs use fresh output directories.
+Prior Stage A pilot / gate reports must remain untouched; re-runs use fresh output directories.
 
 ## GPU acceptance
 

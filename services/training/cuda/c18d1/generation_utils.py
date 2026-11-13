@@ -8,8 +8,22 @@ from __future__ import annotations
 
 from typing import Any
 
-EVAL_IMPLEMENTATION_VERSION = "c18d1-batched-eval-v2"
+EVAL_IMPLEMENTATION_VERSION = "c18d1-batched-eval-v3"
 PROMPT_INSTRUCTION_VERSION = "c18d1-answer-instruction-v2"
+
+# Official evals fix batch size and item composition; base vs adapter must share them.
+# Greedy wording can change with batch shape (bf16 near-tie flips) even when graded
+# outcomes agree — see batch-invariance gate v2.
+BATCHING_POLICY = {
+    "batchSizeFixedPerEvalConfig": True,
+    "batchCompositionFixedPerEvalConfig": True,
+    "baseAndAdapterIdenticalBatching": True,
+    "note": (
+        "Batch size and batch composition are fixed per evaluation configuration. "
+        "Base and adapter are always evaluated with identical batching, because "
+        "batch shape can change greedy wording under bf16."
+    ),
+}
 
 # Exact final-answer contract appended to each item prompt (questions unchanged).
 FINAL_ANSWER_INSTRUCTION = (

@@ -23,6 +23,7 @@ from access_control import LockedTestAccessError, assert_can_read_locked_items, 
 from answer_parser import GRADER_VERSION
 from decoding import CONDITIONS, matched_job_fields, sampling_seed_schedule
 from generation_utils import (
+    BATCHING_POLICY,
     EVAL_IMPLEMENTATION_VERSION,
     FINAL_ANSWER_INSTRUCTION,
     PROMPT_INSTRUCTION_VERSION,
@@ -345,11 +346,15 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
                 []
                 if fields["doSample"]
                 else [
-                    "Greedy batched decode can still differ across batch sizes if "
-                    "attention/position handling or nondeterministic CUDA kernels differ; "
-                    "batch-invariance gate checks exact text.",
+                    "Greedy wording can differ across batch shapes due to bf16 near-ties; "
+                    "batch-invariance gate v2 requires outcome agreement + logit/position checks, "
+                    "not exact text match.",
                 ]
             ),
+        },
+        "batchingPolicy": {
+            **BATCHING_POLICY,
+            "batchSize": batch_size,
         },
         "datasetPath": str(dataset_path),
         "adapterPath": adapter_path,

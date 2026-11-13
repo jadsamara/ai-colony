@@ -16,7 +16,17 @@ sys.path.insert(0, str(ROOT))
 
 from access_control import LockedTestAccessError, assert_can_read_locked_items, can_read_locked_items
 from answer_parser import GRADER_VERSION, parse_model_output
+from batch_invariance_metrics import (
+    BF16_FIRST_TOKEN_LOGIT_ABS_TOL,
+    detect_prefix_artifacts,
+    expected_left_pad_position_ids,
+    gate_pass,
+    outcomes_agree,
+    position_ids_aligned_with_unpadded,
+)
 from generation_utils import (
+    BATCHING_POLICY,
+    EVAL_IMPLEMENTATION_VERSION,
     FINAL_ANSWER_INSTRUCTION,
     apply_sampling_seed,
     build_generate_kwargs,
@@ -255,6 +265,62 @@ def test_chat_template_boundary_contract() -> None:
     assert "</think>" not in prompt_on or prompt_on.find("<think>") >= 0
 
 
+def test_batch_invariance_metrics() -> None:
+    # Left-pad: two pads + three content tokens → content positions 0,1,2
+    mask = [0, 0, 1, 1, 1]
+    pos = expected_left_pad_position_ids(mask)
+    assert pos == [0, 0, 0, 1, 2]
+    unpadded_mask = [1, 1, 1]
+    unpadded_pos = expected_left_pad_position_ids(unpadded_mask)
+    check = position_ids_aligned_with_unpadded(
+        unpadded_attention_mask=unpadded_mask,
+        unpadded_position_ids=unpadded_pos,
+        padded_attention_mask=mask,
+        padded_position_ids=pos,
+    )
+    assert check["aligned"] is True
+
+    # Misaligned: padded row used arange over full width
+    bad = position_ids_aligned_with_unpadded(
+        unpadded_attention_mask=unpadded_mask,
+        unpadded_position_ids=unpadded_pos,
+        padded_attention_mask=mask,
+        padded_position_ids=[0, 1, 2, 3, 4],
+    )
+    assert bad["aligned"] is False
+
+    assert detect_prefix_artifacts("</think>\nWe solve...") == ["</think>"]
+    assert detect_prefix_artifacts("assistant\nANSWER: 1") == ["assistant_role_prefix"]
+    assert detect_prefix_artifacts("We solve...\nANSWER: 1") == []
+
+    assert outcomes_agree(
+        {"outcome": "correct", "mathText": "9/4"},
+        {"outcome": "correct", "mathText": "9/4"},
+    )
+    assert not outcomes_agree(
+        {"outcome": "correct", "mathText": "9/4"},
+        {"outcome": "wrong", "mathText": "1"},
+    )
+    assert BF16_FIRST_TOKEN_LOGIT_ABS_TOL == 5e-2
+    decision = gate_pass(
+        prefix_artifact_count=0,
+        position_ids_ok=True,
+        outcome_disagreements=0,
+        first_token_logit_max_abs=1e-2,
+    )
+    assert decision["passed"] is True
+    assert decision["exactTextMatchRequired"] is False
+    fail = gate_pass(
+        prefix_artifact_count=0,
+        position_ids_ok=True,
+        outcome_disagreements=0,
+        first_token_logit_max_abs=0.2,
+    )
+    assert fail["passed"] is False
+    assert BATCHING_POLICY["baseAndAdapterIdenticalBatching"] is True
+    assert EVAL_IMPLEMENTATION_VERSION == "c18d1-batched-eval-v3"
+
+
 def test_transformers_523_sampling_compat_source() -> None:
     source = (ROOT / "batched_eval.py").read_text(encoding="utf-8")
     # Must not assign a torch Generator into generate kwargs (TF 5.23 rejects it).
@@ -350,6 +416,7 @@ def main() -> None:
     test_generation_slicing_and_sampling_kwargs()
     test_answer_instruction_contract()
     test_chat_template_boundary_contract()
+    test_batch_invariance_metrics()
     test_transformers_523_sampling_compat_source()
     test_access_control()
     test_dataset_minimums_public()
