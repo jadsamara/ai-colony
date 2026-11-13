@@ -30,18 +30,12 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def assert_development_only(path: Path) -> None:
-    resolved = path.resolve()
-    parts = {p.lower() for p in resolved.parts}
-    if "locked" in parts:
-        raise PermissionError(f"Stratified pilot refuses locked paths: {resolved}")
-    # Prefer under datasets/dev
-    if "dev" not in parts and "development" not in parts:
-        # Allow explicit override only if path is under DEV_DIR
-        if not str(resolved).startswith(str(DEV_DIR.resolve())):
-            raise PermissionError(
-                f"Stratified pilot requires development dataset under {DEV_DIR}, got {resolved}",
-            )
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def dataset_content_hash(items: list[dict[str, Any]]) -> str:
@@ -129,6 +123,7 @@ def stratified_select(
     selected.sort(key=lambda row: (row["family"], row["difficulty"], row["id"]))
     families_covered = sorted({row["family"] for row in selected})
     difficulties_covered = sorted({row["difficulty"] for row in selected})
+    item_ids = [row["id"] for row in selected]
     ok = (
         set(families_covered) == set(families)
         and set(difficulties_covered) == set(DIFFICULTIES)
@@ -141,6 +136,7 @@ def stratified_select(
         "seed": int(seed),
         "perCell": int(per_cell),
         "itemCount": len(selected),
+        "itemIds": item_ids,
         "expectedCells": len(families) * len(DIFFICULTIES),
         "families": list(families),
         "difficulties": list(DIFFICULTIES),
@@ -158,7 +154,16 @@ def stratified_select(
     }
 
 
-def write_selection(result: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+def write_selection(
+    result: dict[str, Any],
+    output_dir: Path,
+    *,
+    source_dataset_path: Path,
+) -> dict[str, Any]:
+    """Write selection JSONL + manifest bound to an authorized development source."""
+    from dev_provenance import assert_authorized_source_path
+
+    source_resolved = assert_authorized_source_path(Path(source_dataset_path))
     output_dir.mkdir(parents=True, exist_ok=True)
     items = result["items"]
     jsonl_path = output_dir / "stratified_pilot.jsonl"
@@ -167,11 +172,17 @@ def write_selection(result: dict[str, Any], output_dir: Path) -> dict[str, Any]:
             handle.write(json.dumps(item, sort_keys=True) + "\n")
     manifest = {key: value for key, value in result.items() if key != "items"}
     manifest["datasetPath"] = str(jsonl_path.resolve())
+    manifest["sourceDatasetPath"] = str(source_resolved)
+    manifest["sourceDatasetSha256"] = _sha256_file(source_resolved)
+    manifest["sourceSplit"] = "development"
     _write_json(output_dir / "stratified_selection_manifest.json", manifest)
     return manifest
 
 
 def main() -> None:
+    # Import here to avoid circular import at module load for helpers used by provenance.
+    from dev_provenance import assert_authorized_development_dataset
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--dataset",
@@ -182,11 +193,22 @@ def main() -> None:
     parser.add_argument("--per-cell", type=int, default=1)
     parser.add_argument("--seed", type=int, default=18)
     args = parser.parse_args()
-    assert_development_only(args.dataset)
+    assert_authorized_development_dataset(args.dataset)
     items = _load_jsonl(args.dataset)
     result = stratified_select(items, per_cell=args.per_cell, seed=args.seed)
-    manifest = write_selection(result, args.output_dir)
-    print(json.dumps({"ok": manifest["ok"], "itemCount": manifest["itemCount"], "contentHash": manifest["contentHash"], "outputDir": str(args.output_dir)}, indent=2))
+    manifest = write_selection(result, args.output_dir, source_dataset_path=args.dataset)
+    print(
+        json.dumps(
+            {
+                "ok": manifest["ok"],
+                "itemCount": manifest["itemCount"],
+                "contentHash": manifest["contentHash"],
+                "sourceDatasetPath": manifest["sourceDatasetPath"],
+                "outputDir": str(args.output_dir),
+            },
+            indent=2,
+        ),
+    )
     if not manifest["ok"]:
         raise SystemExit(2)
 

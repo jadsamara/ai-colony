@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,6 +31,10 @@ from batch_invariance_metrics import (
     position_ids_aligned_with_unpadded,
 )
 from accounting import build_accounting
+from dev_provenance import (
+    DevelopmentProvenanceError,
+    assert_authorized_development_dataset,
+)
 from generation_utils import (
     BATCHING_POLICY,
     EVAL_IMPLEMENTATION_VERSION,
@@ -42,7 +47,7 @@ from generation_utils import (
     slice_new_token_ids,
 )
 from projections import project_from_measured
-from stratified_selection import stratified_select
+from stratified_selection import stratified_select, write_selection
 from sympy_grader import answers_canonically_equal, grade_answer, grade_model_output
 from generators import prompt_leaks_split_identity
 from locked_seeds import LockedSeedError, load_locked_stream_seeds
@@ -369,6 +374,77 @@ def test_batch_invariance_metrics() -> None:
     assert OFFICIAL_BACKEND == "huggingface-batched"
 
 
+def test_dev_provenance_valid_and_forged() -> None:
+    source = ROOT / "datasets" / "dev" / "id_dev.jsonl"
+    # Direct authorized path
+    direct = assert_authorized_development_dataset(source)
+    assert direct["mode"] == "direct_dev"
+
+    items = [json.loads(line) for line in source.read_text(encoding="utf-8").splitlines() if line.strip()]
+    selected = stratified_select(items, per_cell=1, seed=18)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "selection"
+        manifest = write_selection(selected, out, source_dataset_path=source)
+        sel_path = Path(manifest["datasetPath"])
+        ok = assert_authorized_development_dataset(
+            sel_path,
+            manifest_path=out / "stratified_selection_manifest.json",
+        )
+        assert ok["mode"] == "generated_selection"
+        assert ok["itemCount"] == 30
+
+        # Hash mismatch / tampered selection
+        tampered = sel_path.read_text(encoding="utf-8").splitlines()
+        # Drop last item
+        sel_path.write_text("\n".join(tampered[:-1]) + "\n", encoding="utf-8")
+        try:
+            assert_authorized_development_dataset(
+                sel_path,
+                manifest_path=out / "stratified_selection_manifest.json",
+            )
+            raise AssertionError("tampered selection must fail")
+        except DevelopmentProvenanceError:
+            pass
+
+        # Restore and forge manifest contentHash
+        write_selection(selected, out, source_dataset_path=source)
+        man_path = out / "stratified_selection_manifest.json"
+        man = json.loads(man_path.read_text(encoding="utf-8"))
+        man["contentHash"] = "0" * 64
+        man_path.write_text(json.dumps(man, indent=2) + "\n", encoding="utf-8")
+        try:
+            assert_authorized_development_dataset(
+                out / "stratified_pilot.jsonl",
+                manifest_path=man_path,
+            )
+            raise AssertionError("forged manifest hash must fail")
+        except DevelopmentProvenanceError:
+            pass
+
+        # Unknown path without manifest
+        orphan = Path(tmp) / "orphan.jsonl"
+        orphan.write_text(sel_path.read_text(encoding="utf-8"), encoding="utf-8")
+        try:
+            assert_authorized_development_dataset(orphan)
+            raise AssertionError("orphan selection must fail")
+        except DevelopmentProvenanceError:
+            pass
+
+        # Locked path rejected
+        locked = ROOT / "datasets" / "locked" / "id_locked.jsonl"
+        if locked.exists():
+            try:
+                assert_authorized_development_dataset(locked)
+                raise AssertionError("locked path must fail")
+            except DevelopmentProvenanceError:
+                pass
+
+    # SymPy must be importable for grading (preflight dependency).
+    import sympy  # noqa: F401
+
+    assert sympy.__version__
+
+
 def test_stratified_and_accounting() -> None:
     path = ROOT / "datasets" / "dev" / "id_dev.jsonl"
     items = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -545,6 +621,7 @@ def main() -> None:
     test_answer_instruction_contract()
     test_chat_template_boundary_contract()
     test_batch_invariance_metrics()
+    test_dev_provenance_valid_and_forged()
     test_stratified_and_accounting()
     test_transformers_523_sampling_compat_source()
     test_access_control()

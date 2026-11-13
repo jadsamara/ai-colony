@@ -20,7 +20,8 @@ from batch_invariance_metrics import GATE_VERSION_V3, detect_prefix_artifacts
 from decoding import CONDITIONS, matched_job_fields
 from generation_utils import EVAL_IMPLEMENTATION_VERSION, OFFICIAL_BACKEND
 from revisions import PINNED_QWEN3_8B, require_for_baseline, verify_pinned
-from stratified_selection import assert_development_only, dataset_content_hash
+from dev_provenance import DevelopmentProvenanceError, assert_authorized_development_dataset
+from stratified_selection import dataset_content_hash
 from sympy_grader import answers_canonically_equal, grade_model_output
 from vllm_backend import BACKEND_ID, BACKEND_STATUS, build_prompts, generate_texts_vllm, load_vllm_engine
 
@@ -120,8 +121,16 @@ def run_vllm_repeatability(job: dict[str, Any]) -> dict[str, Any]:
 
     require_for_baseline(job)
     pin = verify_pinned()
-    dataset_path = Path(job["datasetPath"]).resolve()
-    assert_development_only(dataset_path)
+    dataset_path = Path(job["datasetPath"])
+    manifest_path = Path(job["selectionManifestPath"]) if job.get("selectionManifestPath") else None
+    try:
+        provenance = assert_authorized_development_dataset(
+            dataset_path,
+            manifest_path=manifest_path,
+        )
+    except DevelopmentProvenanceError as exc:
+        raise SystemExit(f"DEVELOPMENT_PROVENANCE_DENIED: {exc}") from exc
+    dataset_path = Path(provenance["datasetPath"])
     items = _load_jsonl(dataset_path)
     if job.get("limit"):
         items = items[: int(job["limit"])]
@@ -244,6 +253,7 @@ def run_vllm_repeatability(job: dict[str, Any]) -> dict[str, Any]:
         "templateFingerprint": tmpl_fp,
         "datasetPath": str(dataset_path),
         "datasetContentHash": dataset_content_hash(items),
+        "developmentProvenance": provenance,
         "itemCount": len(items),
         "seed": seed,
         "greedySameConfigRepeatability": greedy_cmp,

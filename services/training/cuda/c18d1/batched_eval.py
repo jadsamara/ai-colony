@@ -19,6 +19,7 @@ from access_control import LockedTestAccessError, assert_can_read_locked_items, 
 from accounting import build_accounting
 from answer_parser import GRADER_VERSION
 from decoding import CONDITIONS, matched_job_fields, sampling_seed_schedule
+from dev_provenance import DevelopmentProvenanceError, assert_authorized_development_dataset
 from generation_utils import (
     BATCHING_POLICY,
     EVAL_IMPLEMENTATION_VERSION,
@@ -129,9 +130,24 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
     condition = CONDITIONS[job["conditionId"]]
     fields = matched_job_fields(condition)
 
-    dataset_path = Path(job["datasetPath"]).resolve()
-    if "locked" in str(dataset_path).split("/"):
+    dataset_path = Path(job["datasetPath"])
+    development_provenance = None
+    if "locked" in {p.lower() for p in dataset_path.parts} or "locked" in {
+        p.lower() for p in dataset_path.resolve().parts
+    }:
         assert_can_read_locked_items(role=job.get("accessRole"), department_id=job.get("departmentId"))
+        dataset_path = dataset_path.resolve()
+    else:
+        try:
+            development_provenance = assert_authorized_development_dataset(
+                dataset_path,
+                manifest_path=(
+                    Path(job["selectionManifestPath"]) if job.get("selectionManifestPath") else None
+                ),
+            )
+        except DevelopmentProvenanceError as exc:
+            raise SystemExit(f"DEVELOPMENT_PROVENANCE_DENIED: {exc}") from exc
+        dataset_path = Path(development_provenance["datasetPath"])
 
     items = _load_jsonl(dataset_path)
     if job.get("limit"):
@@ -358,6 +374,7 @@ def run_batched_hf(job: dict[str, Any]) -> dict[str, Any]:
         },
         "datasetPath": str(dataset_path),
         "datasetContentHash": dataset_content_hash(items),
+        "developmentProvenance": development_provenance,
         "adapterPath": adapter_path,
         "batchSize": batch_size,
         "itemCount": metrics["itemCount"],

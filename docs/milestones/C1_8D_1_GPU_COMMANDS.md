@@ -123,8 +123,18 @@ Gate v3 GPU PASS is recorded in `C1_8D_1_BATCH_INVARIANCE_GATE_V3_GPU_PASS.md` (
 
 Do **not** start Stage B/C. Fresh dirs only. Official backend remains HF.
 
+Generated `tmp/…/selection/stratified_pilot.jsonl` files are accepted only with a verified
+`stratified_selection_manifest.json` bound to `datasets/dev` (shared provenance validator).
+
+If `C18D1_SKIP_INSTALL=1`, ensure the venv already has **sympy** (and torch/transformers);
+scripts run `deps_preflight.py` first.
+
 ```bash
 cd ~/ai-colony && git pull
+
+# If prior SKIP_INSTALL left sympy missing:
+#   source ~/ai-colony/tmp/c18d1/.venv-gpu/bin/activate
+#   pip install -r services/training/cuda/requirements-c18d1.txt
 
 # Stratified Stage A (HF official) — 10 families × 3 difficulties
 export C18D1_OUT=~/ai-colony/tmp/c18d1/stratified-pilot-$(date +%Y%m%d-%H%M%S)
