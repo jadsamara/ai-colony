@@ -1,11 +1,9 @@
 {
-  "benchmarkVersion": "c18d1-algebra-v1",
+  "benchmarkVersion": "c18d1-algebra-v2",
   "counts": {
     "development": 500,
-    "locked_id": 1000,
-    "locked_ood": 300,
     "regression": 120
   },
-  "note": "Item-level locked contents withheld. Evaluation-owned.",
-  "status": "datasets_generated_baselines_pending"
+  "note": "Locked item-level contents are not in the repo. Evaluation generates them outside the repo with external seeds.",
+  "status": "public_splits_ready_locked_external"
 }

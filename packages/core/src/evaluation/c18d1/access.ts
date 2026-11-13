@@ -3,7 +3,9 @@
  * Item-level locked tests are never available to Math or Weight Optimization.
  */
 
-export const C18D1_BENCHMARK_VERSION = "c18d1-algebra-v1" as const;
+export const C18D1_BENCHMARK_VERSION = "c18d1-algebra-v2" as const;
+/** Locked splits under v1 were exposed in git and must never be used. */
+export const C18D1_RETIRED_LOCKED_BENCHMARK_VERSION = "c18d1-algebra-v1" as const;
 export const C18D1_EVALUATION_DEPARTMENT_ID = "00000000-0000-4000-8000-000000000017" as const;
 export const C18D1_MATH_DEPARTMENT_ID = "00000000-0000-4000-8000-000000000019" as const;
 export const C18D1_WEIGHT_DEPARTMENT_ID = "00000000-0000-4000-8000-000000000015" as const;
@@ -104,7 +106,7 @@ export function redactLockedItemFields<T extends Record<string, unknown>>(payloa
 export const C18D1_AUTONOMOUS_MATH_TRAINING_ENABLED = false as const;
 
 export const C18D1_RESIDUAL_ACCESS_LIMITATIONS = [
-  "Git clones that include locked JSONL can be read offline; restrict repo access for training agents and treat Evaluation hosts as system of record.",
+  "c18d1-algebra-v1 locked JSONL remains in git history; treat as burned — never evaluate or train on it.",
+  "v2 locked JSONL must stay outside the repo under Evaluation host ACLs; application gates still required.",
   "Application-level gates must wrap every loader/API; prompt hiding alone is insufficient.",
-  "GPU VM filesystem ACLs remain operator-enforced.",
 ] as const;

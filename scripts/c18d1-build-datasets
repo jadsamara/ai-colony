@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# C1.8D.1 — regenerate versioned algebra datasets + overlap audit (CPU / local OK).
+# C1.8D.1 — regenerate in-repo public splits (dev + regression). Locked splits are separate.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}/services/training/cuda/c18d1"

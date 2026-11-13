@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Generate C1.8D.1 algebra v2 locked splits OUTSIDE the repo (Evaluation host / GPU VM).
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+if [[ -z "${C18D1_LOCKED_SEED_FILE:-}" && -z "${C18D1_LOCKED_SEED_ID:-}" ]]; then
+  echo "[c18d1] Set C18D1_LOCKED_SEED_FILE or C18D1_LOCKED_SEED_ID+C18D1_LOCKED_SEED_OOD"
+  exit 1
+fi
+if [[ -z "${C18D1_LOCKED_DATA_DIR:-}" ]]; then
+  echo "[c18d1] Set C18D1_LOCKED_DATA_DIR to a path outside the repo"
+  exit 1
+fi
+
+PYTHON="${C18D1_PYTHON:-python3}"
+"${PYTHON}" -c "import sympy" 2>/dev/null || "${PYTHON}" -m pip install -q sympy
+export C18D1_WRITE_REPO_MANIFESTS="${C18D1_WRITE_REPO_MANIFESTS:-1}"
+"${PYTHON}" services/training/cuda/c18d1/build_locked_datasets.py
+echo "[c18d1] Locked data written under ${C18D1_LOCKED_DATA_DIR}"
+echo "[c18d1] Commit-safe manifest: services/training/cuda/c18d1/datasets/manifests/locked_v2_manifest.json"

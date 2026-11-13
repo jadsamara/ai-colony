@@ -16,8 +16,11 @@ from typing import Any, Callable
 
 import sympy as sp
 
-BENCHMARK_VERSION = "c18d1-algebra-v1"
-GENERATOR_VERSION = "c18d1-gen-v1"
+BENCHMARK_VERSION = "c18d1-algebra-v2"
+GENERATOR_VERSION = "c18d1-gen-v2"
+# Locked splits under c18d1-algebra-v1 were committed to git (answers + streamSeed)
+# and are retired — never use for evaluation or training.
+RETIRED_LOCKED_BENCHMARK_VERSION = "c18d1-algebra-v1"
 
 # Department / ownership constants (match seed UUIDs).
 EVALUATION_DEPARTMENT_ID = "00000000-0000-4000-8000-000000000017"
@@ -71,10 +74,9 @@ DIFFICULTY_DEFS = {
     },
 }
 
-SEEDS = {
+# Public (in-repo) stream seeds only. Locked seeds are external — see locked_seeds.py.
+PUBLIC_SEEDS = {
     "dev": 181801,
-    "locked_id": 181802,
-    "locked_ood": 181803,
     "regression": 181804,
     "overlap_audit": 181805,
 }
@@ -103,8 +105,8 @@ def _item_id(split: str, family: str, index: int, digest: str) -> str:
     return f"{BENCHMARK_VERSION}:{split}:{family}:{index:04d}:{digest[:12]}"
 
 
-def _rng(stream: str, family: str, index: int) -> random.Random:
-    seed = SEEDS[stream] ^ (zlib_crc(family) << 1) ^ index
+def _rng(stream_seed: int, family: str, index: int) -> random.Random:
+    seed = int(stream_seed) ^ (zlib_crc(family) << 1) ^ (index * 1_000_003)
     return random.Random(seed)
 
 
@@ -349,24 +351,37 @@ def gen_symbolic_simplification(rng: random.Random, difficulty: str, index: int)
 
 
 def gen_trigonometric_equations(rng: random.Random, difficulty: str, index: int) -> tuple[str, dict[str, Any], list[str]]:
-    x = sp.Symbol("x")
-    # Principal solution on [0, 2pi): sin(x) = 1/2 => pi/6, 5pi/6
+    catalog = [
+        ("sin(x) = 1/2", [sp.pi / 6, 5 * sp.pi / 6]),
+        ("cos(x) = 1/2", [sp.pi / 3, 5 * sp.pi / 3]),
+        ("sin(x) = 0", [sp.Integer(0), sp.pi]),
+        ("cos(x) = 0", [sp.pi / 2, 3 * sp.pi / 2]),
+        ("sin(x) = 1", [sp.pi / 2]),
+        ("cos(x) = 1", [sp.Integer(0)]),
+        ("sin(x) = -1/2", [7 * sp.pi / 6, 11 * sp.pi / 6]),
+        ("cos(x) = -1/2", [2 * sp.pi / 3, 4 * sp.pi / 3]),
+        ("tan(x) = 1", [sp.pi / 4, 5 * sp.pi / 4]),
+        ("tan(x) = 0", [sp.Integer(0), sp.pi]),
+    ]
+    # Shift catalog choice by rng so streams diverge even for the same index.
+    choice = catalog[(index + rng.randint(0, len(catalog) - 1)) % len(catalog)]
+    # Unique harmless parameter: solve k*x form with k in {1,2} derived from index+rng.
+    k = 1 + ((index + rng.randint(0, 1)) % 2)
+    eq = choice[0]
+    roots = choice[1]
+    if k != 1:
+        # sin(2x)=1/2 etc. — keep expected roots as principal solutions divided by k when safe.
+        left, right = eq.split("=")
+        fn = left.strip()
+        eq = f"{fn.replace('(x)', f'({k}*x)')} = {right.strip()}"
+        roots = [sp.simplify(r / k) for r in roots]
     prompt = (
-        "Solve for x in [0, 2*pi). This is an out-of-distribution trigonometric equation. "
-        "End with `ANSWER: <roots>` comma-separated in terms of pi if needed.\n\n"
-        "sin(x) = 1/2"
+        "Solve for x in [0, 2*pi). End with `ANSWER: <roots>` comma-separated "
+        f"in terms of pi if needed.\n\n{eq}"
     )
-    # Vary by asking cos for some indices.
-    if index % 2 == 1:
-        prompt = prompt.replace("sin(x) = 1/2", "cos(x) = 1/2")
-        return (
-            prompt,
-            {"kind": "roots", "values": [str(sp.pi / 3), str(5 * sp.pi / 3)], "variable": "x"},
-            ["ood", "trigonometric"],
-        )
     return (
         prompt,
-        {"kind": "roots", "values": [str(sp.pi / 6), str(5 * sp.pi / 6)], "variable": "x"},
+        {"kind": "roots", "values": [str(r) for r in roots], "variable": "x"},
         ["ood", "trigonometric"],
     )
 
@@ -420,15 +435,27 @@ GENERATORS: dict[str, Callable[[random.Random, str, int], tuple[str, dict[str, A
 }
 
 
-def make_item(*, stream: str, family: str, index: int, distribution: str, split: str) -> Item:
-    rng = _rng(stream, family, index)
+def make_item(
+    *,
+    stream: str,
+    stream_seed: int,
+    family: str,
+    index: int,
+    distribution: str,
+    split: str,
+    seed_hash: str | None = None,
+    record_public_seed: bool = False,
+) -> Item:
+    rng = _rng(stream_seed, family, index)
     difficulty = _pick_difficulty(rng)
     prompt, expected, tags = GENERATORS[family](rng, difficulty, index)
-    # Embed an Evaluation-only instance tag so identical algebra cannot collide across splits.
-    # The tag is not a solution hint; it forces unique prompts/digests under independent streams.
-    instance_tag = f"[{BENCHMARK_VERSION}/{split}/{family}/{index}]"
-    prompt = f"{prompt}\n\nInstance: {instance_tag}"
-    body = {
+    # Opaque per-item ref (no split/family path) keeps prompts unique without leaking identity.
+    opaque_ref = hashlib.sha256(
+        f"{stream_seed}:{family}:{index}:{GENERATOR_VERSION}".encode(),
+    ).hexdigest()[:10]
+    prompt = f"{prompt}\n\nRef: {opaque_ref}"
+    # Instance IDs stay in metadata/id only — never embed split names in the prompt text.
+    body: dict[str, Any] = {
         "family": family,
         "split": split,
         "index": index,
@@ -437,9 +464,26 @@ def make_item(*, stream: str, family: str, index: int, distribution: str, split:
         "expected": expected,
         "generatorVersion": GENERATOR_VERSION,
         "stream": stream,
-        "instanceTag": instance_tag,
     }
+    if record_public_seed:
+        body["streamSeed"] = stream_seed
+    if seed_hash is not None:
+        body["seedHash"] = seed_hash
     digest = _digest(body)
+    provenance: dict[str, Any] = {
+        "benchmarkVersion": BENCHMARK_VERSION,
+        "generatorVersion": GENERATOR_VERSION,
+        "stream": stream,
+        "family": family,
+        "index": index,
+        "ownerDepartmentId": EVALUATION_DEPARTMENT_ID,
+        "forbiddenConsumers": [MATH_DEPARTMENT_ID, WEIGHT_DEPARTMENT_ID],
+    }
+    if record_public_seed:
+        # Dev/regression only — locked items must never carry raw stream seeds.
+        provenance["streamSeed"] = stream_seed
+    if seed_hash is not None:
+        provenance["seedHash"] = seed_hash
     return Item(
         id=_item_id(split, family, index, digest),
         split=split,
@@ -449,17 +493,7 @@ def make_item(*, stream: str, family: str, index: int, distribution: str, split:
         prompt=prompt,
         expected=expected,
         structuralTags=tags,
-        provenance={
-            "benchmarkVersion": BENCHMARK_VERSION,
-            "generatorVersion": GENERATOR_VERSION,
-            "stream": stream,
-            "streamSeed": SEEDS[stream],
-            "family": family,
-            "index": index,
-            "instanceTag": instance_tag,
-            "ownerDepartmentId": EVALUATION_DEPARTMENT_ID,
-            "forbiddenConsumers": [MATH_DEPARTMENT_ID, WEIGHT_DEPARTMENT_ID],
-        },
+        provenance=provenance,
         contentDigest=digest,
     )
 
@@ -467,10 +501,13 @@ def make_item(*, stream: str, family: str, index: int, distribution: str, split:
 def generate_split(
     *,
     stream: str,
+    stream_seed: int,
     families: list[str],
     per_family: int,
     distribution: str,
     split: str,
+    seed_hash: str | None = None,
+    record_public_seed: bool = False,
 ) -> list[Item]:
     items: list[Item] = []
     for family in families:
@@ -478,13 +515,39 @@ def generate_split(
             items.append(
                 make_item(
                     stream=stream,
+                    stream_seed=stream_seed,
                     family=family,
                     index=index,
                     distribution=distribution,
                     split=split,
+                    seed_hash=seed_hash,
+                    record_public_seed=record_public_seed,
                 ),
             )
     return items
+
+
+def prompt_leaks_split_identity(prompt: str) -> bool:
+    """True if a prompt embeds split names or retired Instance tags."""
+    text = prompt or ""
+    if "Instance:" in text:
+        return True
+    lowered = text.lower()
+    for token in (
+        "locked_id",
+        "locked_ood",
+        "locked-id",
+        "locked-ood",
+        "/development/",
+        "/regression/",
+        "c18d1-algebra-v1/",
+        "c18d1-algebra-v2/",
+        "split=",
+        "stream=",
+    ):
+        if token in lowered:
+            return True
+    return False
 
 
 def write_jsonl(path: Path, items: list[Item]) -> None:

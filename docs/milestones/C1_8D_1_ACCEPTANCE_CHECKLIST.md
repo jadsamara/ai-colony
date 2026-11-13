@@ -4,10 +4,13 @@
 
 - [x] Repository audit + plan committed
 - [x] HF revision pin mechanism (`pinned_revisions.json`, fail-closed)
-- [x] SymPy generators + manifests (≥500/1000/300)
-- [x] Overlap / duplicate audit passes
+- [x] SymPy generators + public manifests (500 dev / 120 regression)
+- [x] Locked v1 retired (removed from git tree; never evaluate/train)
+- [x] Locked v2 external-seed generator (out-of-repo data; commit-safe manifests only)
+- [x] Overlap / duplicate audit passes (public splits)
 - [x] Strict parser + adversarial local tests
 - [x] Locked-access unit tests (Evaluation-only)
+- [x] Tests: no locked files tracked; prompts lack split tags; locked gen refuses without seed
 - [x] Batched HF evaluator implemented (not yet GPU-run)
 - [x] Stage A/B/C scripts + result templates
 - [x] Autonomous Math training flag remains `false`

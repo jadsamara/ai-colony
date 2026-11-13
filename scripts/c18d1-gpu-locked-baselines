@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# C1.8D.1 Stage C — locked ID / OOD / regression baselines AFTER freeze.
-# Requires Evaluation access role. Do not use for prompt tuning.
+# C1.8D.1 Stage C — locked ID / OOD baselines + in-repo regression AFTER freeze.
+# Locked JSONL must come from C18D1_LOCKED_DATA_DIR (outside the repo).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
@@ -9,12 +9,24 @@ if [[ "${C18D1_BENCHMARK_FROZEN:-}" != "1" ]]; then
   echo "[c18d1] Refusing Stage C: set C18D1_BENCHMARK_FROZEN=1 after Stage B freeze."
   exit 1
 fi
+if [[ -z "${C18D1_LOCKED_DATA_DIR:-}" ]]; then
+  echo "[c18d1] Set C18D1_LOCKED_DATA_DIR (outside repo), e.g. /var/lib/ai-colony/evaluation/c18d1-locked-v2"
+  exit 1
+fi
 
 PYTHON="${C18D1_PYTHON:-python3}"
-OUT_ROOT="${C18D1_OUT:-${ROOT}/tmp/c18d1/locked-baselines-$(date +%Y%m%d-%H%M%S)}"
+OUT_ROOT="${C18D1_OUT:-${C18D1_LOCKED_DATA_DIR}/results/baselines-$(date +%Y%m%d-%H%M%S)}"
 VENV="${C18D1_VENV:-${ROOT}/tmp/c18d1/.venv-gpu}"
 BATCH="${C18D1_BATCH_SIZE:-4}"
 CONDITION="${C18D1_CONDITION:-thinking_enabled_zero_shot}"
+LOCKED_DATA="$(cd "${C18D1_LOCKED_DATA_DIR}" && pwd)"
+
+case "${LOCKED_DATA}" in
+  "${ROOT}"|"${ROOT}"/*)
+    echo "[c18d1] C18D1_LOCKED_DATA_DIR must be outside the repo (${ROOT})"
+    exit 1
+    ;;
+esac
 
 if [[ "${C18D1_SKIP_INSTALL:-}" != "1" ]]; then
   "${PYTHON}" -m venv "${VENV}"
@@ -53,10 +65,9 @@ EOF
   "${PYTHON}" services/training/cuda/c18d1/batched_eval.py --job "${OUT}/job.json"
 }
 
-BASE="$(pwd)/services/training/cuda/c18d1/datasets"
-run_one locked_id "${BASE}/locked/id_locked.jsonl"
-run_one locked_ood "${BASE}/locked/ood_locked.jsonl"
-run_one regression "${BASE}/regression/regression.jsonl"
+run_one locked_id "${LOCKED_DATA}/id_locked.jsonl"
+run_one locked_ood "${LOCKED_DATA}/ood_locked.jsonl"
+run_one regression "${ROOT}/services/training/cuda/c18d1/datasets/regression/regression.jsonl"
 
 echo "[c18d1] Stage C complete under ${OUT_ROOT}"
-echo "[c18d1] Publish aggregates only; keep item-level artifacts Evaluation-only."
+echo "[c18d1] Publish aggregates only; keep item-level artifacts under ${LOCKED_DATA}/results"

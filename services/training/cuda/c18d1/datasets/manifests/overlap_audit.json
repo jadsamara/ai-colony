@@ -1,34 +1,27 @@
 {
-  "crossSplit": {
-    "ok": true,
-    "sharedContentDigests": [],
-    "sharedPrompts": []
-  },
   "devExactDuplicateDigests": [],
   "devPromptCollisions": 0,
-  "familySeparation": {
-    "idFamilies": [
-      "absolute_value_equations",
-      "exponential_log_equations",
-      "inequalities",
-      "linear_equations",
-      "linear_systems",
-      "polynomial_factorization",
-      "quadratic_equations",
-      "radical_equations",
-      "rational_equations",
-      "symbolic_simplification"
-    ],
-    "ok": true,
-    "oodFamilies": [
-      "linear_diophantine",
-      "piecewise_equations",
-      "trigonometric_equations"
-    ],
-    "overlappingFamilies": [],
-    "structuralNote": "OOD families must differ in algebraic structure (trig / Diophantine / piecewise), not merely random seed."
+  "ok": true,
+  "pathAudit": {
+    "crossSplit": {
+      "ok": true,
+      "sharedContentDigests": [],
+      "sharedPrompts": []
+    },
+    "devExactDuplicateDigests": [],
+    "devPromptCollisions": 0,
+    "familySeparation": {
+      "idFamilies": [],
+      "ok": true,
+      "oodFamilies": [],
+      "overlappingFamilies": [],
+      "structuralNote": "OOD families must differ in algebraic structure (trig / Diophantine / piecewise), not merely random seed."
+    },
+    "lockedExactDuplicateDigests": [],
+    "lockedPromptCollisions": 0,
+    "ok": true
   },
-  "lockedExactDuplicateDigests": [],
-  "lockedPromptCollisions": 0,
-  "ok": true
+  "regressionExactDuplicateDigests": [],
+  "regressionPromptCollisions": 0,
+  "scope": "in_repo_public_splits_only"
 }

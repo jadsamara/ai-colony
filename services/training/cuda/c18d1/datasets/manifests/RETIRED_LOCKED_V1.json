@@ -1,0 +1,8 @@
+{
+  "benchmarkVersion": "c18d1-algebra-v1",
+  "neverEvaluate": true,
+  "neverTrain": true,
+  "reason": "services/training/cuda/c18d1/datasets/locked/*.jsonl were tracked in git, including expected answers and provenance.streamSeed. No locked evaluation had run. Retired rather than patched.",
+  "replacement": "c18d1-algebra-v2 locked splits via external seeds",
+  "status": "retired"
+}

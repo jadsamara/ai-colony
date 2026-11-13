@@ -18,3 +18,5 @@ services/training/.venv/
 services/training/artifacts/
 services/training/checkpoints/
 services/training/research-artifacts/
+# C1.8D.1 locked benchmarks must never be tracked (v1 retired after git exposure).
+services/training/cuda/c18d1/datasets/locked/

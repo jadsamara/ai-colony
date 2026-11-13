@@ -18,8 +18,12 @@ MEMORY_DEPARTMENT_ID = "00000000-0000-4000-8000-000000000016"
 LOCKED_ROLE = "evaluation"
 FORBIDDEN_ROLES = {"math", "weight_optimization", "memory", "monitoring", "ceo"}
 
+import os
+
 ROOT = Path(__file__).resolve().parent
-LOCKED_DIR = ROOT / "datasets" / "locked"
+# Locked JSONL lives outside the repo when C18D1_LOCKED_DATA_DIR is set.
+_DEFAULT_LOCKED = ROOT / "datasets" / "locked"
+LOCKED_DIR = Path(os.environ["C18D1_LOCKED_DATA_DIR"]).expanduser() if os.environ.get("C18D1_LOCKED_DATA_DIR") else _DEFAULT_LOCKED
 DEV_DIR = ROOT / "datasets" / "dev"
 REGRESSION_DIR = ROOT / "datasets" / "regression"
 

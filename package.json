@@ -46,6 +46,7 @@
     "phase0:gpu-controls-v3": "./scripts/c18d-phase0-gpu-controls-v3",
     "c18d1:resolve-revisions": "./scripts/c18d1-resolve-revisions",
     "c18d1:build-datasets": "./scripts/c18d1-build-datasets",
+    "c18d1:build-locked-datasets": "./scripts/c18d1-build-locked-datasets",
     "c18d1:gpu-pilot": "./scripts/c18d1-gpu-pilot",
     "c18d1:gpu-dev-baselines": "./scripts/c18d1-gpu-dev-baselines",
     "c18d1:gpu-locked-baselines": "./scripts/c18d1-gpu-locked-baselines",
