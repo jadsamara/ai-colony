@@ -1,0 +1,78 @@
+{
+  "artifacts": {
+    "generalizationTrain": "/home/info/ai-colony/tmp/c18d-phase0/gpu-controls/generalization/train/result.json",
+    "memorizationTrain": "/home/info/ai-colony/tmp/c18d-phase0/gpu-controls/memorization/train/result.json"
+  },
+  "autonomousTrainingUnlocked": true,
+  "bothControlsPassed": true,
+  "countsAsPhase0Pass": true,
+  "generalization": {
+    "baseExactMatch": 0.0,
+    "checks": {
+      "adapterLoaded": true,
+      "adapterWeightDelta": true,
+      "heldoutExactMatchPass": true,
+      "improvementPass": true,
+      "sampleSizeOk": true
+    },
+    "controlId": "phase0-generalization-v1",
+    "heldoutExactMatch": 1.0,
+    "improvement": 1.0,
+    "passed": true,
+    "thresholds": {
+      "minHeldoutExactMatch": 0.9,
+      "minImprovementOverBase": 0.5
+    }
+  },
+  "memorization": {
+    "checks": {
+      "adapterLoaded": true,
+      "adapterWeightDelta": true,
+      "exactMatchPass": true,
+      "sampleSizeOk": true
+    },
+    "controlId": "phase0-memorization-v1",
+    "exactMatch": 1.0,
+    "passed": true,
+    "threshold": 0.95
+  },
+  "mode": "gpu-controls",
+  "modelId": "Qwen/Qwen3-8B",
+  "note": "Copy this report into docs/milestones/C1_8D_PHASE0_GPU_RESULT.json after a real GPU run.",
+  "ollamaTouched": false,
+  "phase0Passed": true,
+  "specVersion": "c18d-phase0-report-v1",
+  "thresholds": {
+    "declaredBeforeTraining": true,
+    "generalization": {
+      "controlId": "phase0-generalization-v1",
+      "metric": "heldout_exact_match",
+      "minHeldoutExactMatch": 0.9,
+      "minHeldoutItems": 20,
+      "minImprovementOverBase": 0.5,
+      "requireAdapterLoaded": true,
+      "requireAdapterWeightDelta": true
+    },
+    "gpuGate": {
+      "autonomousTrainingUnlocksOnlyAfterPass": true,
+      "bothControlsMustPass": true,
+      "modelId": "Qwen/Qwen3-8B"
+    },
+    "localSmoke": {
+      "countsAsPhase0Pass": false,
+      "modelId": "Qwen/Qwen3-0.6B",
+      "purpose": "Catch chat-template / masking / adapter-load bugs before GPU spend"
+    },
+    "memorization": {
+      "controlId": "phase0-memorization-v1",
+      "metric": "exact_match_on_trained_items",
+      "minExactMatch": 0.95,
+      "minItems": 8,
+      "requireAdapterLoaded": true,
+      "requireAdapterWeightDelta": true
+    },
+    "note": "These thresholds were fixed before any Phase 0 training run. Do not edit after a GPU attempt without creating thresholds-v2.",
+    "specVersion": "c18d-phase0-thresholds-v1"
+  },
+  "wallClockMs": 184177
+}
