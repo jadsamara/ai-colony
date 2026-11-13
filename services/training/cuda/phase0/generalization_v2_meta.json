@@ -1,0 +1,11 @@
+{
+  "rule": "reverse(word) + '!'",
+  "instructionInUserField": false,
+  "trainCount": 200,
+  "heldoutCount": 100,
+  "seedMaterial": "c18d-phase0-generalization-v2",
+  "example": {
+    "user": "zebra",
+    "assistant": "arbez!"
+  }
+}

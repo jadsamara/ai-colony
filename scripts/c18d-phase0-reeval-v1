@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# C1.8D Phase 0 — two-mode re-evaluation of existing v1 adapters (diagnostic only).
+# Does NOT unlock autonomous training.
+#
+# Required env:
+#   C18D_MEM_ADAPTER   path to memorization adapter dir from the v1 GPU run
+#   C18D_GEN_ADAPTER   path to generalization adapter dir from the v1 GPU run
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+: "${C18D_MEM_ADAPTER:?Set C18D_MEM_ADAPTER to the v1 memorization adapter directory}"
+: "${C18D_GEN_ADAPTER:?Set C18D_GEN_ADAPTER to the v1 generalization adapter directory}"
+
+PYTHON="${C18D_PHASE0_PYTHON:-python3}"
+OUT="${C18D_PHASE0_OUT:-${ROOT}/tmp/c18d-phase0/reeval-v1}"
+VENV="${C18D_PHASE0_VENV:-${ROOT}/tmp/c18d-phase0/.venv-gpu}"
+
+if [[ "${C18D_PHASE0_SKIP_INSTALL:-}" != "1" ]]; then
+  "${PYTHON}" -m venv "${VENV}"
+  # shellcheck disable=SC1091
+  source "${VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-phase0.txt
+  PYTHON="${VENV}/bin/python"
+fi
+
+mkdir -p "${OUT}"
+"${PYTHON}" services/training/cuda/phase0/run_phase0_reeval_v1.py \
+  --python "${PYTHON}" \
+  --out "${OUT}" \
+  --device "${C18D_PHASE0_DEVICE:-cuda}" \
+  --memorization-adapter "${C18D_MEM_ADAPTER}" \
+  --generalization-adapter "${C18D_GEN_ADAPTER}"
+
+echo "[c18d-phase0] reeval report: ${OUT}/reeval-v1-report.json"
+echo "[c18d-phase0] autonomousTrainingUnlocked=false (diagnostic only)"

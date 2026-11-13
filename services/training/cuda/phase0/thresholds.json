@@ -1,7 +1,10 @@
 {
   "specVersion": "c18d-phase0-thresholds-v1",
+  "status": "superseded",
+  "supersededBy": "c18d-phase0-thresholds-v2",
+  "autonomousTrainingUnlocked": false,
   "declaredBeforeTraining": true,
-  "note": "These thresholds were fixed before any Phase 0 training run. Do not edit after a GPU attempt without creating thresholds-v2.",
+  "note": "Historical v1 thresholds. Superseded by thresholds-v2.json due to thinking/truncation eval defects. Do not use for gate unlock.",
   "memorization": {
     "controlId": "phase0-memorization-v1",
     "metric": "exact_match_on_trained_items",

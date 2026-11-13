@@ -1,53 +1,52 @@
-# C1.8D Phase 0 — Positive controls
+# C1.8D Phase 0 — Positive controls (v2)
 
 ## Status
 
 | Item | Status |
 |---|---|
-| Thresholds predeclared | Yes — `services/training/cuda/phase0/thresholds.json` |
-| PEFT train/eval + chat-template masking | Implemented |
-| Local Qwen3-0.6B smoke | **Operator-run on Mac** (script provided) |
-| GPU Qwen3-8B controls | **PENDING — run on GPU VM; Cursor has no VM access** |
-| Autonomous training flag | **Disabled** until `docs/milestones/C1_8D_PHASE0_GPU_RESULT.json` records a real pass |
+| v1 thresholds / eval | **Superseded** — see `C1_8D_PHASE0_EVAL_AUDIT.md` + `C1_8D_PHASE0_V1_SUPERSEDED.json` |
+| Thresholds v2 (declared before GPU) | `services/training/cuda/phase0/thresholds-v2.json` |
+| Two-mode matched eval + invalid accounting | Implemented in `peft_lora_eval.py` / `peft_eval_common.py` |
+| Hidden-rule generalization v2 dataset | 200 train / 100 held-out |
+| Autonomous training | **Locked** until `C1_8D_PHASE0_GPU_RESULT_V2.json` records a real pass |
+| GPU results in this Cursor session | **None reported** |
 
-Passing unit tests ≠ Phase 0 pass. Local smoke ≠ Phase 0 pass.
+## Predeclared v2 thresholds
 
-## Predeclared thresholds (do not edit silently)
+- Modes (identical for base and adapter):
+  - `thinking_disabled` (`enable_thinking=False`, `maxNewTokens=64`)
+  - `thinking_enabled` (`enable_thinking=True`, `maxNewTokens=1024`, extract after `</think>`)
+- Base `invalidRate > 5%` ⇒ that mode’s evaluation is **invalid** (not a pass).
+- Memorization: adapter exact-match ≥ 0.95 in **both** modes; evaluate base in both modes.
+- Generalization v2: hidden reverse+`!` rule; held-out exact-match ≥ 0.90 **and** improvement over base ≥ 0.50 in **both** modes.
 
-- Memorization: exact-match ≥ **0.95** on the 8 trained SECRET_PAIR items; adapter must load; adapter weights must change.
-- Generalization: held-out exact-match ≥ **0.90** on 24 unseen `REWRITE: wrap brackets` items **and** improvement over base ≥ **0.50**; adapter must load; weights must change.
+## GPU VM commands
 
-## Local smoke (Mac)
-
-```bash
-cd /path/to/ai-colony
-./scripts/c18d-phase0-local-smoke
-# report: tmp/c18d-phase0/local-smoke/phase0-report.json
-```
-
-This may download `Qwen/Qwen3-0.6B` into the HF cache. It must not touch Ollama.
-
-## GPU VM acceptance (operator)
+### (a) Corrected two-mode re-evaluation of v1 adapters (diagnostic)
 
 ```bash
 cd /path/to/ai-colony
 git pull
-./scripts/c18d-phase0-gpu-controls
-# report: tmp/c18d-phase0/gpu-controls/phase0-report.json
+export C18D_MEM_ADAPTER=/path/to/v1/memorization/train/adapter
+export C18D_GEN_ADAPTER=/path/to/v1/generalization/train/adapter
+./scripts/c18d-phase0-reeval-v1
+# → tmp/c18d-phase0/reeval-v1/reeval-v1-report.json
 ```
 
-Record exact installed versions from the script stdout (`torch`, `transformers`, `peft`, CUDA device name).  
-If `phase0Passed: true`:
+This never unlocks autonomous training. Paste the report back for truncated/no-final-answer counts.
+
+### (b) Corrected v2 controls (gate)
 
 ```bash
-cp tmp/c18d-phase0/gpu-controls/phase0-report.json docs/milestones/C1_8D_PHASE0_GPU_RESULT.json
-git add docs/milestones/C1_8D_PHASE0_GPU_RESULT.json
-git commit -m "Record C1.8D Phase 0 GPU positive-control pass."
+cd /path/to/ai-colony
+git pull
+./scripts/c18d-phase0-gpu-controls-v2
+# → tmp/c18d-phase0/gpu-controls-v2/phase0-report-v2.json
+# if phase0Passed=true:
+cp tmp/c18d-phase0/gpu-controls-v2/phase0-report-v2.json docs/milestones/C1_8D_PHASE0_GPU_RESULT_V2.json
 ```
 
-Until that file exists with `mode=gpu-controls` and `phase0Passed=true`, `readAutonomousLearningFlags()` keeps autonomous training **off**.
+## Training/eval template alignment
 
-## What Phase 0 proves / does not prove
-
-- Proves: the HF PEFT pipeline can train an adapter that learns (memorization + simple generalization).
-- Does **not** prove: Math algebra improvement, Weight Optimization decision quality, or readiness for autonomous cycles.
+- Training uses `enable_thinking=False` (final-answer supervision).
+- Evaluation runs both modes explicitly and records `thinkingMode`, `maxNewTokens`, and `templateFingerprint` on every result.

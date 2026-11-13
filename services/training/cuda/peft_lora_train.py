@@ -17,7 +17,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from peft_chat import tokenize_with_prompt_mask
+from peft_chat import template_fingerprint, tokenize_with_prompt_mask
 
 
 def _fail(code: str, message: str) -> None:
@@ -175,6 +175,8 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
                 break
 
     max_length = int(job.get("maxSeqLen") or 256)
+    # Train on final answers only; matched eval modes are applied at evaluation time.
+    train_enable_thinking = False
 
     def _map_row(row: dict[str, Any]) -> dict[str, Any]:
         encoded = tokenize_with_prompt_mask(
@@ -182,6 +184,7 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
             str(row["user"]),
             str(row["assistant"]),
             max_length=max_length,
+            enable_thinking=train_enable_thinking,
         )
         return {
             "input_ids": encoded["input_ids"],
@@ -191,7 +194,13 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
 
     mapped = [_map_row(row) for row in rows]
     probe_masks = [
-        tokenize_with_prompt_mask(tokenizer, str(r["user"]), str(r["assistant"]), max_length)
+        tokenize_with_prompt_mask(
+            tokenizer,
+            str(r["user"]),
+            str(r["assistant"]),
+            max_length,
+            enable_thinking=train_enable_thinking,
+        )
         for r in rows[:3]
     ]
     if any(item["label_token_count"] == 0 for item in probe_masks):
@@ -285,6 +294,8 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
         "adapterWeightDelta": delta,
         "adapterWeightsChanged": adapter_changed,
         "chatTemplateUsed": bool(getattr(tokenizer, "chat_template", None)),
+        "templateFingerprint": template_fingerprint(tokenizer),
+        "enableThinking": train_enable_thinking,
         "promptMasking": True,
         "eosTokenId": tokenizer.eos_token_id,
         "libraries": _library_versions(),

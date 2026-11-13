@@ -1,0 +1,55 @@
+{
+  "specVersion": "c18d-phase0-thresholds-v2",
+  "declaredBeforeTraining": true,
+  "declaredAt": "2026-11-13T00:00:00.000Z",
+  "note": "Committed before any v2 GPU run. Do not edit after a GPU attempt without creating thresholds-v3.",
+  "evaluation": {
+    "modes": [
+      {
+        "id": "thinking_disabled",
+        "enableThinking": false,
+        "maxNewTokens": 64
+      },
+      {
+        "id": "thinking_enabled",
+        "enableThinking": true,
+        "maxNewTokens": 1024,
+        "extractAfterThink": true
+      }
+    ],
+    "maxBaseInvalidRate": 0.05,
+    "matchedSettingsRequired": true,
+    "invalidIsNotWrong": true
+  },
+  "memorization": {
+    "controlId": "phase0-memorization-v1-dataset",
+    "datasetPath": "memorization.jsonl",
+    "minExactMatchPerMode": 0.95,
+    "minItems": 8,
+    "requireAdapterLoaded": true,
+    "requireAdapterWeightDelta": true,
+    "evaluateBaseInBothModes": true
+  },
+  "generalization": {
+    "controlId": "phase0-generalization-v2-hidden-reverse-suffix",
+    "rule": "Reverse the input word and append a fixed '!' suffix. The rule is never stated in the input.",
+    "trainPath": "generalization_v2_train.jsonl",
+    "heldoutPath": "generalization_v2_heldout.jsonl",
+    "minTrainItems": 200,
+    "minHeldoutItems": 100,
+    "minHeldoutExactMatchPerMode": 0.9,
+    "minImprovementOverBasePerMode": 0.5,
+    "requireAdapterLoaded": true,
+    "requireAdapterWeightDelta": true
+  },
+  "localSmoke": {
+    "modelId": "Qwen/Qwen3-0.6B",
+    "countsAsPhase0Pass": false
+  },
+  "gpuGate": {
+    "modelId": "Qwen/Qwen3-8B",
+    "bothControlsMustPassInBothModes": true,
+    "autonomousTrainingUnlocksOnlyAfterPass": true,
+    "requiredReportPath": "docs/milestones/C1_8D_PHASE0_GPU_RESULT_V2.json"
+  }
+}

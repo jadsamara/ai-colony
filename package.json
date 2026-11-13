@@ -41,6 +41,8 @@
     "accept:c18c:vm": "./scripts/c18c-sandbox-acceptance",
     "phase0:local-smoke": "./scripts/c18d-phase0-local-smoke",
     "phase0:gpu-controls": "./scripts/c18d-phase0-gpu-controls",
+    "phase0:reeval-v1": "./scripts/c18d-phase0-reeval-v1",
+    "phase0:gpu-controls-v2": "./scripts/c18d-phase0-gpu-controls-v2",
     "health": "tsc -b packages/contracts packages/core packages/database packages/inference --pretty false && tsx apps/api/src/runtime-health-cli.ts",
     "ledger:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/ledger-readiness-cli.ts",
     "routing:ready": "tsc -b packages/contracts packages/core packages/database --pretty false && tsx apps/api/src/routing-readiness-cli.ts",

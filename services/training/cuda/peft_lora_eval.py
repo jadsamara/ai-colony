@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Evaluate base vs adapter generations; prove the adapter is loaded."""
+"""Matched two-mode PEFT evaluation (base vs adapter) with invalid-output accounting."""
 
 from __future__ import annotations
 
 import json
-import re
 import sys
 import time
 import traceback
 from pathlib import Path
 from typing import Any
 
-from peft_chat import build_chat_texts
+from peft_chat import build_chat_texts, template_fingerprint
+from peft_eval_common import EVAL_MODES, score_prediction, summarize_scores
 
 
 def _fail(code: str, message: str) -> None:
@@ -38,10 +38,6 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _normalize(text: str) -> str:
-    return re.sub(r"\s+", " ", text.strip())
-
-
 def _pick_device(job: dict[str, Any]) -> str:
     import torch
 
@@ -53,6 +49,18 @@ def _pick_device(job: dict[str, Any]) -> str:
     if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
         return "mps"
     return "cpu"
+
+
+def _resolve_mode(job: dict[str, Any]) -> dict[str, Any]:
+    mode_id = str(job.get("thinkingMode") or job.get("evalMode") or "thinking_disabled")
+    if mode_id not in EVAL_MODES:
+        _fail("EVAL_MODE", f"Unknown thinkingMode {mode_id}")
+    mode = dict(EVAL_MODES[mode_id])
+    if job.get("maxNewTokens") is not None:
+        mode["maxNewTokens"] = int(job["maxNewTokens"])
+    if job.get("enableThinking") is not None:
+        mode["enableThinking"] = bool(job["enableThinking"])
+    return mode
 
 
 def evaluate(job: dict[str, Any]) -> dict[str, Any]:
@@ -68,7 +76,10 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
     tokenizer_revision = job.get("tokenizerRevision") or revision
     adapter_path = job.get("adapterPath")
     device = _pick_device(job)
-    max_new_tokens = int(job.get("maxNewTokens") or 32)
+    mode = _resolve_mode(job)
+    max_new_tokens = int(mode["maxNewTokens"])
+    enable_thinking = bool(mode["enableThinking"])
+    max_invalid = float(job.get("maxBaseInvalidRate") or 0.05)
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_id,
@@ -77,6 +88,7 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    tmpl_fp = template_fingerprint(tokenizer)
 
     started = time.time()
     base = AutoModelForCausalLM.from_pretrained(
@@ -96,17 +108,20 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
         if device != "cpu":
             model.to(device)
         model.eval()
-        # Prove adapter modules exist and are active.
         adapter_names = [name for name, _ in model.named_parameters() if "lora_" in name]
         adapter_loaded = len(adapter_names) > 0
         if not adapter_loaded:
             _fail("ADAPTER_NOT_LOADED", f"No LoRA parameters found under {adapter_path}")
 
-    correct = 0
     predictions: list[dict[str, Any]] = []
     with torch.no_grad():
         for row in rows:
-            prompt, _ = build_chat_texts(tokenizer, str(row["user"]), None)
+            prompt, _ = build_chat_texts(
+                tokenizer,
+                str(row["user"]),
+                None,
+                enable_thinking=enable_thinking,
+            )
             inputs = tokenizer(prompt, return_tensors="pt")
             inputs = {key: value.to(device) for key, value in inputs.items()}
             generated = model.generate(
@@ -115,37 +130,47 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
                 do_sample=False,
                 pad_token_id=tokenizer.pad_token_id,
                 eos_token_id=tokenizer.eos_token_id,
+                return_dict_in_generate=True,
             )
-            new_tokens = generated[0][inputs["input_ids"].shape[-1] :]
+            sequences = generated.sequences
+            new_tokens = sequences[0][inputs["input_ids"].shape[-1] :]
+            truncated = int(new_tokens.shape[0]) >= max_new_tokens
+            # If EOS present in new tokens, not truncated.
+            if tokenizer.eos_token_id is not None and tokenizer.eos_token_id in set(new_tokens.tolist()):
+                truncated = False
             text = tokenizer.decode(new_tokens, skip_special_tokens=True)
-            expected = str(row["assistant"])
-            ok = _normalize(text) == _normalize(expected) or _normalize(expected) in _normalize(text)
-            correct += int(ok)
+            scored = score_prediction(
+                text,
+                str(row["assistant"]),
+                enable_thinking=enable_thinking,
+                truncated=truncated,
+            )
             predictions.append(
                 {
                     "id": row.get("id"),
-                    "expected": expected,
-                    "prediction": text,
-                    "exactMatch": ok,
+                    "rawPrediction": text,
+                    **scored,
                 },
             )
 
+    summary = summarize_scores(predictions, max_base_invalid_rate=max_invalid)
     duration_ms = int((time.time() - started) * 1000)
-    total = len(rows)
     result = {
         "ok": True,
         "modelId": model_id,
         "adapterPath": adapter_path,
         "adapterLoaded": adapter_loaded if adapter_path else False,
         "evaluatedWithAdapter": bool(adapter_path) and adapter_loaded,
-        "sampleSize": total,
-        "exactMatch": (correct / total) if total else 0.0,
-        "correct": correct,
-        "durationMs": duration_ms,
-        "examplesPerSec": (total / (duration_ms / 1000.0)) if duration_ms else None,
+        "thinkingMode": mode["id"],
+        "enableThinking": enable_thinking,
+        "maxNewTokens": max_new_tokens,
+        "templateFingerprint": tmpl_fp,
         "device": device,
+        "durationMs": duration_ms,
+        "examplesPerSec": (len(rows) / (duration_ms / 1000.0)) if duration_ms else None,
         "predictions": predictions,
         "ollamaTouched": False,
+        **summary,
     }
     _write_json(output / "eval-result.json", result)
     return result
