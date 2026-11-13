@@ -1,0 +1,90 @@
+{
+  "specVersion": "c18d-phase0-thresholds-v3",
+  "supersedes": "c18d-phase0-thresholds-v2.1",
+  "declaredBeforeTraining": false,
+  "introducedAfterExamining": "c18d-phase0-thresholds-v2.1",
+  "declaredAt": "2026-11-13T17:00:00.000Z",
+  "note": "Introduced after examining the v2.1 GPU run. v2.1 failed on evaluation-validity (hard base invalid-rate cutoff), not on observed adapter accuracy: generalization adapter 100/100 correct (0% invalid) with base 0/100 correct (29% invalid); memorization adapter 8/8 correct (0% invalid) with base 0/8 correct (100% invalid). v3 replaces that cutoff with a conservative worst-case comparison. This is not an independent pre-result specification. Do not claim the bound alone would have rejected v1 without verifying it. Preserve v2 and v2.1 unchanged. Do not edit after a v3 GPU attempt without creating thresholds-v4.",
+  "v21DiagnosticCarryForward": {
+    "source": "v2.1 GPU thinking_enabled informational eval",
+    "generalizationAdapterInvalidRate": 0.85,
+    "memorizationAdapterInvalidRate": 1.0,
+    "causality": "Do not claim thinking-mode degradation is conclusively caused by training until a properly controlled comparison establishes causality."
+  },
+  "evaluation": {
+    "gatingMode": "thinking_disabled",
+    "comparisonMethod": "conservative_worst_case_bounds",
+    "modes": [
+      {
+        "id": "thinking_disabled",
+        "role": "gating",
+        "enableThinking": false,
+        "maxNewTokens": 256
+      },
+      {
+        "id": "thinking_enabled",
+        "role": "informational",
+        "enableThinking": true,
+        "maxNewTokens": 4096,
+        "extractAfterThink": true,
+        "defaultSkipOnGpuControls": true
+      }
+    ],
+    "matchedSettingsRequired": true,
+    "invalidIsNotWrong": true,
+    "bounds": {
+      "baseUpperBoundAccuracy": "(baseCorrect + baseInvalid) / total",
+      "adapterLowerBoundAccuracy": "adapterCorrect / total (invalid counted as failure)",
+      "conservativeImprovement": "adapterLowerBoundAccuracy - baseUpperBoundAccuracy"
+    },
+    "hardBaseInvalidRateCutoff": false
+  },
+  "memorization": {
+    "controlId": "phase0-memorization-v1-dataset",
+    "datasetPath": "memorization.jsonl",
+    "minAdapterLowerBoundAccuracy": 0.95,
+    "minItems": 8,
+    "requireAdapterLoaded": true,
+    "requireAdapterWeightDelta": true,
+    "requireImprovementOverBase": false
+  },
+  "generalization": {
+    "controlId": "phase0-generalization-v2-hidden-reverse-suffix",
+    "rule": "Reverse the input word and append a fixed '!' suffix. The rule is never stated in the input.",
+    "trainPath": "generalization_v2_train.jsonl",
+    "heldoutPath": "generalization_v2_heldout.jsonl",
+    "minTrainItems": 200,
+    "minHeldoutItems": 100,
+    "minAdapterLowerBoundAccuracy": 0.9,
+    "minConservativeImprovementOverBase": 0.5,
+    "requireAdapterLoaded": true,
+    "requireAdapterWeightDelta": true
+  },
+  "localSmoke": {
+    "modelId": "Qwen/Qwen3-0.6B",
+    "countsAsPhase0Pass": false
+  },
+  "gpuGate": {
+    "modelId": "Qwen/Qwen3-8B",
+    "bothControlsMustPassInGatingMode": true,
+    "skipThinkingEnabledByDefault": true,
+    "freshAdaptersRequired": true,
+    "reusePriorAdapters": false,
+    "autonomousTrainingUnlocksOnlyAfterIndependentEvidencePass": true,
+    "requiredReportPath": "docs/milestones/C1_8D_PHASE0_GPU_RESULT_V3.json",
+    "requiredReportMode": "gpu-controls-v3"
+  },
+  "trainingHyperparameters": {
+    "unchangedFromV21": true,
+    "memorizationSteps": 80,
+    "generalizationSteps": 200,
+    "learningRate": 2e-4,
+    "loraRank": 8,
+    "loraAlpha": 16,
+    "batchSize": 1,
+    "gradAccum": 4,
+    "maxSeqLen": 192,
+    "seed": 18,
+    "enableThinking": false
+  }
+}

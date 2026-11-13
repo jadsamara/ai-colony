@@ -153,6 +153,63 @@ def score_prediction(
     }
 
 
+def conservative_accuracy_bounds(
+    *,
+    correct: int,
+    wrong: int,
+    invalid: int,
+) -> dict[str, Any]:
+    """Worst-case accuracy bounds for Phase 0 v3 comparison.
+
+    - Upper bound treats every invalid as if it could have been correct.
+    - Lower bound treats every invalid as a failure (correct / total).
+    """
+    total = int(correct) + int(wrong) + int(invalid)
+    observed = (correct / total) if total else 0.0
+    upper = ((correct + invalid) / total) if total else 0.0
+    lower = (correct / total) if total else 0.0
+    return {
+        "total": total,
+        "correct": int(correct),
+        "wrong": int(wrong),
+        "invalid": int(invalid),
+        "countsConsistent": total == int(correct) + int(wrong) + int(invalid),
+        "observedAccuracy": observed,
+        "upperBoundAccuracy": upper,
+        "lowerBoundAccuracy": lower,
+    }
+
+
+def conservative_improvement(
+    *,
+    base_correct: int,
+    base_wrong: int,
+    base_invalid: int,
+    adapter_correct: int,
+    adapter_wrong: int,
+    adapter_invalid: int,
+) -> dict[str, Any]:
+    base = conservative_accuracy_bounds(
+        correct=base_correct,
+        wrong=base_wrong,
+        invalid=base_invalid,
+    )
+    adapter = conservative_accuracy_bounds(
+        correct=adapter_correct,
+        wrong=adapter_wrong,
+        invalid=adapter_invalid,
+    )
+    improvement = float(adapter["lowerBoundAccuracy"]) - float(base["upperBoundAccuracy"])
+    return {
+        "base": base,
+        "adapter": adapter,
+        "baseUpperBoundAccuracy": base["upperBoundAccuracy"],
+        "adapterLowerBoundAccuracy": adapter["lowerBoundAccuracy"],
+        "conservativeImprovement": improvement,
+        "observedImprovement": float(adapter["observedAccuracy"]) - float(base["observedAccuracy"]),
+    }
+
+
 def summarize_scores(rows: list[dict[str, Any]], *, max_base_invalid_rate: float = 0.05) -> dict[str, Any]:
     total = len(rows)
     correct = sum(1 for row in rows if row.get("outcome") == "correct")
@@ -171,6 +228,7 @@ def summarize_scores(rows: list[dict[str, Any]], *, max_base_invalid_rate: float
     invalid_rate = (invalid / total) if total else 0.0
     # exactMatch among valid only is informative; gate uses exactMatchAllValidDenom below.
     valid = correct + wrong
+    bounds = conservative_accuracy_bounds(correct=correct, wrong=wrong, invalid=invalid)
     return {
         "sampleSize": total,
         "correct": correct,
@@ -181,6 +239,13 @@ def summarize_scores(rows: list[dict[str, Any]], *, max_base_invalid_rate: float
         "invalidRate": invalid_rate,
         "exactMatch": (correct / total) if total else 0.0,
         "exactMatchAmongValid": (correct / valid) if valid else 0.0,
+        "observedAccuracy": bounds["observedAccuracy"],
+        "upperBoundAccuracy": bounds["upperBoundAccuracy"],
+        "lowerBoundAccuracy": bounds["lowerBoundAccuracy"],
         "evaluationValid": invalid_rate <= max_base_invalid_rate,
         "maxBaseInvalidRate": max_base_invalid_rate,
+        "note": (
+            "evaluationValid reflects the legacy hard invalid-rate cutoff (v2/v2.1). "
+            "Phase 0 v3 gates on conservative bounds instead."
+        ),
     }

@@ -2,7 +2,7 @@
 
 ## Gate status
 
-**`autonomousTrainingUnlocked` remains false** until corrected **thresholds v2.1** controls pass on the GPU VM (`thinking_disabled` gating; `thinking_enabled` informational only). Thresholds v2 remains in-repo unchanged but is superseded as the gate spec.
+**`autonomousTrainingUnlocked` remains false** until corrected **thresholds v3** controls pass on the GPU VM and the gate independently re-validates conservative-bound evidence. Thresholds v2 / v2.1 remain in-repo unchanged but are superseded as the gate spec. v2.1 failed on the hard base-invalid cutoff despite strong observed adapter accuracy; see `thresholds-v3.json`.
 
 Any prior v1 GPU report (if recorded) is **historical only** and is marked superseded in `docs/milestones/C1_8D_PHASE0_V1_SUPERSEDED.json`. Do not edit original result payloads.
 

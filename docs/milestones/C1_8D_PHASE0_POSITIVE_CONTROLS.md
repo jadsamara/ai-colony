@@ -1,58 +1,72 @@
-# C1.8D Phase 0 — Positive controls (v2.1)
+# C1.8D Phase 0 — Positive controls (v3)
 
 ## Status
 
 | Item | Status |
 |---|---|
-| v1 thresholds / eval | **Superseded** — see `C1_8D_PHASE0_EVAL_AUDIT.md` + `C1_8D_PHASE0_V1_SUPERSEDED.json` |
-| Thresholds v2 (both modes gated) | **Superseded as gate spec** — kept unchanged at `thresholds-v2.json` |
-| Thresholds v2.1 (gate) | `services/training/cuda/phase0/thresholds-v2.1.json` |
-| Two-mode matched eval + invalid accounting | Implemented in `peft_lora_eval.py` / `peft_eval_common.py` |
-| Hidden-rule generalization v2 dataset | 200 train / 100 held-out |
-| Autonomous training | **Locked** until `C1_8D_PHASE0_GPU_RESULT_V2.json` records a real **v2.1** pass |
-| GPU results in this Cursor session | **None reported** (no v2/v2.1 GPU run yet) |
+| v1 thresholds / eval | **Superseded** — preserved; see `C1_8D_PHASE0_V1_SUPERSEDED.json` |
+| Thresholds v2 | **Unchanged** in repo; superseded as gate spec |
+| Thresholds v2.1 | **Unchanged** in repo; superseded as gate spec after examining GPU results |
+| Thresholds v3 (gate) | `services/training/cuda/phase0/thresholds-v3.json` |
+| Autonomous training | **Locked** until `C1_8D_PHASE0_GPU_RESULT_V3.json` independently validates |
+| v3 GPU run in this Cursor session | **Not run** |
 
-## Why v2.1
+## Why v3 (after examining v2.1)
 
-Adapters are trained with `enable_thinking=False`. Gating on `thinking_enabled` is out of distribution for that adapter. v2.1 keeps matched thinking-enabled eval for diagnostics (accuracy + invalid counts, `maxNewTokens=4096`) but **only `thinking_disabled` affects the gate**, including `maxBaseInvalidRate`.
+v2.1 failed on the hard base-invalid-rate cutoff, not on observed adapter accuracy:
 
-## Predeclared v2.1 thresholds
+| Control | Adapter | Base |
+|---|---|---|
+| Generalization | 100/100 correct, 0% invalid | 0/100 correct, 29% invalid |
+| Memorization | 8/8 correct, 0% invalid | 0/8 correct, 100% invalid |
 
-- **Gating mode:** `thinking_disabled` (`enable_thinking=False`, `maxNewTokens=64`)
-- **Informational mode:** `thinking_enabled` (`enable_thinking=True`, `maxNewTokens=4096`, extract after `</think>`) — does not fail the gate
-- Base `invalidRate > 5%` in the **gating** mode ⇒ evaluation invalid (not a pass). Informational invalid rate is reported only.
-- Memorization (gating mode): adapter exact-match ≥ 0.95; adapter loaded; weight delta; sample size
-- Generalization v2 (gating mode): held-out exact-match ≥ 0.90 **and** improvement over base ≥ 0.50; adapter loaded; weight delta
-- `gpuGate.bothControlsMustPassInGatingMode: true`
+v3 replaces that cutoff with a **conservative worst-case comparison**:
 
-## GPU VM commands
+- Base upper-bound accuracy = `(correct + invalid) / total`
+- Adapter lower-bound accuracy = `correct / total` (invalids count as failures)
+- Generalization improvement = adapter lower bound − base upper bound
 
-### (a) Corrected two-mode re-evaluation of v1 adapters (diagnostic)
+v3 is **not** an independent pre-result specification. Do not claim the bound alone would have rejected v1 without verifying it.
+
+### Thinking-mode diagnostic (carried forward; causality not established)
+
+From v2.1 informational `thinking_enabled` eval:
+
+- Generalization adapter: **85% invalid**
+- Memorization adapter: **100% invalid**
+
+Do not claim this degradation is conclusively caused by training until a controlled comparison establishes causality. v3 GPU controls **skip** `thinking_enabled` by default; the evaluator remains available via `--run-thinking-enabled`.
+
+## Predeclared v3 thresholds
+
+- **Gating mode:** `thinking_disabled` (`enable_thinking=False`, `maxNewTokens=256`, matched for base and adapter)
+- **Informational mode:** `thinking_enabled` (skipped by default on GPU)
+- Memorization: adapter lower-bound ≥ 0.95; adapter loaded; weight delta; sample size. **No** required improvement over base.
+- Generalization: adapter lower-bound ≥ 0.90 **and** conservative improvement ≥ 0.50; adapter loaded; weight delta; held-out size
+- Fresh adapters required (do not reuse v2.1 artifacts)
+- Gate re-validates counts/bounds independently; report booleans alone never unlock
+
+## GPU VM commands (v3)
 
 ```bash
 cd /path/to/ai-colony
 git pull
-export C18D_MEM_ADAPTER=/path/to/v1/memorization/train/adapter
-export C18D_GEN_ADAPTER=/path/to/v1/generalization/train/adapter
-./scripts/c18d-phase0-reeval-v1
-# → tmp/c18d-phase0/reeval-v1/reeval-v1-report.json
+
+# Fresh output dir required (script refuses non-empty paths)
+export C18D_PHASE0_OUT=/path/to/ai-colony/tmp/c18d-phase0/gpu-controls-v3-$(date +%Y%m%d-%H%M%S)
+
+./scripts/c18d-phase0-gpu-controls-v3
+# → ${C18D_PHASE0_OUT}/phase0-report-v3.json
+
+# Optional informational thinking_enabled pass:
+# C18D_PHASE0_RUN_THINKING_ENABLED=1 ./scripts/c18d-phase0-gpu-controls-v3
+
+# Only after independent evidence pass:
+cp "${C18D_PHASE0_OUT}/phase0-report-v3.json" docs/milestones/C1_8D_PHASE0_GPU_RESULT_V3.json
 ```
 
-This never unlocks autonomous training. Paste the report back for truncated/no-final-answer counts.
+## Training/eval alignment
 
-### (b) Corrected v2.1 controls (gate)
-
-```bash
-cd /path/to/ai-colony
-git pull
-./scripts/c18d-phase0-gpu-controls-v2
-# → tmp/c18d-phase0/gpu-controls-v2/phase0-report-v2.json
-# if phase0Passed=true:
-cp tmp/c18d-phase0/gpu-controls-v2/phase0-report-v2.json docs/milestones/C1_8D_PHASE0_GPU_RESULT_V2.json
-```
-
-## Training/eval template alignment
-
-- Training uses `enable_thinking=False` (final-answer supervision).
-- Evaluation still runs both modes with matched settings and records `thinkingMode`, `maxNewTokens`, and `templateFingerprint` on every result.
-- Only the gating mode unlocks autonomous training.
+- Retrain both controls from base `Qwen/Qwen3-8B` with unchanged hyperparameters (unless separately versioned).
+- Record resolved model/tokenizer revisions, seeds, adapter fingerprints, and load/train/eval wall-clock timings.
+- Prior v1/v2/v2.1 reports and failures remain unchanged.

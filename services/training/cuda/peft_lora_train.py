@@ -136,6 +136,7 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
     if device == "cuda" and torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
 
+    load_started = time.time()
     tokenizer = AutoTokenizer.from_pretrained(
         model_id,
         revision=tokenizer_revision,
@@ -152,6 +153,9 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
     )
     if device != "cpu":
         model.to(device)
+    load_ms = int((time.time() - load_started) * 1000)
+    resolved_model_revision = revision or getattr(model.config, "_commit_hash", None)
+    resolved_tokenizer_revision = tokenizer_revision or getattr(tokenizer, "name_or_path", None)
 
     lora = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
@@ -174,6 +178,7 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
             if len(before_vectors) >= 256:
                 break
 
+    train_started = time.time()
     max_length = int(job.get("maxSeqLen") or 256)
     # Train on final answers only; matched eval modes are applied at evaluation time.
     train_enable_thinking = False
@@ -247,6 +252,7 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
         data_collator=collator,
     )
     train_result = trainer.train()
+    train_ms = int((time.time() - train_started) * 1000)
 
     adapter_dir = output / "adapter"
     trainer.model.save_pretrained(adapter_dir)
@@ -283,6 +289,8 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
         "modelId": model_id,
         "modelRevision": revision,
         "tokenizerRevision": tokenizer_revision,
+        "resolvedModelRevision": resolved_model_revision,
+        "resolvedTokenizerRevision": resolved_tokenizer_revision,
         "seed": seed,
         "steps": steps,
         "learningRate": learning_rate,
@@ -300,6 +308,11 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
         "eosTokenId": tokenizer.eos_token_id,
         "libraries": _library_versions(),
         "trainLoss": float(train_result.training_loss) if train_result.training_loss is not None else None,
+        "timing": {
+            "modelLoadMs": load_ms,
+            "trainMs": train_ms,
+            "wallClockMs": duration_ms,
+        },
         "throughput": throughput,
         "ollamaTouched": False,
     }
@@ -309,6 +322,8 @@ def train(job: dict[str, Any]) -> dict[str, Any]:
         "modelId": model_id,
         "modelRevision": revision,
         "tokenizerRevision": tokenizer_revision,
+        "resolvedModelRevision": resolved_model_revision,
+        "resolvedTokenizerRevision": resolved_tokenizer_revision,
         "seed": seed,
         "steps": steps,
         "learningRate": learning_rate,

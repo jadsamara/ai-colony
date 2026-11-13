@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# C1.8D Phase 0 — corrected GPU controls (thresholds v3).
+# Fresh adapters from Qwen3-8B; thinking_disabled gating with conservative bounds.
+# thinking_enabled skipped by default (pass --run-thinking-enabled to include).
+# Run ONLY on the Debian GPU VM. Cursor cannot access that VM.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+PYTHON="${C18D_PHASE0_PYTHON:-python3}"
+OUT="${C18D_PHASE0_OUT:-${ROOT}/tmp/c18d-phase0/gpu-controls-v3}"
+VENV="${C18D_PHASE0_VENV:-${ROOT}/tmp/c18d-phase0/.venv-gpu}"
+
+echo "[c18d-phase0] GPU controls v3 on $(hostname)"
+command -v nvidia-smi >/dev/null && nvidia-smi || echo "[c18d-phase0] WARN: nvidia-smi missing"
+
+if [[ -e "${OUT}" && -n "$(ls -A "${OUT}" 2>/dev/null || true)" ]]; then
+  echo "[c18d-phase0] REFUSING non-empty output dir: ${OUT}"
+  echo "[c18d-phase0] v3 requires fresh adapters. Set C18D_PHASE0_OUT to a new path or remove the dir."
+  exit 1
+fi
+
+if [[ "${C18D_PHASE0_SKIP_INSTALL:-}" != "1" ]]; then
+  "${PYTHON}" -m venv "${VENV}"
+  # shellcheck disable=SC1091
+  source "${VENV}/bin/activate"
+  pip install -U pip
+  pip install -r services/training/cuda/requirements-phase0.txt
+  PYTHON="${VENV}/bin/python"
+  "${PYTHON}" - <<'PY'
+import torch, transformers, peft
+print("torch", torch.__version__, "cuda", torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)
+print("transformers", transformers.__version__)
+print("peft", peft.__version__)
+PY
+fi
+
+mkdir -p "${OUT}"
+EXTRA_ARGS=()
+if [[ "${C18D_PHASE0_RUN_THINKING_ENABLED:-}" == "1" ]]; then
+  EXTRA_ARGS+=(--run-thinking-enabled)
+fi
+
+"${PYTHON}" services/training/cuda/phase0/run_phase0_v3.py \
+  --mode gpu-controls-v3 \
+  --python "${PYTHON}" \
+  --out "${OUT}" \
+  --device cuda \
+  "${EXTRA_ARGS[@]}"
+
+echo "[c18d-phase0] v3 report: ${OUT}/phase0-report-v3.json"
+echo "[c18d-phase0] On independently validated pass:"
+echo "  cp ${OUT}/phase0-report-v3.json docs/milestones/C1_8D_PHASE0_GPU_RESULT_V3.json"

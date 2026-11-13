@@ -81,6 +81,8 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
     enable_thinking = bool(mode["enableThinking"])
     max_invalid = float(job.get("maxBaseInvalidRate") or 0.05)
 
+    started = time.time()
+    load_started = time.time()
     tokenizer = AutoTokenizer.from_pretrained(
         model_id,
         revision=tokenizer_revision,
@@ -90,7 +92,6 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
         tokenizer.pad_token = tokenizer.eos_token
     tmpl_fp = template_fingerprint(tokenizer)
 
-    started = time.time()
     base = AutoModelForCausalLM.from_pretrained(
         model_id,
         revision=revision,
@@ -112,7 +113,11 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
         adapter_loaded = len(adapter_names) > 0
         if not adapter_loaded:
             _fail("ADAPTER_NOT_LOADED", f"No LoRA parameters found under {adapter_path}")
+    load_ms = int((time.time() - load_started) * 1000)
+    resolved_model_revision = revision or getattr(base.config, "_commit_hash", None)
+    resolved_tokenizer_revision = tokenizer_revision or getattr(tokenizer, "name_or_path", None)
 
+    eval_started = time.time()
     predictions: list[dict[str, Any]] = []
     with torch.no_grad():
         for row in rows:
@@ -154,10 +159,15 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
             )
 
     summary = summarize_scores(predictions, max_base_invalid_rate=max_invalid)
+    eval_ms = int((time.time() - eval_started) * 1000)
     duration_ms = int((time.time() - started) * 1000)
     result = {
         "ok": True,
         "modelId": model_id,
+        "modelRevision": revision,
+        "tokenizerRevision": tokenizer_revision,
+        "resolvedModelRevision": resolved_model_revision,
+        "resolvedTokenizerRevision": resolved_tokenizer_revision,
         "adapterPath": adapter_path,
         "adapterLoaded": adapter_loaded if adapter_path else False,
         "evaluatedWithAdapter": bool(adapter_path) and adapter_loaded,
@@ -167,7 +177,12 @@ def evaluate(job: dict[str, Any]) -> dict[str, Any]:
         "templateFingerprint": tmpl_fp,
         "device": device,
         "durationMs": duration_ms,
-        "examplesPerSec": (len(rows) / (duration_ms / 1000.0)) if duration_ms else None,
+        "timing": {
+            "modelLoadMs": load_ms,
+            "evalMs": eval_ms,
+            "wallClockMs": duration_ms,
+        },
+        "examplesPerSec": (len(rows) / (eval_ms / 1000.0)) if eval_ms else None,
         "predictions": predictions,
         "ollamaTouched": False,
         **summary,
