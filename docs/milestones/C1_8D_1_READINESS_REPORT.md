@@ -38,15 +38,17 @@ Report fields: original vs corrected accuracy (both modes), per-family deltas, f
 
 ## Phase 3 — Blind LLM audit (prepare first)
 
-Proposed reviewer (different family from Qwen):
+Proposed reviewer (different family from Qwen) — **updated**:
 
 | Field | Value |
 |---|---|
-| Model | `gpt-4o-mini` (OpenAI) |
+| Model | `google/gemma-3-27b-it` (Gemma 3 27B Instruct) |
+| Serve | Local vLLM BF16 on RTX PRO 6000 96 GB |
+| Revision | `005ad3404e59d6023443cb575daa05336842228a` |
 | Sampling | temperature 0.0, maxTokens 400 |
-| Cost | See `blind-audit-manifest.json` → `costEstimate` after prepare |
+| Runtime | ~0.3–0.5 GPU-hours for ~307 cases (see `C1_8D_1_GEMMA_REVIEWER_PROPOSAL.md`) |
 
-**Do not launch paid calls** until the estimate is approved and `C18D1_LLM_AUDIT_CONFIRM=1` is set. Execute path is intentionally gated; packets are written for offline/approved execution. LLM judgments are not ground truth and do not authorize promotion. Unresolved disagreements escalate to human review.
+**Do not launch GPU serve/audit** until the proposal is approved, smoke validation (12 verified packets) passes, and `C18D1_LLM_AUDIT_CONFIRM=1` is set. LLM judgments are not ground truth and do not authorize promotion. Unresolved disagreements escalate to human review.
 
 Coverage: all regraded wrong/invalid/truncated/grader_error; stratified 10% of regraded corrects by family × mode; transitions flagged as high-risk.
 

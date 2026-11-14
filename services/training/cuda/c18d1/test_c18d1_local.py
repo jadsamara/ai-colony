@@ -1339,6 +1339,34 @@ def test_family_diagnostics_and_weak_audit() -> None:
         )
 
 
+def test_gemma_reviewer_proposal_and_smoke_fixtures() -> None:
+    from gemma_smoke_validation import build_smoke_cases, write_smoke_bundle
+    from reviewer_gemma3 import (
+        PINNED_GEMMA3_27B_IT,
+        PROPOSED_REVIEWER,
+        estimate_runtime,
+        proposal_payload,
+    )
+
+    assert PROPOSED_REVIEWER["modelId"] == "google/gemma-3-27b-it"
+    assert PROPOSED_REVIEWER["modelFamily"] == "gemma3"
+    assert PROPOSED_REVIEWER["familySeparation"] is True
+    assert PROPOSED_REVIEWER["serving"]["dtype"] == "bfloat16"
+    assert PINNED_GEMMA3_27B_IT["modelRevision"] == "005ad3404e59d6023443cb575daa05336842228a"
+    rt = estimate_runtime(307)
+    assert rt["estimatedApiUsd"] == 0.0
+    assert rt["estimatedGpuHours"] > 0
+    assert proposal_payload()["gpuWorkloadAuthorized"] is False
+
+    cases = build_smoke_cases()
+    assert len(cases) == 12
+    assert sum(1 for c in cases if c["label"] == "independently_correct") == 6
+    with tempfile.TemporaryDirectory() as tmp:
+        man = write_smoke_bundle(Path(tmp))
+        assert man["caseCount"] == 12
+        assert (Path(tmp) / "gemma-smoke-blind-packets.json").is_file()
+
+
 def test_thinking_methodology_constants() -> None:
     from decoding import THINKING_ENABLED
     from paired_stats import DEFAULT_PRACTICAL_MEANINGFUL_IMPROVEMENT
@@ -1394,6 +1422,7 @@ def main() -> None:
     test_interval_float_vs_rational_endpoints()
     test_grader_error_outcome_continues()
     test_family_diagnostics_and_weak_audit()
+    test_gemma_reviewer_proposal_and_smoke_fixtures()
     test_thinking_methodology_constants()
     test_locked_generator_refuses_without_external_seed()
     print("c18d1 local tests ok")

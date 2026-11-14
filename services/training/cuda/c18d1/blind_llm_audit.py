@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """One-time blind LLM disagreement audit for C1.8D (prepare + optional execute).
 
-Default mode is **prepare-only**: writes blind packets and a cost proposal.
-Does not launch paid GPU/API workloads unless explicitly confirmed.
+Default mode is **prepare-only**: writes blind packets and a runtime proposal.
+Does not launch GPU workloads unless explicitly confirmed after approval.
 
-Reviewer must be a different model family from Qwen3 when possible.
+Reviewer: Google Gemma 3 27B Instruct via local vLLM (family ≠ Qwen3).
 LLM judgments are never ground truth and never authorize promotion.
 """
 
@@ -21,19 +21,20 @@ from typing import Any
 
 from answer_parser import GRADER_VERSION
 from independent_check import independent_equals
+from reviewer_gemma3 import (
+    AUDIT_DESIGN,
+    PROPOSED_REVIEWER,
+    estimate_runtime,
+    proposal_payload,
+)
 
 AUDIT_SPEC_VERSION = "c18d1-blind-llm-audit-v1"
-
-# Proposed reviewer (different family from Qwen). Cost estimate before any paid call.
-PROPOSED_REVIEWER = {
+# Historical API proposal retained for provenance only — not used.
+PROPOSED_REVIEWER_PREVIOUS_API = {
     "provider": "openai",
     "modelId": "gpt-4o-mini",
     "modelFamily": "gpt",
-    "rationale": "Different family from Qwen3; low-cost classification; one-time audit only.",
-    "sampling": {"temperature": 0.0, "maxTokens": 400},
-    "estimatedUsdPer1kInputTokens": 0.00015,
-    "estimatedUsdPer1kOutputTokens": 0.0006,
-    "estimatedTokensPerCase": {"input": 1200, "output": 150},
+    "supersededBy": "google/gemma-3-27b-it local vLLM",
 }
 
 BLIND_SYSTEM_PROMPT = """You are an independent mathematics answer auditor.
@@ -63,23 +64,22 @@ def _load_items(dataset_path: Path) -> dict[str, dict[str, Any]]:
     return out
 
 
-def estimate_cost(n_cases: int, reviewer: dict[str, Any] = PROPOSED_REVIEWER) -> dict[str, Any]:
-    inp = reviewer["estimatedTokensPerCase"]["input"] * n_cases
-    out = reviewer["estimatedTokensPerCase"]["output"] * n_cases
-    usd = (inp / 1000.0) * reviewer["estimatedUsdPer1kInputTokens"] + (
-        out / 1000.0
-    ) * reviewer["estimatedUsdPer1kOutputTokens"]
+def estimate_cost(n_cases: int, reviewer: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Runtime/cost estimate for local Gemma reviewer (GPU-hours, not API $)."""
+    rev = reviewer or PROPOSED_REVIEWER
+    runtime = estimate_runtime(n_cases, rev)
+    inp = rev["estimatedTokensPerCase"]["input"] * n_cases
+    out = rev["estimatedTokensPerCase"]["output"] * n_cases
     return {
-        "caseCount": n_cases,
+        **runtime,
         "estimatedInputTokens": inp,
         "estimatedOutputTokens": out,
-        "estimatedUsd": round(usd, 4),
-        "reviewer": {
-            "provider": reviewer["provider"],
-            "modelId": reviewer["modelId"],
-            "modelFamily": reviewer["modelFamily"],
-        },
-        "note": "Estimate only — confirm before any paid API/GPU launch.",
+        "estimatedUsd": 0.0,
+        "supersedesApiProposal": PROPOSED_REVIEWER_PREVIOUS_API,
+        "note": (
+            "Local RTX PRO 6000 estimate — confirm after smoke validation. "
+            "Do not launch GPU serve/audit until approved."
+        ),
     }
 
 
@@ -190,28 +190,38 @@ def prepare_audit(
         item = items.get(str(case["itemId"]))
         packets.append(build_blind_packet(case, item))
     cost = estimate_cost(len(packets))
+    gemma_proposal = proposal_payload()
     manifest = {
         "ok": True,
         "auditSpecVersion": AUDIT_SPEC_VERSION,
+        "auditDesign": AUDIT_DESIGN,
         "mode": "prepare_only",
         "seed": seed,
         "packetCount": len(packets),
+        "expectedCaseCount": AUDIT_DESIGN["expectedCaseCount"],
         "proposedReviewer": PROPOSED_REVIEWER,
         "costEstimate": cost,
+        "runtimeEstimate": cost,
+        "gemmaServingProposal": gemma_proposal,
         "systemPrompt": BLIND_SYSTEM_PROMPT,
         "executeGate": (
-            "Set C18D1_LLM_AUDIT_CONFIRM=1 and pass --execute after approving "
-            "the proposed reviewer and cost. No paid workload is launched otherwise."
+            "1) Approve Gemma BF16 serving proposal + runtime estimate. "
+            "2) Pass smoke validation (12 verified packets). "
+            "3) Set C18D1_LLM_AUDIT_CONFIRM=1 for --execute. "
+            "No GPU workload is launched otherwise."
         ),
         "policy": [
             "Do not reveal expected answers or grades before initial judgment",
             "LLM judgments are not ground truth",
+            "Disagreements adjudicated with SymPy / independent_check",
             "Unresolved disagreements escalate to human review",
             "Does not authorize promotion",
+            "Exit Qwen vLLM fully before loading Gemma; tear down after audit",
         ],
         "regradeReportPath": str(regrade_report_path.resolve()),
         "datasetPath": str(dataset_path.resolve()),
         "graderVersion": GRADER_VERSION,
+        "gpuWorkloadAuthorized": False,
     }
     (output_dir / "blind-audit-manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
@@ -315,9 +325,11 @@ def main() -> None:
             f"(proposed {manifest['costEstimate']})",
         )
     raise SystemExit(
-        "Execute path not auto-wired to a paid API in this milestone. "
-        "Use prepared blind-packets.jsonl with the approved reviewer, then score "
-        "judgments offline. See costEstimate in blind-audit-manifest.json.",
+        "Execute path intentionally gated after proposal approval. "
+        "Serve Gemma per reviewer_gemma3.vllm_serve_command(), run smoke "
+        "validation first, then score blind-packets.jsonl. "
+        "See gemmaServingProposal + runtimeEstimate in blind-audit-manifest.json. "
+        "Do not treat Gemma judgments as ground truth.",
     )
 
 
