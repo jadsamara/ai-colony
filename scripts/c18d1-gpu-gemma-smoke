@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# C1.8D — Gemma 3 27B Instruct BF16 smoke validation ONLY (12 cases).
+# Approved revision: 005ad3404e59d6023443cb575daa05336842228a
+# Does NOT run the 307-case audit. Does NOT start pilot/Stage B/training.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+VLLM_PYTHON="${C18D1_VLLM_PYTHON:-${ROOT}/tmp/c18d1/.venv-vllm/bin/python}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/gemma-smoke-$(date +%Y%m%d-%H%M%S)}"
+PORT="${C18D1_GEMMA_PORT:-8001}"
+MODEL_ID="google/gemma-3-27b-it"
+REVISION="005ad3404e59d6023443cb575daa05336842228a"
+HF_HOME_DIR="${HF_HOME:-${ROOT}/tmp/c18d1/hf-cache}"
+LOG="${OUT}/vllm-gemma-serve.log"
+PID_FILE="${OUT}/vllm-gemma.pid"
+
+mkdir -p "${OUT}" "${HF_HOME_DIR}"
+export HF_HOME="${HF_HOME_DIR}"
+export HUGGINGFACE_HUB_CACHE="${HF_HOME_DIR}/hub"
+
+echo "[c18d1-gemma-smoke] out=${OUT}"
+echo "[c18d1-gemma-smoke] model=${MODEL_ID}@${REVISION}"
+
+# --- 1. Preflight ---
+if [[ ! -x "${VLLM_PYTHON}" ]]; then
+  echo "[c18d1-gemma-smoke] ERROR: VLLM python missing: ${VLLM_PYTHON}" >&2
+  exit 3
+fi
+if [[ -z "${HF_TOKEN:-${HUGGING_FACE_HUB_TOKEN:-}}" ]]; then
+  echo "[c18d1-gemma-smoke] ERROR: set HF_TOKEN for gated google/gemma-3-27b-it" >&2
+  exit 3
+fi
+export HF_TOKEN="${HF_TOKEN:-${HUGGING_FACE_HUB_TOKEN}}"
+
+command -v nvidia-smi >/dev/null || { echo "ERROR: nvidia-smi missing" >&2; exit 3; }
+nvidia-smi | tee "${OUT}/nvidia-smi-before.txt"
+df -h "${HF_HOME_DIR}" "$(pwd)" | tee "${OUT}/disk-space.txt"
+
+"${VLLM_PYTHON}" - <<'PY' | tee "${OUT}/compat-check.json"
+import json, sys
+out = {"ok": True, "checks": {}}
+try:
+    import vllm
+    ver = getattr(vllm, "__version__", "unknown")
+    out["checks"]["vllm"] = ver
+    parts = [int(x) for x in ver.split("+")[0].split(".")[:3] if x.isdigit()]
+    # require >= 0.8.3
+    ok = tuple(parts + [0,0,0])[:3] >= (0, 8, 3)
+    out["checks"]["vllmOk"] = ok
+    if not ok:
+        out["ok"] = False
+except Exception as e:
+    out["ok"] = False
+    out["checks"]["vllmError"] = f"{type(e).__name__}: {e}"
+try:
+    import transformers
+    tver = transformers.__version__
+    out["checks"]["transformers"] = tver
+    parts = [int(x) for x in tver.split("+")[0].split(".")[:3] if x.isdigit()]
+    ok = tuple(parts + [0,0,0])[:3] >= (4, 50, 0)
+    out["checks"]["transformersOk"] = ok
+    if not ok:
+        out["ok"] = False
+except Exception as e:
+    out["ok"] = False
+    out["checks"]["transformersError"] = f"{type(e).__name__}: {e}"
+print(json.dumps(out, indent=2))
+sys.exit(0 if out["ok"] else 2)
+PY
+
+# Refuse if Qwen-looking vLLM already bound and C18D1_FORCE_KILL_VLLM not set
+if ss -ltnp 2>/dev/null | grep -E ':(8000|8001)\b' >/dev/null; then
+  echo "[c18d1-gemma-smoke] WARN: port 8000/8001 already in use — listing:"
+  ss -ltnp | grep -E ':(8000|8001)\b' || true
+  if [[ "${C18D1_STOP_EXISTING_VLLM:-}" == "1" ]]; then
+    echo "[c18d1-gemma-smoke] C18D1_STOP_EXISTING_VLLM=1 — stopping listeners on 8000/8001"
+    # shellcheck disable=SC2009
+    pids=$(ss -ltnp 2>/dev/null | grep -E ':(8000|8001)\b' | grep -oE 'pid=[0-9]+' | cut -d= -f2 | sort -u || true)
+    for p in ${pids}; do
+      echo "[c18d1-gemma-smoke] kill ${p}"
+      kill "${p}" || true
+    done
+    sleep 5
+  else
+    echo "[c18d1-gemma-smoke] ERROR: stop Qwen/vLLM cleanly first, or set C18D1_STOP_EXISTING_VLLM=1" >&2
+    echo "[c18d1-gemma-smoke] Do not interrupt an active evaluation/training workload." >&2
+    exit 4
+  fi
+fi
+
+# --- 2. Download pinned revision to persistent cache ---
+echo "[c18d1-gemma-smoke] downloading pinned revision (persistent HF cache)…"
+START_DL=$(date +%s)
+"${VLLM_PYTHON}" - <<PY
+from huggingface_hub import snapshot_download
+path = snapshot_download(
+    repo_id="${MODEL_ID}",
+    revision="${REVISION}",
+    token=True,
+)
+print(path)
+PY
+echo "[c18d1-gemma-smoke] download_seconds=$(( $(date +%s) - START_DL ))" | tee "${OUT}/download-timing.txt"
+
+# --- 3. Serve BF16 on port 8001 ---
+echo "[c18d1-gemma-smoke] starting vLLM BF16 on :${PORT}"
+START_SERVE=$(date +%s)
+# shellcheck disable=SC2086
+nohup "${VLLM_PYTHON}" -m vllm.entrypoints.openai.api_server \
+  --model "${MODEL_ID}" \
+  --revision "${REVISION}" \
+  --tokenizer "${MODEL_ID}" \
+  --tokenizer-revision "${REVISION}" \
+  --dtype bfloat16 \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 4096 \
+  --max-num-seqs 32 \
+  --limit-mm-per-prompt image=0 \
+  --host 127.0.0.1 \
+  --port "${PORT}" \
+  --trust-remote-code \
+  >"${LOG}" 2>&1 &
+echo $! >"${PID_FILE}"
+echo "[c18d1-gemma-smoke] pid=$(cat "${PID_FILE}") log=${LOG}"
+
+cleanup() {
+  if [[ -f "${PID_FILE}" ]]; then
+    pid=$(cat "${PID_FILE}")
+    echo "[c18d1-gemma-smoke] stopping Gemma server pid=${pid}"
+    kill "${pid}" 2>/dev/null || true
+    sleep 3
+    kill -9 "${pid}" 2>/dev/null || true
+  fi
+  nvidia-smi | tee "${OUT}/nvidia-smi-after.txt" || true
+}
+trap cleanup EXIT
+
+# Wait until /v1/models responds (startup time)
+"${VLLM_PYTHON}" - <<PY
+import json, time, urllib.request
+url = "http://127.0.0.1:${PORT}/v1/models"
+t0 = time.time()
+last = None
+while time.time() - t0 < 900:
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            data = json.loads(r.read().decode())
+        open("${OUT}/startup-timing.json","w").write(json.dumps({
+            "startupSeconds": round(time.time()-t0, 2),
+            "models": data,
+        }, indent=2)+"\n")
+        print(json.dumps({"ready": True, "startupSeconds": round(time.time()-t0, 2)}))
+        break
+    except Exception as e:
+        last = f"{type(e).__name__}: {e}"
+        time.sleep(3)
+else:
+    open("${OUT}/startup-timing.json","w").write(json.dumps({"ready": False, "error": last}, indent=2)+"\n")
+    raise SystemExit(f"server not ready: {last}")
+PY
+nvidia-smi | tee "${OUT}/nvidia-smi-during.txt"
+
+# --- 4. Smoke validation (12 cases) ---
+set +e
+"${VLLM_PYTHON}" services/training/cuda/c18d1/gemma_smoke_runner.py \
+  --base-url "http://127.0.0.1:${PORT}" \
+  --out "${OUT}" \
+  --timeout-s 180
+RC=$?
+set -e
+
+echo "[c18d1-gemma-smoke] report: ${OUT}/gemma-smoke-report.json (exit=${RC})"
+echo "[c18d1-gemma-smoke] STOP — do not run 307-case audit / pilot / Stage B without approval."
+exit "${RC}"

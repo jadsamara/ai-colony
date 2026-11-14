@@ -1340,6 +1340,7 @@ def test_family_diagnostics_and_weak_audit() -> None:
 
 
 def test_gemma_reviewer_proposal_and_smoke_fixtures() -> None:
+    from gemma_smoke_runner import parse_reviewer_json, score_smoke_case
     from gemma_smoke_validation import build_smoke_cases, write_smoke_bundle
     from reviewer_gemma3 import (
         PINNED_GEMMA3_27B_IT,
@@ -1361,10 +1362,19 @@ def test_gemma_reviewer_proposal_and_smoke_fixtures() -> None:
     cases = build_smoke_cases()
     assert len(cases) == 12
     assert sum(1 for c in cases if c["label"] == "independently_correct") == 6
+    parsed = parse_reviewer_json(
+        '{"mathJudgment":"correct","formatCompliant":true,"briefRationale":"ok"}',
+    )
+    assert parsed["ok"] is True
+    assert score_smoke_case(
+        {"hidden": {"independentTruth": "correct"}},
+        parsed["judgment"],
+    )["agreeWithIndependentTruth"] is True
     with tempfile.TemporaryDirectory() as tmp:
         man = write_smoke_bundle(Path(tmp))
         assert man["caseCount"] == 12
         assert (Path(tmp) / "gemma-smoke-blind-packets.json").is_file()
+    assert (REPO_ROOT / "scripts" / "c18d1-gpu-gemma-smoke").is_file()
 
 
 def test_thinking_methodology_constants() -> None:

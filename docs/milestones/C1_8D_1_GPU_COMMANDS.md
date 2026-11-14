@@ -166,9 +166,13 @@ export C18D1_NOISE_FLOOR_DIR=$C18D1_OUT
 # review: offline-regrade-report.json, weak-family-audit-v2.json,
 #         blind-audit/blind-audit-manifest.json (Gemma runtime estimate)
 # Reviewer proposal: docs/milestones/C1_8D_1_GEMMA_REVIEWER_PROPOSAL.md
-#   python3 services/training/cuda/c18d1/reviewer_gemma3.py
-#   python3 services/training/cuda/c18d1/gemma_smoke_validation.py
-# Do NOT serve Gemma / run audit / start pilot or Stage B until approved
+# Approved smoke only (12 cases) — after Qwen is stopped cleanly:
+export HF_TOKEN=…   # gated Gemma access
+export C18D1_OUT=~/ai-colony/tmp/c18d1/gemma-smoke-$(date +%Y%m%d-%H%M%S)
+# export C18D1_STOP_EXISTING_VLLM=1   # only if no active eval/train
+./scripts/c18d1-gpu-gemma-smoke
+# review: $C18D1_OUT/gemma-smoke-report.json (latency, VRAM snapshots, agree/parse counts)
+# Do NOT run 307-case audit / pilot / Stage B until separately approved
 ```
 
 ### Step 2 — Cross-backend check (vLLM vs HF)

@@ -81,9 +81,29 @@ Recompute after smoke with measured tok/s before approving full audit.
 6. Adjudicate with SymPy; human escalate unresolved  
 7. Tear down Gemma before any Qwen Stage work  
 
+## Smoke deployment (approved — 12 cases only)
+
+Cursor cannot access the GPU VM. On the Debian host:
+
+```bash
+cd ~/ai-colony && git pull --ff-only
+export HF_TOKEN=…   # gated access to google/gemma-3-27b-it
+export C18D1_VLLM_PYTHON=~/ai-colony/tmp/c18d1/.venv-vllm/bin/python
+export C18D1_OUT=~/ai-colony/tmp/c18d1/gemma-smoke-$(date +%Y%m%d-%H%M%S)
+# Only if no active Qwen eval/train and you intentionally stop listeners:
+# export C18D1_STOP_EXISTING_VLLM=1
+./scripts/c18d1-gpu-gemma-smoke
+# review: $C18D1_OUT/gemma-smoke-report.json
+# server is stopped on exit
+```
+
+Pass bar: ≥10/12 agree with independent truth and ≥10/12 parseable JSON.  
+**Do not** run the 307-case audit until a separate approval after reviewing smoke metrics.
+
 ## Explicit non-starts
 
-- Do **not** launch GPU serve/audit until approved  
+- Do **not** run the full 307-case audit without separate approval  
 - Do **not** start stratified pilot, Stage B, training, Stage C, or promotion  
+- Do **not** change official grades from Gemma judgments alone  
 
-Code: `reviewer_gemma3.py`, `gemma_smoke_validation.py`, `blind_llm_audit.py`.
+Code: `reviewer_gemma3.py`, `gemma_smoke_validation.py`, `gemma_smoke_runner.py`, `scripts/c18d1-gpu-gemma-smoke`.
