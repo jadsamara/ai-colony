@@ -41,6 +41,7 @@ SERVING_CONFIG_BF16 = {
     "maxModelLen": 4096,
     "maxNumSeqs": 32,
     "limitMmPerPrompt": {"image": 0},
+    "limitMmPerPromptCliJson": '{"image":0}',  # vLLM 0.33+ argv value (not image=0)
     "enforceEager": False,
     "trustRemoteCode": True,
     "port": 8001,
@@ -172,10 +173,54 @@ def estimate_runtime(
     }
 
 
-def vllm_serve_command(cfg: dict[str, Any] | None = None) -> str:
-    """Exact proposed serve command (documentation / future execute only)."""
+# vLLM ≥0.33 requires JSON for --limit-mm-per-prompt (not image=0).
+LIMIT_MM_PER_PROMPT_JSON = '{"image":0}'
+
+
+def vllm_serve_argv(
+    *,
+    cfg: dict[str, Any] | None = None,
+    port: int | None = None,
+) -> list[str]:
+    """Argv for vLLM OpenAI API server (excludes python -m entrypoint).
+
+    ``--limit-mm-per-prompt`` must be a single JSON object argument for vLLM 0.33+.
+    """
     c = cfg or SERVING_CONFIG_BF16
     pin = PINNED_GEMMA3_27B_IT
+    return [
+        "--model",
+        pin["modelId"],
+        "--revision",
+        pin["modelRevision"],
+        "--tokenizer",
+        pin["tokenizerId"],
+        "--tokenizer-revision",
+        pin["tokenizerRevision"],
+        "--dtype",
+        str(c["dtype"]),
+        "--gpu-memory-utilization",
+        str(c["gpuMemoryUtilization"]),
+        "--max-model-len",
+        str(c["maxModelLen"]),
+        "--max-num-seqs",
+        str(c["maxNumSeqs"]),
+        "--limit-mm-per-prompt",
+        LIMIT_MM_PER_PROMPT_JSON,
+        "--host",
+        str(c["host"]),
+        "--port",
+        str(port if port is not None else c["port"]),
+        "--trust-remote-code",
+    ]
+
+
+def vllm_serve_command(cfg: dict[str, Any] | None = None) -> str:
+    """Exact proposed serve command (documentation / smoke script)."""
+    c = cfg or SERVING_CONFIG_BF16
+    pin = PINNED_GEMMA3_27B_IT
+    # Shell-quote JSON so the whole object is one argv token.
+    limit_mm = LIMIT_MM_PER_PROMPT_JSON.replace("'", "'\"'\"'")
     return (
         f"# PROPOSED — do not run until approved\n"
         f"export HF_TOKEN=…  # gated access to {pin['modelId']}\n"
@@ -189,7 +234,7 @@ def vllm_serve_command(cfg: dict[str, Any] | None = None) -> str:
         f"  --gpu-memory-utilization {c['gpuMemoryUtilization']} \\\n"
         f"  --max-model-len {c['maxModelLen']} \\\n"
         f"  --max-num-seqs {c['maxNumSeqs']} \\\n"
-        f"  --limit-mm-per-prompt image=0 \\\n"
+        f"  --limit-mm-per-prompt '{limit_mm}' \\\n"
         f"  --host {c['host']} --port {c['port']} \\\n"
         f"  --trust-remote-code"
     )

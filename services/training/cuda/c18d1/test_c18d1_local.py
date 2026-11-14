@@ -1343,10 +1343,13 @@ def test_gemma_reviewer_proposal_and_smoke_fixtures() -> None:
     from gemma_smoke_runner import parse_reviewer_json, score_smoke_case
     from gemma_smoke_validation import build_smoke_cases, write_smoke_bundle
     from reviewer_gemma3 import (
+        LIMIT_MM_PER_PROMPT_JSON,
         PINNED_GEMMA3_27B_IT,
         PROPOSED_REVIEWER,
         estimate_runtime,
         proposal_payload,
+        vllm_serve_argv,
+        vllm_serve_command,
     )
 
     assert PROPOSED_REVIEWER["modelId"] == "google/gemma-3-27b-it"
@@ -1358,6 +1361,23 @@ def test_gemma_reviewer_proposal_and_smoke_fixtures() -> None:
     assert rt["estimatedApiUsd"] == 0.0
     assert rt["estimatedGpuHours"] > 0
     assert proposal_payload()["gpuWorkloadAuthorized"] is False
+
+    # vLLM 0.33 CLI: --limit-mm-per-prompt must be JSON, not image=0
+    argv = vllm_serve_argv()
+    assert "--limit-mm-per-prompt" in argv
+    lim = argv[argv.index("--limit-mm-per-prompt") + 1]
+    assert lim == LIMIT_MM_PER_PROMPT_JSON == '{"image":0}'
+    assert lim != "image=0"
+    assert json.loads(lim) == {"image": 0}
+    cmd = vllm_serve_command()
+    assert "--limit-mm-per-prompt '{\"image\":0}'" in cmd or '--limit-mm-per-prompt \'{"image":0}\'' in cmd
+    assert "image=0" not in cmd.replace('{"image":0}', "")
+    script = (REPO_ROOT / "scripts" / "c18d1-gpu-gemma-smoke").read_text(encoding="utf-8")
+    assert 'LIMIT_MM_JSON=\'{"image":0}\'' in script
+    assert '--limit-mm-per-prompt "${LIMIT_MM_JSON}"' in script
+    assert "limit-mm-per-prompt image=0" not in script
+    assert "vllm_process_exited_before_ready" in script
+    assert "local_files_only=True" in script
 
     cases = build_smoke_cases()
     assert len(cases) == 12
