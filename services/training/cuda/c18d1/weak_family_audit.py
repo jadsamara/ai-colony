@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Weak-family wrong/invalid audit from existing C1.8D evaluation artifacts.
 
-For each target family, sample up to N wrong/invalid/grader_error rows,
-join expected answers from the development dataset, and classify each as
-genuine_math_error vs grader_miss (vs needs_human_review).
+v2: classifications are **independent** of the grader under audit. A row is a
+genuine mathematical error only when an independently extracted candidate is
+successfully compared and proven unequal to the expected value. Historical
+``outcome=wrong`` alone never implies genuine_math_error.
 
 Confirmed grader misses require a versioned grader bump before Stage B.
 Does not access locked Stage C data. Does not invent model outputs.
@@ -18,10 +19,12 @@ from pathlib import Path
 from typing import Any
 
 from answer_parser import GRADER_VERSION
+from exact_repr import correct_expected, strip_correction_metadata
 from family_diagnostics import WEAK_FAMILIES, _load_results, resolve_condition_artifact
-from sympy_grader import answers_canonically_equal, grade_answer, grade_model_output
+from independent_check import classify_independently
 
-AUDIT_VERSION = "c18d1-weak-family-audit-v1"
+AUDIT_VERSION = "c18d1-weak-family-audit-v2"
+AUDIT_VERSION_PREVIOUS = "c18d1-weak-family-audit-v1"
 
 
 def _load_expected_index(dataset_path: Path) -> dict[str, dict[str, Any]]:
@@ -34,110 +37,21 @@ def _load_expected_index(dataset_path: Path) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _parsed_answer(row: dict[str, Any]) -> str | None:
-    parsed = row.get("parsed") or {}
-    if isinstance(parsed, dict):
-        for key in ("mathText", "answer"):
-            if parsed.get(key):
-                return str(parsed[key])
-    return None
-
-
 def classify_failure(
     row: dict[str, Any],
     expected: dict[str, Any],
     *,
     enable_thinking: bool,
+    prompt: str | None = None,
 ) -> dict[str, Any]:
-    """Classify a wrong/invalid/grader_error row against current grader."""
-    raw = str(row.get("rawPrediction") or "")
-    parsed_ans = _parsed_answer(row)
-    outcome = str(row.get("outcome") or "")
-
-    # Re-grade with current grader; if now correct → grader_miss (historical).
-    try:
-        regraded = grade_model_output(
-            raw,
-            expected,
-            enable_thinking=enable_thinking,
-            truncated=bool(row.get("truncated")),
-        )
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "classification": "needs_human_review",
-            "rationale": f"regrade_exception:{type(exc).__name__}",
-            "regradedOutcome": "grader_error",
-            "parsedAnswer": parsed_ans,
-        }
-
-    if regraded.get("outcome") == "correct":
-        return {
-            "classification": "grader_miss",
-            "rationale": "current_grader_marks_correct",
-            "regradedOutcome": "correct",
-            "parsedAnswer": parsed_ans or regraded.get("parsed", {}).get("mathText"),
-        }
-
-    if outcome == "grader_error" or regraded.get("outcome") == "grader_error":
-        return {
-            "classification": "grader_miss",
-            "rationale": "grader_exception_or_historical_grader_error",
-            "regradedOutcome": regraded.get("outcome"),
-            "parsedAnswer": parsed_ans,
-        }
-
-    if parsed_ans:
-        try:
-            direct = grade_answer(parsed_ans, expected)
-            if direct.get("correct"):
-                return {
-                    "classification": "grader_miss",
-                    "rationale": "parsed_answer_grades_correct_under_current_grader",
-                    "regradedOutcome": regraded.get("outcome"),
-                    "parsedAnswer": parsed_ans,
-                }
-        except Exception:
-            pass
-        # Canonical equality to a simple expected rendering when available
-        expected_render = None
-        if expected.get("kind") == "roots":
-            expected_render = ", ".join(str(v) for v in expected.get("values") or [])
-        elif expected.get("kind") == "no_solution":
-            expected_render = "no solution"
-        elif expected.get("kind") == "expression":
-            expected_render = str(expected.get("value"))
-        if expected_render is not None:
-            eq = answers_canonically_equal(parsed_ans, expected_render)
-            if eq.get("equal"):
-                return {
-                    "classification": "grader_miss",
-                    "rationale": "parsed_canonically_equals_expected_render",
-                    "regradedOutcome": regraded.get("outcome"),
-                    "parsedAnswer": parsed_ans,
-                }
-
-    if outcome in {"invalid", "truncated"} and not parsed_ans:
-        return {
-            "classification": "genuine_math_error",
-            "rationale": "missing_or_unparseable_final_answer",
-            "regradedOutcome": regraded.get("outcome"),
-            "parsedAnswer": None,
-        }
-
-    if regraded.get("outcome") == "wrong":
-        return {
-            "classification": "genuine_math_error",
-            "rationale": "current_grader_marks_wrong",
-            "regradedOutcome": "wrong",
-            "parsedAnswer": parsed_ans,
-        }
-
-    return {
-        "classification": "needs_human_review",
-        "rationale": f"ambiguous_outcome:{outcome}->{regraded.get('outcome')}",
-        "regradedOutcome": regraded.get("outcome"),
-        "parsedAnswer": parsed_ans,
-    }
+    """Independent classification (does not trust grader wrong → genuine error)."""
+    expected_corr = strip_correction_metadata(correct_expected(expected, prompt=prompt))
+    return classify_independently(
+        row,
+        expected_corr,
+        enable_thinking=enable_thinking,
+        prompt=prompt,
+    )
 
 
 def sample_family_failures(
@@ -170,7 +84,7 @@ def sample_family_failures(
                     "classification": "needs_human_review",
                     "rationale": "item_missing_from_dataset_index",
                     "expected": None,
-                    "parsedAnswer": _parsed_answer(row),
+                    "parsedAnswer": None,
                     "rawPredictionPreview": str(row.get("rawPrediction") or "")[:800],
                 },
             )
@@ -179,6 +93,7 @@ def sample_family_failures(
             row,
             item["expected"],
             enable_thinking=enable_thinking,
+            prompt=item.get("prompt"),
         )
         audited.append(
             {
@@ -188,13 +103,17 @@ def sample_family_failures(
                 "sampleIndex": row.get("sampleIndex"),
                 "outcome": row.get("outcome"),
                 "invalidReason": row.get("invalidReason"),
-                "expected": item["expected"],
+                "expected": strip_correction_metadata(
+                    correct_expected(item["expected"], prompt=item.get("prompt")),
+                ),
                 "parsedAnswer": classification.get("parsedAnswer"),
                 "classification": classification["classification"],
                 "rationale": classification["rationale"],
-                "regradedOutcome": classification.get("regradedOutcome"),
+                "independentEqual": classification.get("independentEqual"),
+                "comparable": classification.get("comparable"),
                 "rawPredictionPreview": str(row.get("rawPrediction") or "")[:800],
                 "graderVersionAtAudit": GRADER_VERSION,
+                "auditVersion": AUDIT_VERSION,
             },
         )
     return audited
@@ -239,6 +158,9 @@ def build_weak_family_audit(
                 "genuineMathErrorCount": sum(
                     1 for s in samples if s.get("classification") == "genuine_math_error"
                 ),
+                "insufficientResponseCount": sum(
+                    1 for s in samples if s.get("classification") == "insufficient_response"
+                ),
                 "needsHumanReviewCount": sum(
                     1 for s in samples if s.get("classification") == "needs_human_review"
                 ),
@@ -253,6 +175,11 @@ def build_weak_family_audit(
     return {
         "ok": all(m.get("ok") for m in modes.values()),
         "auditVersion": AUDIT_VERSION,
+        "auditVersionSupersedes": AUDIT_VERSION_PREVIOUS,
+        "independenceNote": (
+            "genuine_math_error requires an independent unequal comparison; "
+            "historical grader wrong labels are never sufficient."
+        ),
         "graderVersion": GRADER_VERSION,
         "artifactDir": str(artifact_dir),
         "datasetPath": str(dataset_path.resolve()),
@@ -294,6 +221,7 @@ def main() -> None:
         json.dumps(
             {
                 "ok": report["ok"],
+                "auditVersion": report["auditVersion"],
                 "confirmedGraderMissTotal": report["confirmedGraderMissTotal"],
                 "stageBBlockedOnGraderMiss": report["stageBBlockedOnGraderMiss"],
                 "out": str(args.out),

@@ -259,8 +259,8 @@ def test_grader_v32_text_answer_markers() -> None:
     from answer_parser import GRADER_VERSION_PREVIOUS
     from generation_utils import HF_BACKEND_ID
 
-    assert GRADER_VERSION == "c18d1-grader-v3.3"
-    assert GRADER_VERSION_PREVIOUS == "c18d1-grader-v3.2"
+    assert GRADER_VERSION == "c18d1-grader-v3.4"
+    assert GRADER_VERSION_PREVIOUS == "c18d1-grader-v3.3"
 
     positives = [
         (r"\text{ANSWER: } (4, 8)", {"kind": "roots", "values": ["4", "8"]}),
@@ -294,12 +294,21 @@ def test_grader_v32_text_answer_markers() -> None:
         r"\text{ANS: } 4",
         r"\text{answer is } 4",
         "The answer is (4, 8)",
-        r"\textbf{ANSWER: } 4",  # not \text
+        r"\textbf{ANS: } 4",  # missing ANSWER token
     ]
     for raw in negatives:
         parsed = parse_model_output(raw, enable_thinking=False)
         assert parsed["ok"] is False, raw
         assert parsed["parseStatus"] in {"missing", "empty", "malformed"}
+
+    # v3.4: \\textbf{ANSWER:} is supported (still not format-compliant)
+    bold_tex = grade_model_output(
+        r"\textbf{ANSWER: } 4",
+        {"kind": "roots", "values": ["4"]},
+        enable_thinking=False,
+    )
+    assert bold_tex["outcome"] == "correct"
+    assert bold_tex["formatCompliant"] is False
 
     # Conflict: bare ANSWER vs disagreeing \text{ANSWER:}
     graded = grade_model_output(
@@ -344,8 +353,8 @@ def test_grader_v33_emptyset_canonicalization() -> None:
     from answer_parser import GRADER_VERSION_PREVIOUS
     from sympy_grader import canonical_answer_key
 
-    assert GRADER_VERSION == "c18d1-grader-v3.3"
-    assert GRADER_VERSION_PREVIOUS == "c18d1-grader-v3.2"
+    assert GRADER_VERSION == "c18d1-grader-v3.4"
+    assert GRADER_VERSION_PREVIOUS == "c18d1-grader-v3.3"
 
     # Exact crash path: must not raise; empty intervals canonicalize as no_solution.
     for empty_form in ("(8, 4)", "(5, 5)", "[5, 5)", "(5, 5]"):
@@ -639,7 +648,7 @@ def test_batch_invariance_metrics() -> None:
     assert OFFICIAL_BACKEND == PRIMARY_EVAL_BACKEND
     assert REFERENCE_BACKEND == "huggingface-batched"
     assert STATISTICAL_GATE_VERSION == "c18d1-statistical-eval-v1"
-    assert GRADER_VERSION == "c18d1-grader-v3.3"
+    assert GRADER_VERSION == "c18d1-grader-v3.4"
     from decoding import DECODING_CONFIG_VERSION, THINKING_DISABLED, THINKING_DISABLED_V1
 
     assert DECODING_CONFIG_VERSION == "c18d1-decoding-v2"
@@ -1053,6 +1062,84 @@ def test_paired_stats_and_statistical_gate() -> None:
     assert "--phase vllm" in script_src and "--phase hf" in script_src and "--phase compare" in script_src
 
 
+def test_grader_v34_markdown_bold_and_exact_pow2() -> None:
+    """Markdown-bold ANSWER markers + exact 2**-40 / 2**-24 / 2**63 expectations."""
+    from exact_repr import exact_pow2, looks_floatish
+    from generators import GENERATOR_VERSION
+
+    assert exact_pow2(-40) == "1/1099511627776"
+    assert exact_pow2(-24) == "1/16777216"
+    assert exact_pow2(63) == "9223372036854775808"
+    assert not looks_floatish(exact_pow2(-40))
+    assert GENERATOR_VERSION == "c18d1-gen-v3"
+
+    for exp in (-40, -24, 63):
+        ans = exact_pow2(exp)
+        expected = {"kind": "roots", "values": [ans], "variable": "x"}
+        for raw in (
+            f"ANSWER: {ans}",
+            f"**ANSWER: {ans}**",
+            f"**ANSWER:** {ans}",
+            f"\\textbf{{ANSWER: }} {ans}",
+            f"\\mathrm{{ANSWER: {ans}}}",
+        ):
+            graded = grade_model_output(raw, expected, enable_thinking=False)
+            assert graded["outcome"] == "correct", raw
+            assert graded["graderVersion"] == GRADER_VERSION
+            if raw.startswith("ANSWER:"):
+                assert graded["formatCompliant"] is True
+            else:
+                assert graded["formatCompliant"] is False
+
+    # Negatives: still require ANSWER token
+    for raw in ("**ANS: 1**", "The answer is 1", r"\textbf{ANS: 1}"):
+        parsed = parse_model_output(raw, enable_thinking=False)
+        assert parsed["ok"] is False, raw
+
+
+def test_independent_audit_does_not_trust_grader_wrong() -> None:
+    """Historical outcome=wrong must not alone imply genuine_math_error."""
+    from independent_check import classify_independently
+
+    # Candidate equals expected → grader_miss even if historical label was wrong.
+    miss = classify_independently(
+        {
+            "outcome": "wrong",
+            "rawPrediction": "ANSWER: 2",
+            "truncated": False,
+        },
+        {"kind": "roots", "values": ["2"]},
+        enable_thinking=False,
+    )
+    assert miss["classification"] == "grader_miss"
+    assert miss["independentEqual"] is True
+
+    # Independently unequal → genuine_math_error
+    genuine = classify_independently(
+        {
+            "outcome": "wrong",
+            "rawPrediction": "ANSWER: 9",
+            "truncated": False,
+        },
+        {"kind": "roots", "values": ["2"]},
+        enable_thinking=False,
+    )
+    assert genuine["classification"] == "genuine_math_error"
+    assert genuine["independentEqual"] is False
+
+    # Missing answer → insufficient_response (not genuine math error)
+    insuff = classify_independently(
+        {
+            "outcome": "wrong",
+            "rawPrediction": "I am not sure.",
+            "truncated": False,
+        },
+        {"kind": "roots", "values": ["2"]},
+        enable_thinking=False,
+    )
+    assert insuff["classification"] == "insufficient_response"
+
+
 def test_grader_error_outcome_continues() -> None:
     """Per-item grading exceptions → grader_error (not crash); counted separately."""
     import sympy_grader as sg
@@ -1113,14 +1200,14 @@ def test_grader_error_outcome_continues() -> None:
 def test_family_diagnostics_and_weak_audit() -> None:
     """Synthetic artifacts: family report schema + weak-family classification."""
     from family_diagnostics import build_dual_mode_report, build_per_family_report
-    from weak_family_audit import build_weak_family_audit, classify_failure
+    from weak_family_audit import AUDIT_VERSION, build_weak_family_audit, classify_failure
 
-    # Parsed answer that grades correct → grader_miss
+    assert AUDIT_VERSION == "c18d1-weak-family-audit-v2"
+
     miss = classify_failure(
         {
             "outcome": "wrong",
             "rawPrediction": "ANSWER: 2",
-            "parsed": {"mathText": "2", "ok": True},
             "truncated": False,
         },
         {"kind": "roots", "values": ["2"]},
@@ -1132,7 +1219,6 @@ def test_family_diagnostics_and_weak_audit() -> None:
         {
             "outcome": "wrong",
             "rawPrediction": "ANSWER: 9",
-            "parsed": {"mathText": "9", "ok": True},
             "truncated": False,
         },
         {"kind": "roots", "values": ["2"]},
@@ -1303,6 +1389,8 @@ def main() -> None:
     test_paired_stats_and_statistical_gate()
     test_grader_v32_text_answer_markers()
     test_grader_v33_emptyset_canonicalization()
+    test_grader_v34_markdown_bold_and_exact_pow2()
+    test_independent_audit_does_not_trust_grader_wrong()
     test_interval_float_vs_rational_endpoints()
     test_grader_error_outcome_continues()
     test_family_diagnostics_and_weak_audit()

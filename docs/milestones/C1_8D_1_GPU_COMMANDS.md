@@ -160,7 +160,12 @@ export C18D1_NOISE_FLOOR_DIR=$C18D1_OUT
 # After a successful noise-floor run — CPU-only reports from artifacts:
 ./scripts/c18d1-report-from-noise-floor-artifacts "$C18D1_NOISE_FLOOR_DIR"
 # review: family-diagnostics-report.json + weak-family-audit-report.json
-# Any confirmed grader_miss blocks Stage B until a versioned grader fix.
+
+# Offline regrade (grader v3.4 + exact expected overlay) + blind-audit prepare:
+./scripts/c18d1-offline-regrade-and-audit-prepare "$C18D1_NOISE_FLOOR_DIR"
+# review: offline-regrade-report.json, weak-family-audit-v2.json,
+#         blind-audit/blind-audit-manifest.json (cost estimate — approve before --execute)
+# Do NOT start stratified pilot or Stage B until approved
 ```
 
 ### Step 2 — Cross-backend check (vLLM vs HF)

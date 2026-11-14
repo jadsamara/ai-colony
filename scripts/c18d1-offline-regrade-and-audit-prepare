@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# CPU-only offline regrade + blind LLM audit preparation from saved noise-floor artifacts.
+# Does NOT overwrite historical results. Does NOT launch paid LLM calls.
+# Does NOT start pilot / Stage B / training.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+DIR="${C18D1_NOISE_FLOOR_DIR:-${1:-}}"
+if [[ -z "${DIR}" || ! -d "${DIR}" ]]; then
+  echo "Usage: C18D1_NOISE_FLOOR_DIR=/path/to/noise-floor-out $0" >&2
+  exit 2
+fi
+
+PYTHON="${C18D1_PYTHON:-python3}"
+# Join artifact itemIds against the preserved gen-v2 development set.
+DATASET="${C18D1_DATASET:-services/training/cuda/c18d1/datasets/historical/id_dev.gen-v2.jsonl}"
+OUT="${C18D1_REGRADE_OUT:-${DIR}/offline-regrade-$(date +%Y%m%d-%H%M%S)}"
+
+"${PYTHON}" services/training/cuda/c18d1/offline_regrade.py \
+  --artifact-dir "${DIR}" \
+  --dataset "${DATASET}" \
+  --out "${OUT}"
+
+"${PYTHON}" services/training/cuda/c18d1/blind_llm_audit.py \
+  --regrade-report "${OUT}/offline-regrade-report.json" \
+  --dataset "${DATASET}" \
+  --out "${OUT}/blind-audit" \
+  --seed 18
+
+"${PYTHON}" services/training/cuda/c18d1/weak_family_audit.py \
+  --artifact-dir "${DIR}" \
+  --dataset "${DATASET}" \
+  --sample-size 10 \
+  --seed 18 \
+  --out "${OUT}/weak-family-audit-v2.json"
+
+echo "[c18d1] offline regrade: ${OUT}/offline-regrade-report.json"
+echo "[c18d1] blind audit prepare: ${OUT}/blind-audit/blind-audit-manifest.json (cost estimate inside)"
+echo "[c18d1] weak-family audit v2: ${OUT}/weak-family-audit-v2.json"
+echo "[c18d1] STOP — review reports; approve reviewer/cost before any --execute; no pilot/Stage B."

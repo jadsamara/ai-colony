@@ -16,8 +16,11 @@ from typing import Any, Callable
 
 import sympy as sp
 
+from exact_repr import exact_pow2
+
 BENCHMARK_VERSION = "c18d1-algebra-v2"
-GENERATOR_VERSION = "c18d1-gen-v2"
+GENERATOR_VERSION = "c18d1-gen-v3"
+GENERATOR_VERSION_PREVIOUS = "c18d1-gen-v2"
 # Locked splits under c18d1-algebra-v1 were committed to git (answers + streamSeed)
 # and are retired — never use for evaluation or training.
 RETIRED_LOCKED_BENCHMARK_VERSION = "c18d1-algebra-v1"
@@ -328,12 +331,16 @@ def gen_exponential_log_equations(rng: random.Random, difficulty: str, index: in
             f"2**(x - {a}) = 2**({b})"
         )
         return prompt, {"kind": "roots", "values": [str(a + b)], "variable": "x"}, ["exponential"]
-    # log2(x) = b => x = 2^b (require x>0)
+    # log2(x) = b => x = 2^b (require x>0). Use exact SymPy power — never float(2**-k).
     prompt = (
         f"Solve for x over the reals (domain x > 0). End with `ANSWER: <value>`.\n\n"
         f"log(x)/log(2) = {b}"
     )
-    return prompt, {"kind": "roots", "values": [str(2 ** b)], "variable": "x"}, ["logarithm", "domain_restriction"]
+    return (
+        prompt,
+        {"kind": "roots", "values": [exact_pow2(int(b))], "variable": "x"},
+        ["logarithm", "domain_restriction"],
+    )
 
 
 def gen_symbolic_simplification(rng: random.Random, difficulty: str, index: int) -> tuple[str, dict[str, Any], list[str]]:

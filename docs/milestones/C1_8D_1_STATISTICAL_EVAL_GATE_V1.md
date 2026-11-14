@@ -64,6 +64,7 @@ vLLM at `gpu_memory_utilization≈0.92` can reserve ~88 GiB of 96 GiB (large
 |---|---|---|
 | Grader recognizes `\\text{ANSWER: ...}` | `c18d1-grader-v3.2` | Math may be correct while formatCompliant stays false; do not rescore old reports |
 | EmptySet-safe canonicalization | `c18d1-grader-v3.3` | SymPy empty intervals / `\\emptyset` ↔ no solution; do not rescore v3.2 artifacts |
+| Markdown-bold / extended LaTeX ANSWER + exact `2**k` | `c18d1-grader-v3.4` / `c18d1-gen-v3` | Offline regrade only; do not overwrite historical eval dirs |
 | Thinking-disabled `maxNewTokens` 512→2048 | `c18d1-decoding-v2` | v1 (512) preserved as `THINKING_DISABLED_V1` |
 | HF report backend label | reference = `huggingface-batched` | Must never be labeled `vllm-batched` |
 | Full-dev noise floor | same-seed + alternate-seed (thinking) | 24-item 21.24% MDI is **not** automatic promotion threshold; practical meaningful improvement is separate |

@@ -13,7 +13,9 @@
 - [x] Tests: no locked files tracked; prompts lack split tags; locked gen refuses without seed
 - [x] Batched HF evaluator implemented (reference cross-check)
 - [x] vLLM primary eval + statistical gate v1 + noise floor + cross-backend
-- [x] Grader v3.3 (EmptySet-safe; `\text{ANSWER:}` from v3.2) + decoding-v2 (non-thinking 2048)
+- [x] Grader v3.4 (markdown-bold / extended LaTeX ANSWER; EmptySet-safe) + decoding-v2
+- [x] Generator v3 exact `2**k` expectations; gen-v2 historical preserved
+- [x] Independent weak-family audit v2 + offline regrade + blind-audit prepare tooling
 - [x] HF reference provenance label fix (never `vllm-batched`)
 - [x] Stage A/B scripts (vLLM) + result templates
 - [x] Autonomous Math training flag remains `false`
@@ -21,9 +23,8 @@
 
 ## Pending GPU acceptance (operator)
 
-- [ ] Full-development noise floor reviewed (thinking ~94.8–95.4%; flips ~10%) — methodology update landed
-- [ ] Family diagnostics + weak-family audit JSON generated from VM artifacts — **STOP for review**
-- [ ] Confirmed grader misses fixed (versioned) before Stage B, if any
+- [ ] Offline regrade of full-dev noise-floor artifacts + weak-family audit v2 — **STOP for review**
+- [ ] Blind LLM audit cost/model approval; execute only if approved; human escalate disagreements
 - [ ] Stratified pilot (vLLM, both modes) — only after explicit approval — **STOP**
 - [ ] Stage B full development baselines (vLLM) — only after pilot approval — **STOP for freeze**
 - [ ] Stage C locked ID/OOD + regression **only in same session as first trained adapter**

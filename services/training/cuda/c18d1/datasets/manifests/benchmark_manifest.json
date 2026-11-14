@@ -8,7 +8,7 @@
   },
   "difficultyBasis": "development_structural_tiers_only",
   "difficultyFrozen": true,
-  "generatorVersion": "c18d1-gen-v2",
+  "generatorVersion": "c18d1-gen-v3",
   "minimums": {
     "devPerIdFamily": 50,
     "idFamilies": 10,
@@ -34,7 +34,7 @@
         "itemLevel": "evaluation_only"
       },
       "benchmarkVersion": "c18d1-algebra-v2",
-      "contentHash": "70c793322cd7e12e388f44c5e7e2e0b34904fe1c9f8219ff35fec159f3e55edc",
+      "contentHash": "f0cd34aee882cbdfa1ff375449ecf498d6629fa264d440e96ec3488b88aee60e",
       "difficulties": {
         "easy": 179,
         "hard": 145,
@@ -52,7 +52,7 @@
         "rational_equations",
         "symbolic_simplification"
       ],
-      "generatorVersion": "c18d1-gen-v2",
+      "generatorVersion": "c18d1-gen-v3",
       "itemCount": 500,
       "name": "id_dev",
       "ownerDepartmentId": "00000000-0000-4000-8000-000000000017"
@@ -71,7 +71,7 @@
         "itemLevel": "evaluation_only"
       },
       "benchmarkVersion": "c18d1-algebra-v2",
-      "contentHash": "7ce5f494ad284df7d2f13a9e4202f999ae0b4c8b29ea7512b22bd7cbaf0576ec",
+      "contentHash": "b97574f18dd16e331655c8361577a616d2c0a7ed75cd4fa6d977fdbd7b76af30",
       "difficulties": {
         "easy": 35,
         "hard": 44,
@@ -82,7 +82,7 @@
         "quadratic_equations",
         "symbolic_simplification"
       ],
-      "generatorVersion": "c18d1-gen-v2",
+      "generatorVersion": "c18d1-gen-v3",
       "itemCount": 120,
       "name": "regression",
       "ownerDepartmentId": "00000000-0000-4000-8000-000000000017"

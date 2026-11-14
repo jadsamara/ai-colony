@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Final-answer parser for C1.8D.1 Math evaluation (grader v3.3).
+"""Final-answer parser for C1.8D.1 Math evaluation (grader v3.4).
 
 Never search the reasoning trace. Only the final response region
 (after ``</think>`` when thinking is enabled) is considered.
 
-Accepted final-answer markers (v3.2+, unchanged in v3.3):
+Accepted final-answer markers:
 - a bare ``ANSWER: <expr>`` line, or
+- Markdown-bold wrapped ``**ANSWER: …**`` / ``**ANSWER:** …`` (v3.4; not format-compliant),
 - the **last** ``\\boxed{...}`` in the final region, or
-- strict ``ANSWER:`` wrapped in LaTeX ``\\text{...}``
+- strict ``ANSWER:`` wrapped in LaTeX ``\\text{...}`` / ``\\textbf{...}`` / ``\\mathrm{...}``
   (e.g. ``\\text{ANSWER: } (4, 8)`` or ``\\text{ANSWER: no solution}``)
 
 v3.3: EmptySet-safe canonical comparison (no Interval attribute crash).
+v3.4: Markdown bold + supported LaTeX text-command wrappers; exact expected overlays elsewhere.
 
 If markers are present and canonically disagree → invalid.
 Format compliance remains the bare ``ANSWER:`` contract and is reported
@@ -35,16 +37,21 @@ ParseStatus = Literal[
     "protocol_violation",
 ]
 
-GRADER_VERSION = "c18d1-grader-v3.3"
-GRADER_VERSION_PREVIOUS = "c18d1-grader-v3.2"
+GRADER_VERSION = "c18d1-grader-v3.4"
+GRADER_VERSION_PREVIOUS = "c18d1-grader-v3.3"
 THINK_CLOSE = "</think>"
 THINK_OPEN = "<think>"
 
 STRICT_ANSWER_LINE = re.compile(r"(?im)^\s*ANSWER:\s*(.+?)\s*$")
+# Markdown bold: **ANSWER: expr** or **ANSWER:** expr (still requires ANSWER:)
+MARKDOWN_BOLD_ANSWER_CLOSED = re.compile(r"(?im)^\s*\*\*\s*ANSWER:\s*(.+?)\s*\*\*\s*$")
+MARKDOWN_BOLD_ANSWER_LABEL = re.compile(r"(?im)^\s*\*\*\s*ANSWER:\s*\*\*\s+(.+?)\s*$")
 ANSWER_TOKEN = re.compile(r"(?i)ANSWER:\s*(.+)$")
 BOXED_START = re.compile(r"\\boxed\s*\{")
-# \text{ANSWER: <inside>}[ optional trailing payload on the same line ]
-TEXT_ANSWER = re.compile(r"(?is)\\text\s*\{\s*ANSWER:\s*([^}]*)\}")
+# \text / \textbf / \mathrm / \mathbf {ANSWER: ...}
+TEXT_ANSWER = re.compile(
+    r"(?is)\\(?:text|textbf|mathrm|mathbf)\s*\{\s*ANSWER:\s*([^}]*)\}",
+)
 
 
 def extract_after_thinking(raw: str, *, enable_thinking: bool) -> dict[str, Any]:
@@ -162,25 +169,42 @@ def _answer_lines(final_text: str) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     for line in (final_text or "").splitlines():
         strict = STRICT_ANSWER_LINE.match(line)
-        if not strict:
+        if strict:
+            payload = strict.group(1).strip()
+            math_text, wrappers = _strip_math_wrappers(payload)
+            found.append(
+                {
+                    "rawLine": line.strip(),
+                    "payload": payload,
+                    "mathText": math_text,
+                    "wrappers": wrappers,
+                    "strictFormat": len(wrappers) == 0 and bool(math_text),
+                    "source": "strict_answer_line",
+                },
+            )
             continue
-        payload = strict.group(1).strip()
+        bold = MARKDOWN_BOLD_ANSWER_LABEL.match(line) or MARKDOWN_BOLD_ANSWER_CLOSED.match(line)
+        if not bold:
+            continue
+        payload = (bold.group(1) or "").strip()
         math_text, wrappers = _strip_math_wrappers(payload)
+        if not math_text:
+            continue
         found.append(
             {
                 "rawLine": line.strip(),
                 "payload": payload,
                 "mathText": math_text,
-                "wrappers": wrappers,
-                "strictFormat": len(wrappers) == 0 and bool(math_text),
-                "source": "strict_answer_line",
+                "wrappers": ["markdown_bold", *wrappers],
+                "strictFormat": False,
+                "source": "markdown_bold_answer",
             },
         )
     return found
 
 
 def _text_answer_markers(final_text: str) -> list[dict[str, Any]]:
-    """Extract ``\\text{ANSWER: ...}`` markers (grader v3.2).
+    """Extract LaTeX ``\\text|\\textbf|\\mathrm|\\mathbf{ANSWER: ...}`` markers.
 
     Supports payload inside the braces (``\\text{ANSWER: no solution}``) or
     immediately after an empty/whitespace brace payload
@@ -189,6 +213,7 @@ def _text_answer_markers(final_text: str) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     text = final_text or ""
     for match in TEXT_ANSWER.finditer(text):
+        cmd = match.group(0).split("{", 1)[0].strip()
         inside = (match.group(1) or "").strip()
         after = text[match.end() :]
         # Same-line trailing payload only (do not cross newlines).
@@ -210,7 +235,7 @@ def _text_answer_markers(final_text: str) -> list[dict[str, Any]]:
                 "rawLine": raw,
                 "payload": payload,
                 "mathText": math_text,
-                "wrappers": ["\\text", *wrappers],
+                "wrappers": [cmd or "\\text", *wrappers],
                 "strictFormat": False,
                 "source": "text_answer",
             },
@@ -365,7 +390,9 @@ def parse_answer_lines(final_text: str) -> dict[str, Any]:
         marker = "text_and_boxed_agree"
     elif answer_cand:
         chosen = answer_cand
-        marker = "answer_line"
+        src = str(answer_cand.get("source") or "answer_line")
+        # Keep historical marker id for bare ANSWER lines.
+        marker = "answer_line" if src == "strict_answer_line" else src
     elif text_cand:
         chosen = text_cand
         marker = "text_answer"

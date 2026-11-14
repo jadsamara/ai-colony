@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic SymPy grading for C1.8D.1 algebra (grader v3.3).
+"""Deterministic SymPy grading for C1.8D.1 algebra (grader v3.4).
 
 Separates mathematical accuracy from format compliance.
 LLM judges are forbidden as the sole source of correctness.
@@ -7,6 +7,7 @@ LLM judges are forbidden as the sole source of correctness.
 v3.1: interval endpoints compare via symbolic equality (Float −0.5 ≡ Rational −1/2).
 v3.2: answer_parser recognizes ``\\text{ANSWER: ...}`` markers (math vs format still split).
 v3.3: EmptySet-safe canonicalization (SymPy empty intervals); ``\\emptyset`` ↔ no solution.
+v3.4: Markdown-bold / extended LaTeX ANSWER wrappers (parser); exact expected overlays.
 Historical reports under older graderVersion strings must not be silently rescored.
 """
 
