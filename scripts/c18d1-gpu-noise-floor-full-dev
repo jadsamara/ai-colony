@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # C1.8D.1 — Full-development noise floor (entire id_dev.jsonl, both modes).
 # Thinking: same-seed (backend nondeterminism) + alternate-seed (sampling variance).
-# Uses grader v3.2 + decoding-v2 (thinking-disabled maxNewTokens=2048).
+# Uses grader v3.3 + decoding-v2 (thinking-disabled maxNewTokens=2048).
 # Development only — no locked/Stage C data. STOP after review. No Stage B/pilot here.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

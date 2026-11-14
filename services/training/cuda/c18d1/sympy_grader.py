@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Deterministic SymPy grading for C1.8D.1 algebra (grader v3.2).
+"""Deterministic SymPy grading for C1.8D.1 algebra (grader v3.3).
 
 Separates mathematical accuracy from format compliance.
 LLM judges are forbidden as the sole source of correctness.
 
 v3.1: interval endpoints compare via symbolic equality (Float −0.5 ≡ Rational −1/2).
 v3.2: answer_parser recognizes ``\\text{ANSWER: ...}`` markers (math vs format still split).
+v3.3: EmptySet-safe canonicalization (SymPy empty intervals); ``\\emptyset`` ↔ no solution.
 Historical reports under older graderVersion strings must not be silently rescored.
 """
 
@@ -31,6 +32,7 @@ NO_SOLUTION_TOKENS = {
     "∅",
     "emptyset",
     "empty set",
+    "varnothing",
     "no real solution",
     "no real solutions",
 }
@@ -60,6 +62,7 @@ def _normalize_latex_math(text: str) -> str:
     t = t.replace("\\left", "").replace("\\right", "")
     t = t.replace("\\,", "").replace("\\;", "").replace("\\!", "")
     t = t.replace("\\infty", "oo").replace("∞", "oo")
+    t = t.replace("\\emptyset", "emptyset").replace("\\varnothing", "varnothing")
     t = t.replace("\\cup", "U").replace("∪", "U")
     t = t.replace("\\pi", "pi").replace("\\%", "/100")
     t = re.sub(r"\\sqrt\s*\{([^{}]+)\}", r"sqrt(\1)", t)
@@ -131,7 +134,26 @@ def _parse_endpoint(raw: str) -> sp.Expr:
         return expr
 
 
-def _try_parse_interval(text: str) -> sp.Interval | None:
+def _is_empty_set(obj: Any) -> bool:
+    """True for SymPy EmptySet (including empty Interval constructions)."""
+    if obj is None:
+        return False
+    if obj is sp.EmptySet:
+        return True
+    try:
+        if isinstance(obj, sp.Set) and obj == sp.EmptySet:
+            return True
+    except Exception:
+        return False
+    return False
+
+
+def _try_parse_interval(text: str) -> sp.Interval | Any | None:
+    """Parse bracketed interval text.
+
+    May return ``sp.EmptySet`` when SymPy collapses an empty interval
+    (e.g. ``(5, 5)`` or ``(8, 4)``). Callers must not assume Interval attributes.
+    """
     inner = _normalize_text(text).strip()
     if len(inner) < 3 or inner[0] not in "([" or inner[-1] not in ")]":
         return None
@@ -209,8 +231,12 @@ def _endpoint_equal(a: sp.Expr, b: sp.Expr) -> bool:
     return _expr_equal(a, b)
 
 
-def _intervals_equal(got: sp.Interval, want: sp.Interval) -> bool:
-    """True when openness and endpoints match mathematically (not raw SymPy ==)."""
+def _intervals_equal(got: Any, want: Any) -> bool:
+    """True when both are nonempty Intervals with matching openness/endpoints."""
+    if _is_empty_set(got) or _is_empty_set(want):
+        return _is_empty_set(got) and _is_empty_set(want)
+    if not isinstance(got, sp.Interval) or not isinstance(want, sp.Interval):
+        return False
     if bool(got.left_open) != bool(want.left_open):
         return False
     if bool(got.right_open) != bool(want.right_open):
@@ -218,12 +244,73 @@ def _intervals_equal(got: sp.Interval, want: sp.Interval) -> bool:
     return _endpoint_equal(got.left, want.left) and _endpoint_equal(got.right, want.right)
 
 
+def _interval_key(iv: sp.Interval) -> dict[str, Any]:
+    lo = "(" if iv.left_open else "["
+    ro = ")" if iv.right_open else "]"
+    return {
+        "ok": True,
+        "key": f"interval:{lo}{iv.left},{iv.right}{ro}",
+        "kind": "interval",
+    }
+
+
+def _set_canonical_key(obj: Any) -> dict[str, Any] | None:
+    """Canonical key for SymPy Set / nested set expressions. None if unsupported."""
+    if _is_empty_set(obj):
+        return {"ok": True, "key": "no_solution", "kind": "no_solution"}
+    if isinstance(obj, sp.Interval):
+        return _interval_key(obj)
+    if isinstance(obj, sp.FiniteSet):
+        try:
+            roots = sorted(str(sp.simplify(e)) for e in obj.args)
+            return {"ok": True, "key": "roots:" + ",".join(roots), "kind": "roots"}
+        except Exception:
+            return {"ok": False, "key": None, "kind": "unparseable"}
+    if isinstance(obj, set):
+        try:
+            roots = sorted(str(sp.simplify(e)) for e in obj)
+            if not roots:
+                return {"ok": True, "key": "no_solution", "kind": "no_solution"}
+            return {"ok": True, "key": "roots:" + ",".join(roots), "kind": "roots"}
+        except Exception:
+            return {"ok": False, "key": None, "kind": "unparseable"}
+    if isinstance(obj, sp.Union):
+        try:
+            parts: list[str] = []
+            for arg in obj.args:
+                sub = _set_canonical_key(arg)
+                if sub is None or not sub.get("ok") or sub.get("key") is None:
+                    return {"ok": False, "key": None, "kind": "unparseable"}
+                if sub["kind"] == "no_solution":
+                    continue
+                parts.append(str(sub["key"]))
+            if not parts:
+                return {"ok": True, "key": "no_solution", "kind": "no_solution"}
+            parts_sorted = sorted(parts)
+            return {"ok": True, "key": "union:" + "|".join(parts_sorted), "kind": "union"}
+        except Exception:
+            return {"ok": False, "key": None, "kind": "unparseable"}
+    return None
+
+
 def canonical_answer_key(answer_text: str | None) -> dict[str, Any]:
     """Stable symbolic key for comparing two model answers without the expected value.
 
     Used by batch-invariance Gate v3 so ``1281/26`` and ``\\\\frac{1281}{26}`` agree,
     while two different wrong answers do not agree merely because both grade wrong.
+
+    Never raises: malformed/unsupported inputs return controlled opaque/unparseable keys.
     """
+    try:
+        return _canonical_answer_key_impl(answer_text)
+    except Exception:
+        raw = None if answer_text is None else str(answer_text).strip()
+        if not raw:
+            return {"ok": True, "key": None, "kind": "missing"}
+        return {"ok": False, "key": f"raw:{raw}", "kind": "opaque"}
+
+
+def _canonical_answer_key_impl(answer_text: str | None) -> dict[str, Any]:
     if answer_text is None:
         return {"ok": True, "key": None, "kind": "missing"}
     text = str(answer_text).strip()
@@ -235,12 +322,17 @@ def canonical_answer_key(answer_text: str | None) -> dict[str, Any]:
     if low in ALL_REALS_TOKENS or text in {"(-oo, oo)", "R"}:
         return {"ok": True, "key": "all_reals", "kind": "all_reals"}
     # Bracketed interval forms before multi-root / expression parse.
+    # SymPy may return EmptySet for empty intervals — handle before Interval attrs.
     iv = _try_parse_interval(text)
     if iv is not None:
-        lo = "(" if iv.left_open else "["
-        ro = ")" if iv.right_open else "]"
-        key = f"interval:{lo}{iv.left},{iv.right}{ro}"
-        return {"ok": True, "key": key, "kind": "interval"}
+        if _is_empty_set(iv):
+            return {"ok": True, "key": "no_solution", "kind": "no_solution"}
+        if isinstance(iv, sp.Interval):
+            return _interval_key(iv)
+        set_key = _set_canonical_key(iv)
+        if set_key is not None:
+            return set_key
+        return {"ok": False, "key": None, "kind": "unparseable"}
     # Prefer multi-root set when commas present at depth 0.
     parts = _split_root_list(text)
     if len(parts) > 1:
@@ -251,15 +343,26 @@ def canonical_answer_key(answer_text: str | None) -> dict[str, Any]:
             return {"ok": False, "key": None, "kind": "unparseable"}
     try:
         expr = sp.simplify(_parse_expr(text))
+        set_key = _set_canonical_key(expr)
+        if set_key is not None:
+            return set_key
         return {"ok": True, "key": "expr:" + str(expr), "kind": "expression"}
     except Exception:
         return {"ok": False, "key": f"raw:{text}", "kind": "opaque"}
 
 
 def answers_canonically_equal(a: str | None, b: str | None) -> dict[str, Any]:
-    """Compare two answer strings via canonical_answer_key."""
-    ka = canonical_answer_key(a)
-    kb = canonical_answer_key(b)
+    """Compare two answer strings via canonical_answer_key. Never raises."""
+    try:
+        ka = canonical_answer_key(a)
+        kb = canonical_answer_key(b)
+    except Exception as exc:
+        return {
+            "equal": False,
+            "keyA": {"ok": False, "key": None, "kind": "opaque"},
+            "keyB": {"ok": False, "key": None, "kind": "opaque"},
+            "error": type(exc).__name__,
+        }
     # Both missing → agree. One missing → disagree.
     if ka["kind"] == "missing" and kb["kind"] == "missing":
         return {"equal": True, "keyA": ka, "keyB": kb}
@@ -276,10 +379,13 @@ def answers_canonically_equal(a: str | None, b: str | None) -> dict[str, Any]:
         except Exception:
             equal = False
     if not equal and ka["kind"] == "interval" and kb["kind"] == "interval":
-        ia = _try_parse_interval(str(a))
-        ib = _try_parse_interval(str(b))
-        if ia is not None and ib is not None:
-            equal = _intervals_equal(ia, ib)
+        try:
+            ia = _try_parse_interval(str(a))
+            ib = _try_parse_interval(str(b))
+            if ia is not None and ib is not None:
+                equal = _intervals_equal(ia, ib)
+        except Exception:
+            equal = False
     return {"equal": bool(equal), "keyA": ka, "keyB": kb}
 
 
@@ -290,6 +396,16 @@ def grade_answer(answer_text: str, expected: dict[str, Any]) -> dict[str, Any]:
 
     if exp["kind"] == "no_solution":
         ok = low in NO_SOLUTION_TOKENS or text in {"{}", "∅"}
+        if not ok:
+            iv = _try_parse_interval(text)
+            if _is_empty_set(iv):
+                ok = True
+            else:
+                try:
+                    parsed = _parse_expr(text)
+                    ok = _is_empty_set(parsed)
+                except Exception:
+                    ok = False
         return {"correct": ok, "detail": "no_solution"}
 
     if exp["kind"] == "all_reals":
@@ -297,6 +413,12 @@ def grade_answer(answer_text: str, expected: dict[str, Any]) -> dict[str, Any]:
         return {"correct": ok, "detail": "all_reals"}
 
     if exp["kind"] == "roots":
+        # Empty-set answers are never correct for a nonempty root list.
+        if low in NO_SOLUTION_TOKENS or text in {"{}", "∅"}:
+            return {"correct": False, "detail": "empty_vs_roots"}
+        iv_empty = _try_parse_interval(text)
+        if _is_empty_set(iv_empty):
+            return {"correct": False, "detail": "empty_vs_roots"}
         got = _as_root_set(text)
         if got is None:
             return {"correct": False, "detail": "unparseable_roots"}
@@ -334,6 +456,11 @@ def grade_answer(answer_text: str, expected: dict[str, Any]) -> dict[str, Any]:
             if text.startswith("(") or text.startswith("["):
                 return {"correct": False, "detail": "unparseable_interval"}
             return {"correct": False, "detail": "interval_format"}
+        if _is_empty_set(got):
+            # EmptySet never equals a nonempty expected interval.
+            return {"correct": False, "detail": "empty_vs_interval"}
+        if not isinstance(got, sp.Interval):
+            return {"correct": False, "detail": "unparseable_interval"}
         return {"correct": _intervals_equal(got, exp["interval"]), "detail": "interval"}
 
     if exp["kind"] == "relation":
@@ -353,7 +480,21 @@ def grade_model_output(
     enable_thinking: bool,
     truncated: bool = False,
 ) -> dict[str, Any]:
-    parsed = parse_model_output(raw, enable_thinking=enable_thinking, truncated=truncated)
+    try:
+        parsed = parse_model_output(raw, enable_thinking=enable_thinking, truncated=truncated)
+    except Exception as exc:
+        return {
+            "graderVersion": GRADER_VERSION,
+            "parsed": None,
+            "formatCompliant": False,
+            "answerMarkerUsed": None,
+            "thinkingProtocolViolation": False,
+            "mathematicalCorrect": False,
+            "correct": False,
+            "outcome": "invalid",
+            "grade": None,
+            "invalidReason": f"parse_error:{type(exc).__name__}",
+        }
     base = {
         "graderVersion": GRADER_VERSION,
         "parsed": parsed,
@@ -372,7 +513,15 @@ def grade_model_output(
             "grade": None,
             "invalidReason": parsed.get("reason"),
         }
-    grade = grade_answer(str(parsed["mathText"] or parsed["answer"]), expected)
+    try:
+        grade = grade_answer(str(parsed["mathText"] or parsed["answer"]), expected)
+    except Exception as exc:
+        return {
+            **base,
+            "outcome": "invalid",
+            "grade": None,
+            "invalidReason": f"grade_error:{type(exc).__name__}",
+        }
     math_ok = bool(grade["correct"])
     return {
         **base,

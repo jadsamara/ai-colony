@@ -255,12 +255,12 @@ def test_grader_core() -> None:
 
 
 def test_grader_v32_text_answer_markers() -> None:
-    """Five previously invalid \\text{ANSWER:} forms + negative cases."""
+    """Five previously invalid \\text{ANSWER:} forms + negative cases (preserved in v3.3)."""
     from answer_parser import GRADER_VERSION_PREVIOUS
     from generation_utils import HF_BACKEND_ID
 
-    assert GRADER_VERSION == "c18d1-grader-v3.2"
-    assert GRADER_VERSION_PREVIOUS == "c18d1-grader-v3.1"
+    assert GRADER_VERSION == "c18d1-grader-v3.3"
+    assert GRADER_VERSION_PREVIOUS == "c18d1-grader-v3.2"
 
     positives = [
         (r"\text{ANSWER: } (4, 8)", {"kind": "roots", "values": ["4", "8"]}),
@@ -333,6 +333,91 @@ def test_grader_v32_text_answer_markers() -> None:
     hf_fn = src[src.index("def run_hf_benchmark") : src.index("def run_vllm_benchmark")]
     assert "REFERENCE_BACKEND" in hf_fn
     assert not _re.search(r'"backend":\s*OFFICIAL_BACKEND', hf_fn)
+
+
+def test_grader_v33_emptyset_canonicalization() -> None:
+    """v3.3: EmptySet-safe keys; empty ≡ no solution; never ≡ nonempty sets.
+
+    Exact crash path: text-vs-boxed comparison when SymPy Interval → EmptySet
+    (e.g. ``(8, 4)``) previously raised AttributeError on ``left_open``.
+    """
+    from answer_parser import GRADER_VERSION_PREVIOUS
+    from sympy_grader import canonical_answer_key
+
+    assert GRADER_VERSION == "c18d1-grader-v3.3"
+    assert GRADER_VERSION_PREVIOUS == "c18d1-grader-v3.2"
+
+    # Exact crash path: must not raise; empty intervals canonicalize as no_solution.
+    for empty_form in ("(8, 4)", "(5, 5)", "[5, 5)", "(5, 5]"):
+        key = canonical_answer_key(empty_form)
+        assert key["kind"] == "no_solution", empty_form
+        assert key["key"] == "no_solution"
+        assert answers_canonically_equal(empty_form, "no solution")["equal"] is True
+
+    # Equivalent empty-solution representations.
+    empties = [
+        "no solution",
+        "EmptySet",
+        "emptyset",
+        "∅",
+        r"\emptyset",
+        "{}",
+        "(8, 4)",
+    ]
+    for a in empties:
+        for b in empties:
+            assert answers_canonically_equal(a, b)["equal"] is True, (a, b)
+
+    # EmptySet never equals a nonempty interval or finite solution set.
+    nonempty = ["(4, 8)", "[0, 1]", "4, 8", "0"]
+    for empty in ("no solution", "EmptySet", "∅", r"\emptyset", "(8, 4)"):
+        for other in nonempty:
+            assert answers_canonically_equal(empty, other)["equal"] is False, (empty, other)
+
+    assert grade_answer("EmptySet", {"kind": "no_solution"})["correct"] is True
+    assert grade_answer(r"\emptyset", {"kind": "no_solution"})["correct"] is True
+    assert grade_answer("(8, 4)", {"kind": "no_solution"})["correct"] is True
+    assert grade_answer(
+        "(8, 4)",
+        {"kind": "interval", "left": "4", "right": "8", "leftOpen": True, "rightOpen": True},
+    )["correct"] is False
+    assert grade_answer("no solution", {"kind": "roots", "values": ["4", "8"]})["correct"] is False
+
+    # Text-versus-boxed: agreeing empties parse OK; crash path does not abort eval.
+    agree = grade_model_output(
+        "\\text{ANSWER: no solution}\n\\boxed{\\emptyset}",
+        {"kind": "no_solution"},
+        enable_thinking=False,
+    )
+    assert agree["outcome"] == "correct"
+    assert agree["graderVersion"] == GRADER_VERSION
+    assert agree["formatCompliant"] is False
+
+    crash_path = grade_model_output(
+        "\\text{ANSWER: } (8, 4)\n\\boxed{(8, 4)}",
+        {"kind": "no_solution"},
+        enable_thinking=False,
+    )
+    assert crash_path["outcome"] == "correct"
+    assert crash_path["invalidReason"] is None
+
+    # Disagreeing text vs boxed → controlled invalid (not process crash).
+    conflict = grade_model_output(
+        "\\text{ANSWER: } (8, 4)\n\\boxed{(4, 8)}",
+        {"kind": "no_solution"},
+        enable_thinking=False,
+    )
+    assert conflict["outcome"] == "invalid"
+    assert conflict["invalidReason"] == "conflicting_text_and_boxed"
+
+    # Malformed / unsupported → controlled invalid, not an uncaught exception.
+    malformed = grade_model_output(
+        "\\text{ANSWER: } (8, 4)\n\\boxed{(8, 4}",
+        {"kind": "no_solution"},
+        enable_thinking=False,
+    )
+    assert malformed["outcome"] in {"correct", "wrong", "invalid"}
+    assert "graderVersion" in malformed
 
 
 def test_interval_float_vs_rational_endpoints() -> None:
@@ -554,7 +639,7 @@ def test_batch_invariance_metrics() -> None:
     assert OFFICIAL_BACKEND == PRIMARY_EVAL_BACKEND
     assert REFERENCE_BACKEND == "huggingface-batched"
     assert STATISTICAL_GATE_VERSION == "c18d1-statistical-eval-v1"
-    assert GRADER_VERSION == "c18d1-grader-v3.2"
+    assert GRADER_VERSION == "c18d1-grader-v3.3"
     from decoding import DECODING_CONFIG_VERSION, THINKING_DISABLED, THINKING_DISABLED_V1
 
     assert DECODING_CONFIG_VERSION == "c18d1-decoding-v2"

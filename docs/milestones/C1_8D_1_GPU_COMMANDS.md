@@ -148,7 +148,7 @@ Do **not** treat the stratified 24-item 21.24% MDI as an automatic promotion thr
 export C18D1_OUT=~/ai-colony/tmp/c18d1/noise-floor-full-dev-$(date +%Y%m%d-%H%M%S)
 ./scripts/c18d1-gpu-noise-floor-full-dev
 # review: $C18D1_OUT/noise-floor-report.json
-#   graderVersion=c18d1-grader-v3.2, decodingConfigVersion=c18d1-decoding-v2
+#   graderVersion=c18d1-grader-v3.3, decodingConfigVersion=c18d1-decoding-v2
 #   sameSeedNoiseFloor vs alternateSeedNoiseFloor (thinking)
 #   overallModelPromotionThreshold, minimumPracticallyMeaningfulImprovement
 #   truncationByFamily / tokens — STOP for independent review

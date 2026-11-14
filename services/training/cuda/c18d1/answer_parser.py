@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Final-answer parser for C1.8D.1 Math evaluation (grader v3.2).
+"""Final-answer parser for C1.8D.1 Math evaluation (grader v3.3).
 
 Never search the reasoning trace. Only the final response region
 (after ``</think>`` when thinking is enabled) is considered.
 
-Accepted final-answer markers (v3.2):
+Accepted final-answer markers (v3.2+, unchanged in v3.3):
 - a bare ``ANSWER: <expr>`` line, or
 - the **last** ``\\boxed{...}`` in the final region, or
 - strict ``ANSWER:`` wrapped in LaTeX ``\\text{...}``
   (e.g. ``\\text{ANSWER: } (4, 8)`` or ``\\text{ANSWER: no solution}``)
+
+v3.3: EmptySet-safe canonical comparison (no Interval attribute crash).
 
 If markers are present and canonically disagree → invalid.
 Format compliance remains the bare ``ANSWER:`` contract and is reported
@@ -33,8 +35,8 @@ ParseStatus = Literal[
     "protocol_violation",
 ]
 
-GRADER_VERSION = "c18d1-grader-v3.2"
-GRADER_VERSION_PREVIOUS = "c18d1-grader-v3.1"
+GRADER_VERSION = "c18d1-grader-v3.3"
+GRADER_VERSION_PREVIOUS = "c18d1-grader-v3.2"
 THINK_CLOSE = "</think>"
 THINK_OPEN = "<think>"
 
@@ -217,9 +219,13 @@ def _text_answer_markers(final_text: str) -> list[dict[str, Any]]:
 
 
 def _canonically_equal(a: str | None, b: str | None) -> bool:
-    from sympy_grader import answers_canonically_equal
+    """Compare answer payloads. Never raises — parse/canonicalize failures ⇒ not equal."""
+    try:
+        from sympy_grader import answers_canonically_equal
 
-    return bool(answers_canonically_equal(a, b)["equal"])
+        return bool(answers_canonically_equal(a, b)["equal"])
+    except Exception:
+        return False
 
 
 def parse_answer_lines(final_text: str) -> dict[str, Any]:

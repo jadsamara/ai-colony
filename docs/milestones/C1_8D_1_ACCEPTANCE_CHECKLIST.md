@@ -13,7 +13,7 @@
 - [x] Tests: no locked files tracked; prompts lack split tags; locked gen refuses without seed
 - [x] Batched HF evaluator implemented (reference cross-check)
 - [x] vLLM primary eval + statistical gate v1 + noise floor + cross-backend
-- [x] Grader v3.2 (`\text{ANSWER:}`) + decoding-v2 (non-thinking 2048)
+- [x] Grader v3.3 (EmptySet-safe; `\text{ANSWER:}` from v3.2) + decoding-v2 (non-thinking 2048)
 - [x] HF reference provenance label fix (never `vllm-batched`)
 - [x] Stage A/B scripts (vLLM) + result templates
 - [x] Autonomous Math training flag remains `false`
