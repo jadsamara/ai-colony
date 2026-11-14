@@ -35,7 +35,7 @@ Config id: `c18d1-gemma3-27b-it-vllm-bf16-v1`
 - `--gpu-memory-utilization 0.85`
 - `--max-model-len 4096`
 - `--max-num-seqs 32`
-- `--limit-mm-per-prompt image=0` (text-only audit)
+- `--limit-mm-per-prompt '{"image":0}'` (text-only audit; vLLM 0.33 JSON argv)
 - `--host 127.0.0.1 --port 8001`
 
 **Fallback (only if BF16 OOM / unsupported):** AWQ quantized config `c18d1-gemma3-27b-it-vllm-awq-v1` — must re-pin AWQ revision and re-pass smoke validation.
@@ -61,15 +61,15 @@ Pass bar: ≥10/12 reviewer judgments agree with independent truth; SymPy wins d
 
 ## Runtime / cost estimate (307 cases)
 
-| Item | Estimate |
-|---|---|
-| Model load | ~4 min |
-| Smoke (12) | ~1–2 min |
-| Full audit generation | ~13 min @ 2.5 s/case batched |
-| **Total GPU time** | **~0.3–0.5 GPU-hours** |
-| API USD | **$0** (local) |
+| Item | Pre-smoke estimate | Smoke-calibrated (serial) |
+|---|---|---|
+| Model load / startup | ~4 min | **74 s** observed |
+| Smoke (12) | ~1–2 min | **passed** (mean 2215 ms) |
+| Full audit generation | ~13 min @ 2.5 s/case | **~11.3 min** @ 2.215 s/case serial |
+| **Total GPU time** | **~0.3–0.5 GPU-hours** | **~0.21 GPU-hours** serial |
+| API USD | **$0** (local) | **$0** |
 
-Recompute after smoke with measured tok/s before approving full audit.
+Reuse pinned HF cache; do not redownload. Confirm free disk ≥5 GiB for audit outputs.
 
 ## Execution plan (after approval only)
 

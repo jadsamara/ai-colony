@@ -89,7 +89,7 @@ def select_audit_cases(
     seed: int = 18,
     correct_sample_frac: float = 0.10,
 ) -> list[dict[str, Any]]:
-    """Select wrong/invalid/truncated/ambiguous + stratified 10% of corrects."""
+    """Select all failures + high-risk transitions + stratified 10% of corrects."""
     rng = random.Random(seed)
     selected: list[dict[str, Any]] = []
     for cid, mode in (regrade_report.get("modes") or {}).items():
@@ -98,11 +98,13 @@ def select_audit_cases(
         path = Path(mode["regradedPath"])
         rows = _load_json(path).get("results") or []
         enable_thinking = "thinking_enabled" in cid
-        non_correct = []
+        non_correct: list[dict[str, Any]] = []
+        high_risk_correct: list[dict[str, Any]] = []
         correct_by_family: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for row in rows:
             outcome = str(row.get("outcome") or "")
             fam = str(row.get("family") or "unknown")
+            orig = str(row.get("originalOutcome") or "")
             meta = {
                 "conditionId": cid,
                 "enableThinking": enable_thinking,
@@ -110,35 +112,151 @@ def select_audit_cases(
                 "family": fam,
                 "sampleIndex": row.get("sampleIndex"),
                 "regradedOutcome": outcome,
+                "highRiskTransition": bool(orig and orig != outcome),
                 "row": row,
             }
             if outcome in {"wrong", "invalid", "truncated", "grader_error"}:
                 non_correct.append(meta)
             elif outcome == "correct":
                 correct_by_family[fam].append(meta)
-            # Ambiguous / transitions of interest
-            if str(row.get("originalOutcome")) != outcome:
-                meta = {**meta, "highRiskTransition": True}
-                if meta not in non_correct and outcome == "correct":
-                    # still eligible via correct sample; mark high-risk separately
-                    pass
+                # Include every original→corrected transition even if outside 10% sample.
+                if meta["highRiskTransition"]:
+                    high_risk_correct.append({**meta, "highRiskCorrect": True})
         selected.extend(non_correct)
+        selected.extend(high_risk_correct)
         for fam, bucket in sorted(correct_by_family.items()):
             rng.shuffle(bucket)
             k = max(1, int(round(len(bucket) * correct_sample_frac))) if bucket else 0
             for row in bucket[:k]:
-                row = {**row, "correctSample": True}
-                selected.append(row)
-    # Deduplicate by (conditionId, itemId, sampleIndex)
-    seen: set[tuple[Any, ...]] = set()
-    uniq: list[dict[str, Any]] = []
+                selected.append({**row, "correctSample": True})
+    # Deduplicate by (conditionId, itemId, sampleIndex); prefer flags merged
+    seen: dict[tuple[Any, ...], dict[str, Any]] = {}
     for case in selected:
         key = (case["conditionId"], case["itemId"], case.get("sampleIndex"))
         if key in seen:
+            prev = seen[key]
+            prev["correctSample"] = bool(prev.get("correctSample") or case.get("correctSample"))
+            prev["highRiskTransition"] = bool(
+                prev.get("highRiskTransition") or case.get("highRiskTransition"),
+            )
+            prev["highRiskCorrect"] = bool(prev.get("highRiskCorrect") or case.get("highRiskCorrect"))
+        else:
+            seen[key] = dict(case)
+    return list(seen.values())
+
+
+def composition_summary(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize audit case composition for provenance / design checks."""
+    by_outcome: dict[str, int] = defaultdict(int)
+    by_mode: dict[str, int] = defaultdict(int)
+    by_family: dict[str, int] = defaultdict(int)
+    failure_n = 0
+    correct_sample_n = 0
+    high_risk_n = 0
+    for c in cases:
+        outcome = str(c.get("regradedOutcome") or "")
+        by_outcome[outcome] += 1
+        by_mode[str(c.get("conditionId"))] += 1
+        by_family[str(c.get("family"))] += 1
+        if outcome in {"wrong", "invalid", "truncated", "grader_error"}:
+            failure_n += 1
+        if c.get("correctSample"):
+            correct_sample_n += 1
+        if c.get("highRiskTransition"):
+            high_risk_n += 1
+    return {
+        "caseCount": len(cases),
+        "failureCount": failure_n,
+        "correctSampleCount": correct_sample_n,
+        "highRiskTransitionCount": high_risk_n,
+        "byRegradedOutcome": dict(sorted(by_outcome.items())),
+        "byCondition": dict(sorted(by_mode.items())),
+        "byFamily": dict(sorted(by_family.items())),
+        "includesAllFailures": True,  # enforced by select_audit_cases
+        "correctSampleFracTarget": 0.10,
+        "seed": 18,
+    }
+
+
+def assert_blind_packet(packet: dict[str, Any]) -> list[str]:
+    """Return issues if expected answers / grades leak into blind reviewer fields."""
+    issues: list[str] = []
+    blind = packet.get("blind") or {}
+    forbidden_blind_keys = {
+        "expected",
+        "regradedOutcome",
+        "originalOutcome",
+        "correct",
+        "grade",
+        "graderVersion",
+        "hidden",
+        "independentTruth",
+    }
+    leak = forbidden_blind_keys.intersection(blind)
+    if leak:
+        issues.append(f"blind_keys_leak:{sorted(leak)}")
+    # Serialized blind payload must not embed expected JSON / outcome labels as fields
+    blind_blob = json.dumps(blind, sort_keys=True)
+    for needle in ('"expected"', '"regradedOutcome"', '"originalOutcome"', '"independentTruth"'):
+        if needle in blind_blob:
+            issues.append(f"blind_json_contains:{needle}")
+    hidden = packet.get("hidden") or {}
+    if "expected" not in hidden:
+        issues.append("hidden_missing_expected")
+    prompt = packet.get("reviewerPrompt") or {}
+    user_t = str(prompt.get("userTemplate") or "")
+    if "{expected}" in user_t or "regradedOutcome" in user_t:
+        issues.append("user_template_references_grades")
+    return issues
+
+
+def reviewer_user_message(packet: dict[str, Any]) -> str:
+    """Build the exact user message sent to Gemma (blind fields only)."""
+    blind = packet["blind"]
+    tmpl = (packet.get("reviewerPrompt") or {}).get("userTemplate") or (
+        "Problem:\n{problem}\n\nModel response:\n{response}\n\n"
+        "Return JSON with mathJudgment, formatCompliant, briefRationale."
+    )
+    return tmpl.format(
+        problem=blind["problemStatement"],
+        response=blind["rawModelResponse"],
+    )
+
+
+def verify_dataset_prompt_provenance(
+    dataset_path: Path,
+    packets: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Confirm audit packets join to dataset prompts (saved prompt provenance)."""
+    items = _load_items(dataset_path)
+    missing = []
+    prompt_mismatch = []
+    empty_prompt = []
+    for p in packets:
+        iid = str(p.get("itemId"))
+        item = items.get(iid)
+        if item is None:
+            missing.append(iid)
             continue
-        seen.add(key)
-        uniq.append(case)
-    return uniq
+        prompt = item.get("prompt")
+        if not prompt or not str(prompt).strip():
+            empty_prompt.append(iid)
+            continue
+        blind_prompt = (p.get("blind") or {}).get("problemStatement")
+        if blind_prompt and blind_prompt != "<missing prompt>" and blind_prompt != prompt:
+            prompt_mismatch.append(iid)
+    digest = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+    return {
+        "ok": not missing and not prompt_mismatch and not empty_prompt,
+        "datasetPath": str(dataset_path.resolve()),
+        "datasetSha256": digest,
+        "packetCount": len(packets),
+        "itemIndexSize": len(items),
+        "missingItemIds": missing[:32],
+        "emptyPromptItemIds": empty_prompt[:32],
+        "promptMismatchItemIds": prompt_mismatch[:32],
+        "lockedDataAccessed": "locked" in {p.lower() for p in dataset_path.resolve().parts},
+    }
 
 
 def build_blind_packet(case: dict[str, Any], item: dict[str, Any] | None) -> dict[str, Any]:
@@ -153,6 +271,7 @@ def build_blind_packet(case: dict[str, Any], item: dict[str, Any] | None) -> dic
         "family": case["family"],
         "sampleIndex": case.get("sampleIndex"),
         "correctSample": bool(case.get("correctSample")),
+        "highRiskTransition": bool(case.get("highRiskTransition")),
         "blind": {
             "problemStatement": (item or {}).get("prompt") or "<missing prompt>",
             "rawModelResponse": row.get("rawPrediction") or "",
@@ -174,6 +293,53 @@ def build_blind_packet(case: dict[str, Any], item: dict[str, Any] | None) -> dic
     }
 
 
+# Operator-reported Gemma smoke (BF16) — used to calibrate full-audit runtime.
+SMOKE_OBSERVED_METRICS = {
+    "agreeCount": 12,
+    "parseOkCount": 12,
+    "caseCount": 12,
+    "meanLatencyMs": 2215,
+    "startupSeconds": 74,
+    "gpuMemoryGiBApprox": 80.6,
+    "passed": True,
+    "dtype": "bfloat16",
+    "modelRevision": "005ad3404e59d6023443cb575daa05336842228a",
+}
+
+
+def estimate_runtime_from_smoke(
+    n_cases: int = 307,
+    *,
+    smoke: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Serial runtime from measured smoke latency + startup (conservative)."""
+    s = smoke or SMOKE_OBSERVED_METRICS
+    mean_ms = float(s.get("meanLatencyMs") or 2500)
+    startup_s = float(s.get("startupSeconds") or 240)
+    gen_s = n_cases * (mean_ms / 1000.0)
+    total_s = startup_s + gen_s
+    base = estimate_runtime(n_cases)
+    return {
+        **base,
+        "calibration": "gemma_smoke_observed",
+        "smokeObserved": s,
+        "estimatedSecondsPerCaseSerial": round(mean_ms / 1000.0, 3),
+        "estimatedStartupSeconds": startup_s,
+        "estimatedGenerationMinutesSerial": round(gen_s / 60.0, 1),
+        "estimatedTotalGpuMinutesSerial": round(total_s / 60.0, 1),
+        "estimatedGpuHoursSerial": round(total_s / 3600.0, 2),
+        "diskEstimate": {
+            "modelWeightsGiBCached": 54,
+            "auditOutputMiB": 50,
+            "recommendedFreeGiB": 5,
+            "note": (
+                "Reuse existing HF cache for pinned revision; do not redownload. "
+                "Confirm free disk on GPU VM before serve."
+            ),
+        },
+    }
+
+
 def prepare_audit(
     *,
     regrade_report_path: Path,
@@ -186,29 +352,54 @@ def prepare_audit(
     items = _load_items(dataset_path)
     cases = select_audit_cases(report, seed=seed)
     packets = []
+    blindness_issues: list[dict[str, Any]] = []
     for case in cases:
         item = items.get(str(case["itemId"]))
-        packets.append(build_blind_packet(case, item))
+        packet = build_blind_packet(case, item)
+        issues = assert_blind_packet(packet)
+        if issues:
+            blindness_issues.append({"packetId": packet["packetId"], "issues": issues})
+        # Strip hidden from any export that could be sent to the model API path.
+        packets.append(packet)
+    composition = composition_summary(cases)
+    provenance = verify_dataset_prompt_provenance(dataset_path, packets)
     cost = estimate_cost(len(packets))
+    runtime = estimate_runtime_from_smoke(len(packets) or AUDIT_DESIGN["expectedCaseCount"])
     gemma_proposal = proposal_payload()
+    blindness_ok = len(blindness_issues) == 0
+    # Design target 307 is typical full-dev; record actual + target.
+    composition["expectedCaseCountDesign"] = AUDIT_DESIGN["expectedCaseCount"]
+    composition["matchesDesignTarget"] = (
+        composition["caseCount"] == AUDIT_DESIGN["expectedCaseCount"]
+    )
     manifest = {
-        "ok": True,
+        "ok": blindness_ok and provenance.get("ok", False),
         "auditSpecVersion": AUDIT_SPEC_VERSION,
         "auditDesign": AUDIT_DESIGN,
         "mode": "prepare_only",
         "seed": seed,
         "packetCount": len(packets),
         "expectedCaseCount": AUDIT_DESIGN["expectedCaseCount"],
+        "composition": composition,
+        "datasetProvenance": provenance,
+        "blindness": {
+            "ok": blindness_ok,
+            "issueCount": len(blindness_issues),
+            "issues": blindness_issues[:32],
+            "reviewerSeesOnly": ["problemStatement", "rawModelResponse"],
+            "reviewerDoesNotSee": list(AUDIT_DESIGN["blindTo"]),
+        },
         "proposedReviewer": PROPOSED_REVIEWER,
         "costEstimate": cost,
-        "runtimeEstimate": cost,
+        "runtimeEstimate": runtime,
+        "smokeObserved": SMOKE_OBSERVED_METRICS,
         "gemmaServingProposal": gemma_proposal,
         "systemPrompt": BLIND_SYSTEM_PROMPT,
         "executeGate": (
-            "1) Approve Gemma BF16 serving proposal + runtime estimate. "
-            "2) Pass smoke validation (12 verified packets). "
-            "3) Set C18D1_LLM_AUDIT_CONFIRM=1 for --execute. "
-            "No GPU workload is launched otherwise."
+            "1) Smoke validation passed (12/12). "
+            "2) Review composition + reconcile + runtime/disk. "
+            "3) Set C18D1_LLM_AUDIT_CONFIRM=1 for GPU full-audit script. "
+            "No GPU workload is launched from prepare-only."
         ),
         "policy": [
             "Do not reveal expected answers or grades before initial judgment",
@@ -216,12 +407,14 @@ def prepare_audit(
             "Disagreements adjudicated with SymPy / independent_check",
             "Unresolved disagreements escalate to human review",
             "Does not authorize promotion",
+            "Reuse pinned Gemma HF cache; do not redownload weights",
             "Exit Qwen vLLM fully before loading Gemma; tear down after audit",
         ],
         "regradeReportPath": str(regrade_report_path.resolve()),
         "datasetPath": str(dataset_path.resolve()),
         "graderVersion": GRADER_VERSION,
         "gpuWorkloadAuthorized": False,
+        "fullAuditExecuted": False,
     }
     (output_dir / "blind-audit-manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
@@ -231,6 +424,28 @@ def prepare_audit(
         "\n".join(json.dumps(p, sort_keys=True) for p in packets) + ("\n" if packets else ""),
         encoding="utf-8",
     )
+    # Blind-only export for the model API (no hidden / grades).
+    blind_only = [
+        {
+            "packetId": p["packetId"],
+            "conditionId": p["conditionId"],
+            "itemId": p["itemId"],
+            "family": p["family"],
+            "sampleIndex": p.get("sampleIndex"),
+            "blind": p["blind"],
+            "system": BLIND_SYSTEM_PROMPT,
+            "user": reviewer_user_message(p),
+        }
+        for p in packets
+    ]
+    for bo in blind_only:
+        # Defense in depth: refuse if user message somehow embeds hidden fields.
+        if '"expected"' in bo["user"] or "regradedOutcome" in bo["user"]:
+            raise RuntimeError(f"blind user message leaked grades for {bo['packetId']}")
+    (output_dir / "blind-packets-for-reviewer.jsonl").write_text(
+        "\n".join(json.dumps(p, sort_keys=True) for p in blind_only) + ("\n" if blind_only else ""),
+        encoding="utf-8",
+    )
     # Hidden labels file kept separate so reviewers can be given packets only.
     hidden = [
         {
@@ -238,11 +453,17 @@ def prepare_audit(
             "itemId": p["itemId"],
             "conditionId": p["conditionId"],
             "hidden": p["hidden"],
+            "correctSample": p.get("correctSample"),
+            "highRiskTransition": p.get("highRiskTransition"),
         }
         for p in packets
     ]
     (output_dir / "blind-hidden-labels.json").write_text(
         json.dumps(hidden, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (output_dir / "audit-composition.json").write_text(
+        json.dumps(composition, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
     return manifest

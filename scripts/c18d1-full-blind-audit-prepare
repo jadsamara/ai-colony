@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# C1.8D — CPU-only full blind-audit preparation after Gemma smoke pass.
+# Does NOT serve Gemma, does NOT run the 307-case audit, does NOT start pilot/Stage B.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+PYTHON="${C18D1_PYTHON:-python3}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/full-blind-audit-prepare-$(date +%Y%m%d-%H%M%S)}"
+DATASET="${C18D1_DATASET:-services/training/cuda/c18d1/datasets/historical/id_dev.gen-v2.jsonl}"
+
+ARGS=(--out "${OUT}" --dataset "${DATASET}" --seed 18)
+if [[ -n "${C18D1_REGRADE_REPORT:-}" ]]; then
+  ARGS+=(--regrade-report "${C18D1_REGRADE_REPORT}")
+elif [[ -n "${1:-}" && -f "${1}" ]]; then
+  ARGS+=(--regrade-report "${1}")
+fi
+if [[ -n "${C18D1_WEAK_FAMILY_AUDIT:-}" ]]; then
+  ARGS+=(--weak-family-audit "${C18D1_WEAK_FAMILY_AUDIT}")
+elif [[ -n "${2:-}" && -f "${2}" ]]; then
+  ARGS+=(--weak-family-audit "${2}")
+fi
+
+echo "[c18d1-full-blind-audit-prepare] out=${OUT}"
+"${PYTHON}" services/training/cuda/c18d1/full_blind_audit_prepare.py "${ARGS[@]}"
+
+echo "[c18d1-full-blind-audit-prepare] report: ${OUT}/full-blind-audit-prepare-report.json"
+echo "[c18d1-full-blind-audit-prepare] STOP — review reconcile/composition/runtime; do not run GPU audit without approval."

@@ -1339,6 +1339,186 @@ def test_family_diagnostics_and_weak_audit() -> None:
         )
 
 
+def test_grader_miss_reconcile_ten_fixture() -> None:
+    """Ten synthetic weak-family misses → historical_corrected vs remaining."""
+    from grader_miss_reconcile import (
+        RECONCILE_VERSION,
+        build_synthetic_ten_miss_fixture,
+        reconcile_weak_family_audit,
+    )
+
+    weak = build_synthetic_ten_miss_fixture()
+    assert weak["confirmedGraderMissTotal"] == 10
+    report = reconcile_weak_family_audit(weak)
+    assert report["reconcileVersion"] == RECONCILE_VERSION
+    assert report["inputMissCount"] == 10
+    assert report["historicalCorrectedCount"] == 9
+    assert report["remainingDefectCount"] == 1
+    assert report["openStageBBlockerCount"] == 1
+    assert report["byDefectKind"]["markdown_bold_answer_marker"] == 4
+    assert report["byDefectKind"]["exact_pow2_expected"] == 2
+    statuses = {s["itemId"]: s["status"] for s in report["samples"]}
+    assert statuses["syn-pow2-40"] == "historical_corrected"
+    assert statuses["syn-remaining"] == "remaining_defect"
+
+
+def test_blind_audit_composition_blindness_and_provenance() -> None:
+    """Selection includes all failures + high-risk + stratified 10%; packets stay blind."""
+    from blind_llm_audit import (
+        assert_blind_packet,
+        build_blind_packet,
+        composition_summary,
+        estimate_runtime_from_smoke,
+        prepare_audit,
+        reviewer_user_message,
+        select_audit_cases,
+        verify_dataset_prompt_provenance,
+    )
+
+    # Synthetic regrade: 20 failures + 100 corrects across 2 families; 5 high-risk corrects
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        results = []
+        for i in range(20):
+            results.append(
+                {
+                    "itemId": f"fail-{i}",
+                    "family": "quadratic_equations" if i % 2 == 0 else "symbolic_simplification",
+                    "sampleIndex": 0,
+                    "outcome": "wrong",
+                    "originalOutcome": "wrong",
+                    "rawPrediction": f"ANSWER: {i}",
+                    "expectedUsed": {"kind": "roots", "values": ["0"]},
+                    "graderVersion": "c18d1-grader-v3.4",
+                },
+            )
+        for i in range(100):
+            fam = "quadratic_equations" if i < 50 else "symbolic_simplification"
+            orig = "wrong" if i < 5 else "correct"  # 5 high-risk transitions
+            results.append(
+                {
+                    "itemId": f"ok-{i}",
+                    "family": fam,
+                    "sampleIndex": 0,
+                    "outcome": "correct",
+                    "originalOutcome": orig,
+                    "rawPrediction": "ANSWER: 1",
+                    "expectedUsed": {"kind": "roots", "values": ["1"]},
+                    "graderVersion": "c18d1-grader-v3.4",
+                },
+            )
+        regraded = tmp_path / "regraded-thinking_disabled_zero_shot.json"
+        regraded.write_text(
+            json.dumps({"results": results}) + "\n",
+            encoding="utf-8",
+        )
+        report = {
+            "ok": True,
+            "modes": {
+                "thinking_disabled_zero_shot": {
+                    "ok": True,
+                    "regradedPath": str(regraded),
+                },
+            },
+        }
+        report_path = tmp_path / "offline-regrade-report.json"
+        report_path.write_text(json.dumps(report) + "\n", encoding="utf-8")
+
+        ds = tmp_path / "ds.jsonl"
+        lines = []
+        for r in results:
+            lines.append(
+                json.dumps(
+                    {
+                        "id": r["itemId"],
+                        "family": r["family"],
+                        "prompt": f"Problem for {r['itemId']}",
+                        "expected": r["expectedUsed"],
+                    },
+                ),
+            )
+        ds.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        cases = select_audit_cases(report, seed=18)
+        # All 20 failures included
+        assert sum(1 for c in cases if c["regradedOutcome"] == "wrong") == 20
+        # All 5 high-risk corrects included
+        assert sum(1 for c in cases if c.get("highRiskCorrect")) == 5
+        # Stratified ~10% of 50 per family → ~5 each (max(1, round(5)))
+        correct_samples = [c for c in cases if c.get("correctSample")]
+        assert len(correct_samples) >= 8  # ~5+5 with possible overlap on high-risk
+        # Reproducible
+        cases2 = select_audit_cases(report, seed=18)
+        keys1 = {(c["itemId"], c.get("sampleIndex")) for c in cases}
+        keys2 = {(c["itemId"], c.get("sampleIndex")) for c in cases2}
+        assert keys1 == keys2
+
+        out = tmp_path / "blind"
+        manifest = prepare_audit(
+            regrade_report_path=report_path,
+            dataset_path=ds,
+            output_dir=out,
+            seed=18,
+        )
+        assert manifest["blindness"]["ok"] is True
+        assert manifest["datasetProvenance"]["ok"] is True
+        assert manifest["composition"]["failureCount"] == 20
+        packets = [
+            json.loads(line)
+            for line in (out / "blind-packets.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        for p in packets:
+            assert assert_blind_packet(p) == []
+            user = reviewer_user_message(p)
+            assert "expected" not in user
+            assert "regradedOutcome" not in user
+            assert p["hidden"]["expected"] is not None
+        # Blind-only export has no hidden
+        blind_only = (out / "blind-packets-for-reviewer.jsonl").read_text(encoding="utf-8")
+        assert '"expected"' not in blind_only
+        assert '"regradedOutcome"' not in blind_only
+        prov = verify_dataset_prompt_provenance(ds, packets)
+        assert prov["ok"] is True
+        comp = composition_summary(cases)
+        assert comp["includesAllFailures"] is True
+
+    rt = estimate_runtime_from_smoke(307)
+    assert rt["smokeObserved"]["meanLatencyMs"] == 2215
+    assert rt["estimatedTotalGpuMinutesSerial"] < 20
+    assert rt["diskEstimate"]["recommendedFreeGiB"] >= 5
+
+
+def test_full_blind_audit_prepare_cpu() -> None:
+    from full_blind_audit_prepare import PREPARE_VERSION, prepare_full_audit_bundle
+    from gemma_full_audit_runner import RUNNER_VERSION, classify_disagreement
+
+    with tempfile.TemporaryDirectory() as tmp:
+        summary = prepare_full_audit_bundle(output_dir=Path(tmp))
+        assert summary["prepareVersion"] == PREPARE_VERSION
+        assert summary["ok"] is True
+        assert summary["smokeObserved"]["passed"] is True
+        assert summary["graderMissReconcile"]["inputMissCount"] == 10
+        assert summary["graderMissReconcile"]["historicalCorrectedCount"] == 9
+        assert summary["graderMissReconcile"]["usedSyntheticFixture"] is True
+        assert summary["execution"]["fullAuditExecuted"] is False
+        assert summary["execution"]["gpuWorkloadAuthorized"] is False
+        assert (Path(tmp) / "grader-miss-reconcile.json").is_file()
+        assert (Path(tmp) / "full-blind-audit-prepare-report.json").is_file()
+
+    assert RUNNER_VERSION.startswith("c18d1-gemma-full-audit")
+    assert classify_disagreement(
+        {"disagreementWithDeterministic": False},
+        {"mathJudgment": "correct"},
+    ) == "agree_with_deterministic"
+    assert (REPO_ROOT / "scripts" / "c18d1-full-blind-audit-prepare").is_file()
+    assert (REPO_ROOT / "scripts" / "c18d1-gpu-gemma-full-audit").is_file()
+    gpu_script = (REPO_ROOT / "scripts" / "c18d1-gpu-gemma-full-audit").read_text(encoding="utf-8")
+    assert "C18D1_LLM_AUDIT_CONFIRM" in gpu_script
+    assert "local_files_only=True" in gpu_script
+    assert 'LIMIT_MM_JSON=\'{"image":0}\'' in gpu_script
+
+
 def test_gemma_reviewer_proposal_and_smoke_fixtures() -> None:
     from gemma_smoke_runner import parse_reviewer_json, score_smoke_case
     from gemma_smoke_validation import build_smoke_cases, write_smoke_bundle
@@ -1452,6 +1632,9 @@ def main() -> None:
     test_interval_float_vs_rational_endpoints()
     test_grader_error_outcome_continues()
     test_family_diagnostics_and_weak_audit()
+    test_grader_miss_reconcile_ten_fixture()
+    test_blind_audit_composition_blindness_and_provenance()
+    test_full_blind_audit_prepare_cpu()
     test_gemma_reviewer_proposal_and_smoke_fixtures()
     test_thinking_methodology_constants()
     test_locked_generator_refuses_without_external_seed()

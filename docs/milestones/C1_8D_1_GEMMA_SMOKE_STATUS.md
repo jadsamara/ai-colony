@@ -1,17 +1,38 @@
 # C1.8D — Gemma smoke status
 
-**Status:** Implementation ready; **GPU smoke not executed in this Cursor session.**
+**Status:** Smoke **passed** on the GPU VM (operator-reported). Full 307-case audit is prepared but **not executed**.
 
-Cursor runs on a Mac without `nvidia-smi` / RTX PRO 6000 access (same constraint as prior C1.8D GPU steps). Actual download, BF16 serve, VRAM, latency, and 12-case judgments must be produced on the Debian GPU VM via:
+## Smoke results (BF16, pinned revision `005ad340…`)
 
-```bash
-./scripts/c18d1-gpu-gemma-smoke
-```
+| Metric | Value |
+|---|---|
+| Mathematical agreement | **12/12** |
+| Parseable JSON | **12/12** |
+| Mean latency | **2,215 ms** |
+| Startup | **74 s** |
+| GPU memory | **~80.6 GB** |
+| Shutdown | Clean |
 
-Do not invent smoke metrics here. After the VM run, copy `gemma-smoke-report.json` for review.
+## Full audit gate
 
 | Gate | State |
 |---|---|
-| 12-case smoke | Pending operator VM execution |
-| Full 307-case audit | **Blocked** until smoke review + separate approval |
+| 12-case smoke | **Passed** |
+| CPU full-audit prepare | `./scripts/c18d1-full-blind-audit-prepare` |
+| Full 307-case audit | **Blocked** until separate approval + `C18D1_LLM_AUDIT_CONFIRM=1` on GPU VM |
 | Pilot / Stage B / training / promotion | **Blocked** |
+
+## Smoke-calibrated runtime (serial, 307 cases)
+
+- Generation ≈ 307 × 2.215 s ≈ **11.3 min**
+- Plus ~74 s startup → **~12.5 min** total (~**0.21 GPU-hours**)
+- Reuse HF cache; do not redownload pinned weights
+
+## VM execute (only after approval)
+
+```bash
+export C18D1_LLM_AUDIT_CONFIRM=1
+export C18D1_BLIND_PACKETS=/path/to/blind-packets.jsonl
+export C18D1_OUT=~/ai-colony/tmp/c18d1/gemma-full-audit-$(date +%Y%m%d-%H%M%S)
+./scripts/c18d1-gpu-gemma-full-audit
+```

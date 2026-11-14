@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# C1.8D — Gemma 3 27B BF16 FULL blind audit (307 cases) — GATED.
+# Requires: smoke passed, packets prepared, C18D1_LLM_AUDIT_CONFIRM=1.
+# Reuses HF cache (local_files_only first). Does NOT redownload if revision cached.
+# Does NOT start pilot / Stage B / training / promotion.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+if [[ "${C18D1_LLM_AUDIT_CONFIRM:-}" != "1" ]]; then
+  echo "[c18d1-gemma-full-audit] Refusing: set C18D1_LLM_AUDIT_CONFIRM=1 after reviewing prepare bundle." >&2
+  echo "[c18d1-gemma-full-audit] CPU prepare only: ./scripts/c18d1-full-blind-audit-prepare" >&2
+  exit 5
+fi
+
+VLLM_PYTHON="${C18D1_VLLM_PYTHON:-${ROOT}/tmp/c18d1/.venv-vllm/bin/python}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/gemma-full-audit-$(date +%Y%m%d-%H%M%S)}"
+PORT="${C18D1_GEMMA_PORT:-8001}"
+MODEL_ID="google/gemma-3-27b-it"
+REVISION="005ad3404e59d6023443cb575daa05336842228a"
+LIMIT_MM_JSON='{"image":0}'
+HF_HOME_DIR="${HF_HOME:-${ROOT}/tmp/c18d1/hf-cache}"
+LOG="${OUT}/vllm-gemma-serve.log"
+PID_FILE="${OUT}/vllm-gemma.pid"
+PACKETS="${C18D1_BLIND_PACKETS:-}"
+
+mkdir -p "${OUT}" "${HF_HOME_DIR}"
+export HF_HOME="${HF_HOME_DIR}"
+export HUGGINGFACE_HUB_CACHE="${HF_HOME_DIR}/hub"
+
+if [[ -z "${PACKETS}" || ! -f "${PACKETS}" ]]; then
+  echo "[c18d1-gemma-full-audit] ERROR: set C18D1_BLIND_PACKETS to blind-packets.jsonl from prepare" >&2
+  exit 2
+fi
+
+echo "[c18d1-gemma-full-audit] out=${OUT}"
+echo "[c18d1-gemma-full-audit] packets=${PACKETS}"
+echo "[c18d1-gemma-full-audit] model=${MODEL_ID}@${REVISION}"
+
+if [[ ! -x "${VLLM_PYTHON}" ]]; then
+  echo "[c18d1-gemma-full-audit] ERROR: VLLM python missing: ${VLLM_PYTHON}" >&2
+  exit 3
+fi
+if [[ -z "${HF_TOKEN:-${HUGGING_FACE_HUB_TOKEN:-}}" ]]; then
+  echo "[c18d1-gemma-full-audit] ERROR: set HF_TOKEN" >&2
+  exit 3
+fi
+export HF_TOKEN="${HF_TOKEN:-${HUGGING_FACE_HUB_TOKEN}}"
+
+command -v nvidia-smi >/dev/null || { echo "ERROR: nvidia-smi missing" >&2; exit 3; }
+nvidia-smi | tee "${OUT}/nvidia-smi-before.txt"
+df -h "${HF_HOME_DIR}" "$(pwd)" | tee "${OUT}/disk-space.txt"
+
+# Argv JSON regression (same as smoke)
+"${VLLM_PYTHON}" - <<'PY' | tee "${OUT}/argv-check.json"
+import json, sys
+sys.path.insert(0, "services/training/cuda/c18d1")
+from reviewer_gemma3 import LIMIT_MM_PER_PROMPT_JSON, vllm_serve_argv
+argv = vllm_serve_argv()
+i = argv.index("--limit-mm-per-prompt")
+val = argv[i + 1]
+assert val == LIMIT_MM_PER_PROMPT_JSON == '{"image":0}'
+json.loads(val)
+print(json.dumps({"ok": True, "limitMmPerPrompt": val}, indent=2))
+PY
+
+# Cache-first: refuse network download unless C18D1_ALLOW_GEMMA_DOWNLOAD=1
+echo "[c18d1-gemma-full-audit] resolving pinned revision from HF cache…"
+"${VLLM_PYTHON}" - <<PY
+import json, os, time
+from huggingface_hub import snapshot_download
+from pathlib import Path
+repo = "${MODEL_ID}"
+rev = "${REVISION}"
+t0 = time.time()
+try:
+    path = snapshot_download(repo_id=repo, revision=rev, token=True, local_files_only=True)
+    mode = "cache_hit_local_files_only"
+except Exception as e:
+    if os.environ.get("C18D1_ALLOW_GEMMA_DOWNLOAD") == "1":
+        path = snapshot_download(repo_id=repo, revision=rev, token=True, local_files_only=False)
+        mode = "cache_miss_downloaded"
+    else:
+        raise SystemExit(
+            f"Pinned Gemma revision not in HF cache ({type(e).__name__}: {e}). "
+            "Reuse smoke cache or set C18D1_ALLOW_GEMMA_DOWNLOAD=1 intentionally."
+        )
+meta = {"path": path, "mode": mode, "seconds": round(time.time() - t0, 2),
+        "modelId": repo, "revision": rev}
+Path("${OUT}/download-timing.json").write_text(json.dumps(meta, indent=2) + "\n")
+print(json.dumps(meta, indent=2))
+assert mode == "cache_hit_local_files_only" or os.environ.get("C18D1_ALLOW_GEMMA_DOWNLOAD") == "1"
+PY
+
+# Port conflict
+if ss -ltnp 2>/dev/null | grep -E ':(8000|8001)\b' >/dev/null; then
+  echo "[c18d1-gemma-full-audit] ERROR: port 8000/8001 in use — stop Qwen/vLLM first" >&2
+  ss -ltnp | grep -E ':(8000|8001)\b' || true
+  exit 4
+fi
+
+echo "[c18d1-gemma-full-audit] starting vLLM BF16 on :${PORT}"
+nohup "${VLLM_PYTHON}" -m vllm.entrypoints.openai.api_server \
+  --model "${MODEL_ID}" \
+  --revision "${REVISION}" \
+  --tokenizer "${MODEL_ID}" \
+  --tokenizer-revision "${REVISION}" \
+  --dtype bfloat16 \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 4096 \
+  --max-num-seqs 32 \
+  --limit-mm-per-prompt "${LIMIT_MM_JSON}" \
+  --host 127.0.0.1 \
+  --port "${PORT}" \
+  --trust-remote-code \
+  >"${LOG}" 2>&1 &
+echo $! >"${PID_FILE}"
+
+cleanup() {
+  if [[ -f "${PID_FILE}" ]]; then
+    pid=$(cat "${PID_FILE}")
+    echo "[c18d1-gemma-full-audit] stopping Gemma server pid=${pid}"
+    kill "${pid}" 2>/dev/null || true
+    sleep 3
+    kill -9 "${pid}" 2>/dev/null || true
+  fi
+  nvidia-smi | tee "${OUT}/nvidia-smi-after.txt" || true
+}
+trap cleanup EXIT
+
+# Fail-fast readiness (same pattern as smoke)
+"${VLLM_PYTHON}" - <<PY
+import json, os, time, urllib.request
+from pathlib import Path
+url = "http://127.0.0.1:${PORT}/v1/models"
+pid = int(Path("${PID_FILE}").read_text().strip())
+log_path = Path("${LOG}")
+t0 = time.time()
+max_wait = float(os.environ.get("C18D1_GEMMA_READY_TIMEOUT_S", "900"))
+
+def alive(p):
+    try:
+        os.kill(p, 0); return True
+    except OSError:
+        return False
+
+last = None
+while time.time() - t0 < max_wait:
+    if not alive(pid):
+        tail = "\n".join(log_path.read_text(errors="replace").splitlines()[-40:]) if log_path.is_file() else ""
+        Path("${OUT}/startup-timing.json").write_text(json.dumps({
+            "ready": False, "error": "vllm_process_exited_before_ready",
+            "pid": pid, "waitedSeconds": round(time.time()-t0, 2), "logTail": tail
+        }, indent=2) + "\n")
+        raise SystemExit(f"vLLM exited before ready; see {log_path}")
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            data = json.loads(r.read().decode())
+        Path("${OUT}/startup-timing.json").write_text(json.dumps({
+            "ready": True, "startupSeconds": round(time.time()-t0, 2), "models": data
+        }, indent=2) + "\n")
+        print(json.dumps({"ready": True, "startupSeconds": round(time.time()-t0, 2)}))
+        break
+    except Exception as e:
+        last = f"{type(e).__name__}: {e}"
+        time.sleep(2)
+else:
+    raise SystemExit(f"server not ready: {last}")
+PY
+nvidia-smi | tee "${OUT}/nvidia-smi-during.txt"
+
+set +e
+"${VLLM_PYTHON}" services/training/cuda/c18d1/gemma_full_audit_runner.py \
+  --packets "${PACKETS}" \
+  --base-url "http://127.0.0.1:${PORT}" \
+  --out "${OUT}" \
+  --timeout-s 180 \
+  --execute
+RC=$?
+set -e
+
+echo "[c18d1-gemma-full-audit] report: ${OUT}/gemma-full-audit-report.json (exit=${RC})"
+echo "[c18d1-gemma-full-audit] STOP — do not start pilot / Stage B / training / promotion."
+exit "${RC}"

@@ -36,31 +36,37 @@ export C18D1_NOISE_FLOOR_DIR=~/ai-colony/tmp/c18d1/noise-floor-full-dev-<timesta
 
 Report fields: original vs corrected accuracy (both modes), per-family deltas, false-negative / false-positive grading-defect counts, remaining wrong/invalid/truncated/grader_error, provenance (grader + expected-correction + dataset paths). Historical eval files are not overwritten.
 
-## Phase 3 — Blind LLM audit (prepare first)
-
-Proposed reviewer (different family from Qwen) — **updated**:
+## Phase 3 — Blind LLM audit
 
 | Field | Value |
 |---|---|
 | Model | `google/gemma-3-27b-it` (Gemma 3 27B Instruct) |
 | Serve | Local vLLM BF16 on RTX PRO 6000 96 GB |
 | Revision | `005ad3404e59d6023443cb575daa05336842228a` |
-| Sampling | temperature 0.0, maxTokens 400 |
-| Runtime | ~0.3–0.5 GPU-hours for ~307 cases (see `C1_8D_1_GEMMA_REVIEWER_PROPOSAL.md`) |
+| Smoke | **Passed** — 12/12 agree, 12/12 parseable, mean 2215 ms, startup 74 s, ~80.6 GB |
+| Runtime (smoke-calibrated serial) | ~12.5 min / ~0.21 GPU-hours for 307 cases |
+| Prepare | `./scripts/c18d1-full-blind-audit-prepare` |
+| Execute | Gated: `C18D1_LLM_AUDIT_CONFIRM=1` + `./scripts/c18d1-gpu-gemma-full-audit` |
 
-**Do not launch GPU serve/audit** until the proposal is approved, smoke validation (12 verified packets) passes, and `C18D1_LLM_AUDIT_CONFIRM=1` is set. LLM judgments are not ground truth and do not authorize promotion. Unresolved disagreements escalate to human review.
+**Do not execute the 307-case audit** without separate approval. Reuse HF cache (no redownload). LLM judgments are not ground truth and do not authorize promotion.
 
-Coverage: all regraded wrong/invalid/truncated/grader_error; stratified 10% of regraded corrects by family × mode; transitions flagged as high-risk.
+Coverage: all regraded wrong/invalid/truncated/grader_error; all high-risk original→corrected transitions; stratified 10% of regraded corrects by family × mode (seed 18). Blind packets expose only `problemStatement` + `rawModelResponse`.
+
+### Grader-miss reconcile
+
+Weak-family `grader_miss` samples are reconciled into `historical_corrected` (fixed by grader v3.4 / exact expected overlay) vs `remaining_defect` (still open Stage B blockers). CPU fixture covers the known corrected classes (markdown-bold, LaTeX wrappers, exact `2**k`, interval float). Point prepare at the VM `weak-family-audit-v2.json` for live counts.
 
 ## Phase 4 — Readiness (current)
 
 | Question | Answer |
 |---|---|
+| Smoke validation? | **Passed** (operator-reported) |
 | Corrected baselines available? | After operator runs offline regrade on VM artifacts |
 | Per-family weaknesses? | Recompute from regrade + weak-family audit v2 |
-| Remaining grader defects? | Any `grader_miss` / unresolved blind disagreements after regrade |
-| Stratified pilot ready? | **Not yet** — blocked until regrade + audit review + explicit approval |
-| Before Stage B | Pilot approval; no confirmed open grader misses; config freeze |
+| Remaining grader defects? | `remaining_defect` from reconcile + unresolved blind disagreements |
+| 307-case audit ready to run? | Prepare tooling ready; **execution blocked** until approval |
+| Stratified pilot ready? | **Not yet** — blocked until audit review + explicit approval |
+| Before Stage B | Pilot approval; no open `remaining_defect` grader misses; config freeze |
 
 ## Remaining acceptance gates
 

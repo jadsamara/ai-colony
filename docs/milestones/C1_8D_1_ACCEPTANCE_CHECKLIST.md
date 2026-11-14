@@ -23,8 +23,11 @@
 
 ## Pending GPU acceptance (operator)
 
-- [ ] Offline regrade of full-dev noise-floor artifacts + weak-family audit v2 — **STOP for review**
-- [ ] Blind LLM audit cost/model approval; execute only if approved; human escalate disagreements
+- [x] Gemma 3 27B BF16 smoke (12/12 agree + parse) — passed
+- [x] Full blind-audit CPU prepare (reconcile / provenance / composition / blindness / runtime)
+- [ ] Offline regrade of full-dev noise-floor artifacts + weak-family audit v2 — point prepare at live JSON
+- [ ] Full 307-case Gemma blind audit — **only after separate approval** (`C18D1_LLM_AUDIT_CONFIRM=1`)
+- [ ] Human escalate unresolved disagreements
 - [ ] Stratified pilot (vLLM, both modes) — only after explicit approval — **STOP**
 - [ ] Stage B full development baselines (vLLM) — only after pilot approval — **STOP for freeze**
 - [ ] Stage C locked ID/OOD + regression **only in same session as first trained adapter**

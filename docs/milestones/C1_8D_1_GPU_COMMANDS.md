@@ -172,7 +172,16 @@ export C18D1_OUT=~/ai-colony/tmp/c18d1/gemma-smoke-$(date +%Y%m%d-%H%M%S)
 # export C18D1_STOP_EXISTING_VLLM=1   # only if no active eval/train
 ./scripts/c18d1-gpu-gemma-smoke
 # review: $C18D1_OUT/gemma-smoke-report.json (latency, VRAM snapshots, agree/parse counts)
+# Smoke passed (12/12). CPU prepare full audit (no GPU):
+./scripts/c18d1-full-blind-audit-prepare
+# optional: C18D1_REGRADE_REPORT=…/offline-regrade-report.json \
+#           C18D1_WEAK_FAMILY_AUDIT=…/weak-family-audit-v2.json \
+#           ./scripts/c18d1-full-blind-audit-prepare
 # Do NOT run 307-case audit / pilot / Stage B until separately approved
+# After approval only:
+#   export C18D1_LLM_AUDIT_CONFIRM=1
+#   export C18D1_BLIND_PACKETS=…/blind-packets.jsonl
+#   ./scripts/c18d1-gpu-gemma-full-audit
 ```
 
 ### Step 2 — Cross-backend check (vLLM vs HF)
