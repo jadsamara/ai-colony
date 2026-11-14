@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# C1.8D — CPU-only adjudication of an existing Gemma full-audit report.
+# No GPU. No new inference. Does not modify official grades.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+PYTHON="${C18D1_PYTHON:-python3}"
+REPORT="${C18D1_AUDIT_REPORT:-${1:-}}"
+OUT="${C18D1_OUT:-${ROOT}/tmp/c18d1/audit-adjudication-$(date +%Y%m%d-%H%M%S)}"
+
+if [[ -z "${REPORT}" || ! -f "${REPORT}" ]]; then
+  echo "Usage: $0 /path/to/gemma-full-audit-report.json" >&2
+  echo "   or: C18D1_AUDIT_REPORT=... $0" >&2
+  echo "Fixture demo: ${PYTHON} services/training/cuda/c18d1/audit_adjudication.py --fixture --out ${OUT}" >&2
+  exit 2
+fi
+
+echo "[c18d1-adjudicate] report=${REPORT}"
+echo "[c18d1-adjudicate] out=${OUT}"
+"${PYTHON}" services/training/cuda/c18d1/audit_adjudication.py \
+  --report "${REPORT}" \
+  --out "${OUT}"
+
+echo "[c18d1-adjudicate] summary: ${OUT}/adjudication-summary.json"
+echo "[c18d1-adjudicate] queue: ${OUT}/adjudication-review-queue.jsonl"
+echo "[c18d1-adjudicate] STOP — human-review unresolved; no Stage B / training / promotion."

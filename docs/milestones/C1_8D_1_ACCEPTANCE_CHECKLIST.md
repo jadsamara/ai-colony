@@ -27,8 +27,9 @@
 - [x] Full blind-audit CPU prepare (reconcile / provenance / composition / blindness / runtime)
 - [x] Preflight: poly:0042 incomplete≠grader defect; 325-vs-307 composition explained
 - [ ] Offline regrade of full-dev noise-floor artifacts + weak-family audit v2 — point prepare at live JSON
-- [ ] Full 307-case Gemma blind audit — **only after separate approval** (`C18D1_LLM_AUDIT_CONFIRM=1`)
-- [ ] Human escalate unresolved disagreements
+- [x] Full Gemma blind audit executed on GPU VM (325 packets; operator-reported)
+- [x] CPU post-audit adjudication tooling (symmetry + review queue + summary)
+- [ ] Human escalate unresolved disagreements from adjudication queue
 - [ ] Stratified pilot (vLLM, both modes) — only after explicit approval — **STOP**
 - [ ] Stage B full development baselines (vLLM) — only after pilot approval — **STOP for freeze**
 - [ ] Stage C locked ID/OOD + regression **only in same session as first trained adapter**

@@ -1339,6 +1339,85 @@ def test_family_diagnostics_and_weak_audit() -> None:
         )
 
 
+def test_score_judgment_disagreement_symmetry() -> None:
+    """Both reviewer↔grader disagreement directions set the same boolean."""
+    from audit_adjudication import verify_score_judgment_symmetry
+    from blind_llm_audit import score_judgment
+
+    sym = verify_score_judgment_symmetry()
+    assert sym["symmetricDisagreementFlag"] is True
+    assert sym["reviewerCorrectGraderWrong"]["disagreement"] is True
+    assert sym["reviewerIncorrectGraderCorrect"]["disagreement"] is True
+
+    # Non-comparable → independentEqual is None (not False)
+    packet = {
+        "packetId": "nc",
+        "itemId": "nc",
+        "conditionId": "thinking_disabled_zero_shot",
+        "blind": {"problemStatement": "p", "rawModelResponse": "no marker"},
+        "hidden": {
+            "regradedOutcome": "wrong",
+            "expected": {"kind": "roots", "values": ["1"]},
+        },
+    }
+    scored = score_judgment(packet, {"mathJudgment": "correct", "formatCompliant": False})
+    assert scored["disagreementWithDeterministic"] is True
+    assert scored["independentComparable"] is False
+    assert scored["independentEqual"] is None
+    assert scored["escalation"] == "human_review"
+
+
+def test_audit_adjudication_fixture_reconciles() -> None:
+    from audit_adjudication import (
+        ADJUDICATION_VERSION,
+        adjudicate_report,
+        build_fixture_report,
+        classify_parse_failure,
+        write_adjudication_bundle,
+    )
+
+    report = build_fixture_report()
+    bundle = adjudicate_report(report)
+    summary = bundle["summary"]
+    assert summary["adjudicationVersion"] == ADJUDICATION_VERSION
+    assert summary["reconciliation"]["equalsPacketCount"] is True
+    assert summary["reconciliation"]["sum"] == summary["sourcePacketCount"]
+    assert summary["officialGradesModified"] is False
+    assert summary["scoreJudgmentSymmetry"]["symmetricDisagreementFlag"] is True
+    assert summary["disagreementBreakdown"]["total"] >= 2
+    assert summary["parseFailureBreakdown"]["total"] >= 2
+    assert any(
+        a["direction"] == "reviewer_correct_vs_grader_wrong"
+        for a in bundle["disagreementAnalyses"]
+    )
+    assert any(
+        a["direction"] == "reviewer_incorrect_vs_grader_correct"
+        for a in bundle["disagreementAnalyses"]
+    )
+    # Must not label all disagreements as Gemma errors solely from independentEqual
+    assert not all(
+        "gemma_error" in a["adjudicationLabel"] for a in bundle["disagreementAnalyses"]
+    )
+    empty = classify_parse_failure(
+        {
+            "packetId": "e",
+            "parsed": {"ok": False, "reason": "empty_response"},
+            "response": {"rawContent": "", "error": None},
+        },
+    )
+    assert empty["parseFailureKind"] == "empty_response"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        (out / "src.json").write_text(json.dumps(report) + "\n", encoding="utf-8")
+        written = write_adjudication_bundle(out / "src.json", out / "adj")
+        assert written["ok"] is True
+        assert (out / "adj" / "adjudication-summary.json").is_file()
+        assert (out / "adj" / "adjudication-review-queue.jsonl").is_file()
+        assert (out / "adj" / "ADJUDICATION_REPORT.md").is_file()
+    assert (REPO_ROOT / "scripts" / "c18d1-adjudicate-gemma-audit").is_file()
+
+
 def test_grader_miss_reconcile_ten_fixture() -> None:
     """Ten synthetic weak-family misses → historical_corrected + incomplete (not blocker)."""
     from grader_miss_reconcile import (
@@ -1699,6 +1778,8 @@ def main() -> None:
     test_interval_float_vs_rational_endpoints()
     test_grader_error_outcome_continues()
     test_family_diagnostics_and_weak_audit()
+    test_score_judgment_disagreement_symmetry()
+    test_audit_adjudication_fixture_reconciles()
     test_grader_miss_reconcile_ten_fixture()
     test_independent_check_truncated_is_not_grader_miss()
     test_blind_audit_composition_blindness_and_provenance()

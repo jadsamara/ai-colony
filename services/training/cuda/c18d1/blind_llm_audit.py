@@ -546,33 +546,51 @@ def prepare_audit(
 
 
 def score_judgment(packet: dict[str, Any], judgment: dict[str, Any]) -> dict[str, Any]:
-    """Compare reviewer judgment to corrected deterministic grade; verify with exact math."""
+    """Compare reviewer judgment to corrected deterministic grade; verify with exact math.
+
+    Disagreement detection is **symmetric** for the binary pairs:
+    (reviewer correct, grader wrong) and (reviewer incorrect, grader correct).
+
+    ``independentEqual`` is ``None`` when the candidate is not independently
+    comparable — never coerce non-comparable cases to ``False``.
+    """
     hidden = packet["hidden"]
     math_j = str(judgment.get("mathJudgment") or "")
     regraded = str(hidden.get("regradedOutcome") or "")
     expected = hidden.get("expected") or {}
     raw = packet["blind"]["rawModelResponse"]
+    problem = (packet.get("blind") or {}).get("problemStatement")
     # Extract candidate via independent check when possible
     from independent_check import extract_candidate
 
     enable = "thinking_enabled" in str(packet.get("conditionId"))
     extracted = extract_candidate(raw, enable_thinking=enable)
-    eq = independent_equals(extracted.get("mathText"), expected) if extracted.get("ok") else {
-        "equal": False,
-        "comparable": False,
-    }
+    if extracted.get("ok"):
+        eq = independent_equals(extracted.get("mathText"), expected, prompt=problem)
+    else:
+        eq = {"equal": None, "comparable": False, "reason": extracted.get("reason")}
 
-    # Map judgments
+    # Map judgments — both disagreement directions share this predicate.
     reviewer_says_correct = math_j == "correct"
     det_correct = regraded == "correct"
     disagreement = None
     if math_j in {"correct", "incorrect"} and regraded in {"correct", "wrong"}:
         disagreement = reviewer_says_correct != det_correct
 
-    fp = bool(det_correct and math_j == "incorrect" and eq.get("comparable") and eq.get("equal"))
-    # FP for grader: grader said correct but math is wrong — need reviewer incorrect + eq unequal
-    grader_fp = bool(det_correct and eq.get("comparable") and (eq.get("equal") is False))
-    grader_fn = bool((not det_correct) and eq.get("comparable") and eq.get("equal"))
+    comparable = bool(eq.get("comparable"))
+    equal = eq.get("equal") if comparable else None
+
+    # Grader FP/FN candidates require a decisive independent comparison.
+    grader_fp = bool(det_correct and comparable and equal is False)
+    grader_fn = bool((not det_correct) and comparable and equal is True)
+
+    # Symmetric reviewer-vs-exact conflicts (only when comparable).
+    reviewer_vs_exact = None
+    if comparable and math_j in {"correct", "incorrect"}:
+        if math_j == "correct" and equal is False:
+            reviewer_vs_exact = "reviewer_correct_but_exact_unequal"
+        elif math_j == "incorrect" and equal is True:
+            reviewer_vs_exact = "reviewer_incorrect_but_exact_equal"
 
     return {
         "packetId": packet["packetId"],
@@ -581,14 +599,18 @@ def score_judgment(packet: dict[str, Any], judgment: dict[str, Any]) -> dict[str
         "reviewerFormatCompliant": judgment.get("formatCompliant"),
         "regradedOutcome": regraded,
         "disagreementWithDeterministic": disagreement,
-        "independentEqual": eq.get("equal"),
-        "independentComparable": eq.get("comparable"),
+        "independentEqual": equal,
+        "independentComparable": comparable,
         "graderFalsePositiveCandidate": grader_fp,
         "graderFalseNegativeCandidate": grader_fn,
-        "reviewerVsExactConflict": fp,
+        # Legacy boolean kept for older consumers (reviewer incorrect + exact equal).
+        "reviewerVsExactConflict": bool(
+            det_correct and math_j == "incorrect" and comparable and equal is True,
+        ),
+        "reviewerVsExactConflictKind": reviewer_vs_exact,
         "escalation": (
             "human_review"
-            if disagreement and not eq.get("comparable")
+            if disagreement and not comparable
             else ("none" if not disagreement else "exact_check_applied")
         ),
     }

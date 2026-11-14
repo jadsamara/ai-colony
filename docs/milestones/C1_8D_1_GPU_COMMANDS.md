@@ -182,6 +182,11 @@ export C18D1_OUT=~/ai-colony/tmp/c18d1/gemma-smoke-$(date +%Y%m%d-%H%M%S)
 #   export C18D1_LLM_AUDIT_CONFIRM=1
 #   export C18D1_BLIND_PACKETS=…/blind-packets.jsonl
 #   ./scripts/c18d1-gpu-gemma-full-audit
+# After full audit exists — CPU adjudication only (no new inference):
+#   ./scripts/c18d1-adjudicate-gemma-audit \
+#     ~/ai-colony/tmp/c18d1/gemma-smoke-20261114-215916/gemma-full-audit-report.json
+#   # review adjudication-summary.json + adjudication-review-queue.jsonl
+#   # STOP — human-review unresolved; no Stage B / training / promotion
 ```
 
 ### Step 2 — Cross-backend check (vLLM vs HF)
