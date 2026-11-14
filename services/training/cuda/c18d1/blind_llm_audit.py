@@ -126,9 +126,17 @@ def select_audit_cases(
         selected.extend(high_risk_correct)
         for fam, bucket in sorted(correct_by_family.items()):
             rng.shuffle(bucket)
-            k = max(1, int(round(len(bucket) * correct_sample_frac))) if bucket else 0
+            denom = len(bucket)
+            k = max(1, int(round(denom * correct_sample_frac))) if bucket else 0
             for row in bucket[:k]:
-                selected.append({**row, "correctSample": True})
+                selected.append(
+                    {
+                        **row,
+                        "correctSample": True,
+                        "correctSampleDenominator": denom,
+                        "correctSampleFrac": correct_sample_frac,
+                    },
+                )
     # Deduplicate by (conditionId, itemId, sampleIndex); prefer flags merged
     seen: dict[tuple[Any, ...], dict[str, Any]] = {}
     for case in selected:
@@ -140,19 +148,41 @@ def select_audit_cases(
                 prev.get("highRiskTransition") or case.get("highRiskTransition"),
             )
             prev["highRiskCorrect"] = bool(prev.get("highRiskCorrect") or case.get("highRiskCorrect"))
+            if case.get("correctSampleDenominator") is not None:
+                prev["correctSampleDenominator"] = case["correctSampleDenominator"]
+            if case.get("correctSampleFrac") is not None:
+                prev["correctSampleFrac"] = case["correctSampleFrac"]
         else:
             seen[key] = dict(case)
     return list(seen.values())
 
 
-def composition_summary(cases: list[dict[str, Any]]) -> dict[str, Any]:
+def generation_identity(case: dict[str, Any]) -> tuple[Any, ...]:
+    """Unique identity for one model generation in the audit."""
+    return (case.get("conditionId"), case.get("itemId"), case.get("sampleIndex"))
+
+
+def composition_summary(
+    cases: list[dict[str, Any]],
+    *,
+    seed: int = 18,
+    design_target: int | None = None,
+    correct_sample_frac: float = 0.10,
+) -> dict[str, Any]:
     """Summarize audit case composition for provenance / design checks."""
+    design_target = (
+        design_target if design_target is not None else AUDIT_DESIGN["expectedCaseCount"]
+    )
     by_outcome: dict[str, int] = defaultdict(int)
     by_mode: dict[str, int] = defaultdict(int)
     by_family: dict[str, int] = defaultdict(int)
     failure_n = 0
     correct_sample_n = 0
     high_risk_n = 0
+    high_risk_only_n = 0
+    high_risk_and_sample_n = 0
+    identities = [generation_identity(c) for c in cases]
+    unique_n = len(set(identities))
     for c in cases:
         outcome = str(c.get("regradedOutcome") or "")
         by_outcome[outcome] += 1
@@ -160,21 +190,67 @@ def composition_summary(cases: list[dict[str, Any]]) -> dict[str, Any]:
         by_family[str(c.get("family"))] += 1
         if outcome in {"wrong", "invalid", "truncated", "grader_error"}:
             failure_n += 1
-        if c.get("correctSample"):
+        is_sample = bool(c.get("correctSample"))
+        is_hr = bool(c.get("highRiskTransition"))
+        if is_sample:
             correct_sample_n += 1
-        if c.get("highRiskTransition"):
+        if is_hr:
             high_risk_n += 1
+        if is_hr and is_sample:
+            high_risk_and_sample_n += 1
+        if is_hr and not is_sample and outcome == "correct":
+            high_risk_only_n += 1
+
+    # Denominator for stratified 10%: regraded-correct rows per family × mode
+    # (computed from selected correctSample flags' sibling buckets at select time).
+    # Report the effective selected counts; denominators are recorded when available
+    # on case metadata (`correctSampleDenominator`).
+    denominators: dict[str, int] = {}
+    for c in cases:
+        if not c.get("correctSample"):
+            continue
+        key = f"{c.get('conditionId')}::{c.get('family')}"
+        denom = c.get("correctSampleDenominator")
+        if denom is not None:
+            denominators[key] = int(denom)
+
+    delta = len(cases) - design_target
+    explanation = (
+        f"Design target {design_target} ≈ all failures + stratified "
+        f"{correct_sample_frac:.0%} of regraded corrects. "
+        f"Actual {len(cases)} includes every high-risk original→corrected "
+        f"transition even when outside the 10% sample "
+        f"({high_risk_only_n} exclusive high-risk corrects after dedup). "
+        f"Failures included: {failure_n}. "
+        f"High-risk ∩ correct-sample overlap: {high_risk_and_sample_n}. "
+        f"Unique generation identities: {unique_n}/{len(cases)}. "
+        f"Selection seed={seed}."
+    )
     return {
         "caseCount": len(cases),
+        "designTarget": design_target,
+        "deltaVsDesign": delta,
         "failureCount": failure_n,
         "correctSampleCount": correct_sample_n,
         "highRiskTransitionCount": high_risk_n,
+        "exclusiveHighRiskCorrectCount": high_risk_only_n,
+        "highRiskAndCorrectSampleOverlapCount": high_risk_and_sample_n,
+        "uniqueGenerationIdentityCount": unique_n,
+        "allGenerationIdentitiesUnique": unique_n == len(cases),
         "byRegradedOutcome": dict(sorted(by_outcome.items())),
         "byCondition": dict(sorted(by_mode.items())),
         "byFamily": dict(sorted(by_family.items())),
         "includesAllFailures": True,  # enforced by select_audit_cases
-        "correctSampleFracTarget": 0.10,
-        "seed": 18,
+        "correctSampleFracTarget": correct_sample_frac,
+        "correctSampleDenominatorsByConditionFamily": denominators,
+        "correctSampleDenominatorDefinition": (
+            "Per (conditionId, family): count of regraded outcome=correct rows; "
+            "k = max(1, round(denom * 0.10)) sampled with Random(seed)."
+        ),
+        "seed": seed,
+        "reproducibleWithSeed": True,
+        "explanation": explanation,
+        "blindReviewerPayload": ["problemStatement", "rawModelResponse"],
     }
 
 
@@ -361,7 +437,7 @@ def prepare_audit(
             blindness_issues.append({"packetId": packet["packetId"], "issues": issues})
         # Strip hidden from any export that could be sent to the model API path.
         packets.append(packet)
-    composition = composition_summary(cases)
+    composition = composition_summary(cases, seed=seed)
     provenance = verify_dataset_prompt_provenance(dataset_path, packets)
     cost = estimate_cost(len(packets))
     runtime = estimate_runtime_from_smoke(len(packets) or AUDIT_DESIGN["expectedCaseCount"])

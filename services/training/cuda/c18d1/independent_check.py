@@ -139,13 +139,17 @@ def classify_independently(
         truncated=bool(row.get("truncated")),
     )
     if not extracted["ok"] or not extracted.get("mathText"):
-        # Missing/invalid marker is insufficient response — not proven wrong math.
-        label = "insufficient_response"
-        if historical == "grader_error":
-            label = "grader_miss"
+        # Missing/invalid marker is insufficient / incomplete — not a grader miss.
+        # Truncated or grader_error-without-answer must never become grader_miss
+        # without evidence of a usable final answer the grader failed to extract.
+        rationale = extracted.get("reason") or "no_extractable_answer"
+        if bool(row.get("truncated")) or historical == "truncated":
+            rationale = "truncated_before_final_answer"
+        elif historical == "grader_error":
+            rationale = "grader_error_without_extractable_answer"
         return {
-            "classification": label,
-            "rationale": extracted.get("reason") or "no_extractable_answer",
+            "classification": "insufficient_response",
+            "rationale": rationale,
             "parsedAnswer": extracted.get("mathText"),
             "independentEqual": None,
             "comparable": False,

@@ -25,6 +25,7 @@
 
 - [x] Gemma 3 27B BF16 smoke (12/12 agree + parse) — passed
 - [x] Full blind-audit CPU prepare (reconcile / provenance / composition / blindness / runtime)
+- [x] Preflight: poly:0042 incomplete≠grader defect; 325-vs-307 composition explained
 - [ ] Offline regrade of full-dev noise-floor artifacts + weak-family audit v2 — point prepare at live JSON
 - [ ] Full 307-case Gemma blind audit — **only after separate approval** (`C18D1_LLM_AUDIT_CONFIRM=1`)
 - [ ] Human escalate unresolved disagreements

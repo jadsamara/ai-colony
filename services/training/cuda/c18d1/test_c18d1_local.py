@@ -1340,10 +1340,13 @@ def test_family_diagnostics_and_weak_audit() -> None:
 
 
 def test_grader_miss_reconcile_ten_fixture() -> None:
-    """Ten synthetic weak-family misses → historical_corrected vs remaining."""
+    """Ten synthetic weak-family misses → historical_corrected + incomplete (not blocker)."""
     from grader_miss_reconcile import (
+        POLY_0042_ITEM_ID,
         RECONCILE_VERSION,
         build_synthetic_ten_miss_fixture,
+        poly_0042_incomplete_fixture_sample,
+        reconcile_sample,
         reconcile_weak_family_audit,
     )
 
@@ -1353,13 +1356,59 @@ def test_grader_miss_reconcile_ten_fixture() -> None:
     assert report["reconcileVersion"] == RECONCILE_VERSION
     assert report["inputMissCount"] == 10
     assert report["historicalCorrectedCount"] == 9
-    assert report["remainingDefectCount"] == 1
-    assert report["openStageBBlockerCount"] == 1
+    assert report["incompleteOrTruncatedCount"] == 1
+    assert report["remainingDefectCount"] == 0
+    assert report["openStageBBlockerCount"] == 0
     assert report["byDefectKind"]["markdown_bold_answer_marker"] == 4
     assert report["byDefectKind"]["exact_pow2_expected"] == 2
     statuses = {s["itemId"]: s["status"] for s in report["samples"]}
     assert statuses["syn-pow2-40"] == "historical_corrected"
-    assert statuses["syn-remaining"] == "remaining_defect"
+    assert statuses[POLY_0042_ITEM_ID] == "incomplete_or_truncated_response"
+
+    # Explicit poly 0042 investigation: truncated working text, no ANSWER marker
+    import re as _re
+
+    poly = reconcile_sample(poly_0042_incomplete_fixture_sample(), enable_thinking=False)
+    assert poly["status"] == "incomplete_or_truncated_response"
+    assert poly["openStageBBlocker"] is False
+    assert not _re.search(r"ANSWER\s*:", poly["rawPredictionPreserved"], _re.I)
+    # Completing the same item with a valid ANSWER is historical_corrected, not remaining
+    complete = {
+        **poly_0042_incomplete_fixture_sample(),
+        "truncated": False,
+        "outcome": "wrong",
+        "rawPrediction": "Working...\nANSWER: -15, 17, 20",
+    }
+    done = reconcile_sample(complete, enable_thinking=False)
+    assert done["status"] == "historical_corrected"
+    assert done["openStageBBlocker"] is False
+
+
+def test_independent_check_truncated_is_not_grader_miss() -> None:
+    from independent_check import classify_independently
+
+    truncated = classify_independently(
+        {
+            "outcome": "truncated",
+            "truncated": True,
+            "rawPrediction": "Still factoring the cubic…",
+        },
+        {"kind": "roots", "values": ["-15", "17", "20"]},
+        enable_thinking=False,
+    )
+    assert truncated["classification"] == "insufficient_response"
+    assert truncated["classification"] != "grader_miss"
+
+    grader_err = classify_independently(
+        {
+            "outcome": "grader_error",
+            "truncated": False,
+            "rawPrediction": "no marker here",
+        },
+        {"kind": "roots", "values": ["1"]},
+        enable_thinking=False,
+    )
+    assert grader_err["classification"] == "insufficient_response"
 
 
 def test_blind_audit_composition_blindness_and_provenance() -> None:
@@ -1447,10 +1496,12 @@ def test_blind_audit_composition_blindness_and_provenance() -> None:
         # Stratified ~10% of 50 per family → ~5 each (max(1, round(5)))
         correct_samples = [c for c in cases if c.get("correctSample")]
         assert len(correct_samples) >= 8  # ~5+5 with possible overlap on high-risk
+        # Denominator recorded on sampled corrects
+        assert all(c.get("correctSampleDenominator") == 50 for c in correct_samples)
         # Reproducible
         cases2 = select_audit_cases(report, seed=18)
-        keys1 = {(c["itemId"], c.get("sampleIndex")) for c in cases}
-        keys2 = {(c["itemId"], c.get("sampleIndex")) for c in cases2}
+        keys1 = {(c["conditionId"], c["itemId"], c.get("sampleIndex")) for c in cases}
+        keys2 = {(c["conditionId"], c["itemId"], c.get("sampleIndex")) for c in cases2}
         assert keys1 == keys2
 
         out = tmp_path / "blind"
@@ -1463,6 +1514,8 @@ def test_blind_audit_composition_blindness_and_provenance() -> None:
         assert manifest["blindness"]["ok"] is True
         assert manifest["datasetProvenance"]["ok"] is True
         assert manifest["composition"]["failureCount"] == 20
+        assert manifest["composition"]["allGenerationIdentitiesUnique"] is True
+        assert manifest["composition"]["exclusiveHighRiskCorrectCount"] >= 0
         packets = [
             json.loads(line)
             for line in (out / "blind-packets.jsonl").read_text(encoding="utf-8").splitlines()
@@ -1480,8 +1533,19 @@ def test_blind_audit_composition_blindness_and_provenance() -> None:
         assert '"regradedOutcome"' not in blind_only
         prov = verify_dataset_prompt_provenance(ds, packets)
         assert prov["ok"] is True
-        comp = composition_summary(cases)
+        comp = composition_summary(cases, seed=18)
         assert comp["includesAllFailures"] is True
+        assert comp["reproducibleWithSeed"] is True
+        assert "exclusive high-risk" in comp["explanation"]
+
+    # Operator-reported shape: 119 failures → design 307; +18 exclusive high-risk → 325
+    # (unit check of the accounting identity used in the preflight explanation)
+    failures, design, actual = 119, 307, 325
+    stratified_correct_approx = design - failures  # 188
+    exclusive_high_risk = actual - design  # 18
+    assert stratified_correct_approx == 188
+    assert exclusive_high_risk == 18
+    assert failures + stratified_correct_approx + exclusive_high_risk == actual
 
     rt = estimate_runtime_from_smoke(307)
     assert rt["smokeObserved"]["meanLatencyMs"] == 2215
@@ -1500,6 +1564,9 @@ def test_full_blind_audit_prepare_cpu() -> None:
         assert summary["smokeObserved"]["passed"] is True
         assert summary["graderMissReconcile"]["inputMissCount"] == 10
         assert summary["graderMissReconcile"]["historicalCorrectedCount"] == 9
+        assert summary["graderMissReconcile"]["incompleteOrTruncatedCount"] == 1
+        assert summary["graderMissReconcile"]["remainingDefectCount"] == 0
+        assert summary["graderMissReconcile"]["openStageBBlockerCount"] == 0
         assert summary["graderMissReconcile"]["usedSyntheticFixture"] is True
         assert summary["execution"]["fullAuditExecuted"] is False
         assert summary["execution"]["gpuWorkloadAuthorized"] is False
@@ -1633,6 +1700,7 @@ def main() -> None:
     test_grader_error_outcome_continues()
     test_family_diagnostics_and_weak_audit()
     test_grader_miss_reconcile_ten_fixture()
+    test_independent_check_truncated_is_not_grader_miss()
     test_blind_audit_composition_blindness_and_provenance()
     test_full_blind_audit_prepare_cpu()
     test_gemma_reviewer_proposal_and_smoke_fixtures()

@@ -131,13 +131,21 @@ def prepare_full_audit_bundle(
         "smokeObserved": SMOKE_OBSERVED_METRICS,
         "smokeStatus": "passed_operator_reported",
         "graderMissReconcile": {
+            "reconcileVersion": reconcile.get("reconcileVersion"),
             "inputMissCount": reconcile.get("inputMissCount"),
             "historicalCorrectedCount": reconcile.get("historicalCorrectedCount"),
+            "incompleteOrTruncatedCount": reconcile.get("incompleteOrTruncatedCount"),
             "remainingDefectCount": reconcile.get("remainingDefectCount"),
             "openStageBBlockerCount": reconcile.get("openStageBBlockerCount"),
             "usedSyntheticFixture": used_fixture,
+            "byStatus": reconcile.get("byStatus"),
             "byDefectKind": reconcile.get("byDefectKind"),
             "reportPath": str((output_dir / "grader-miss-reconcile.json").resolve()),
+            "poly0042Note": (
+                "c18d1-algebra-v2:development:polynomial_factorization:0042:38a978c18df8 "
+                "classified incomplete_or_truncated_response when no usable ANSWER "
+                "(not a Stage B grader-defect blocker)."
+            ),
         },
         "blindAudit": {
             "packetsReady": packets_ready,

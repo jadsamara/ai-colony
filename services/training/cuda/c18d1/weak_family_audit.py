@@ -95,6 +95,7 @@ def sample_family_failures(
             enable_thinking=enable_thinking,
             prompt=item.get("prompt"),
         )
+        raw_full = str(row.get("rawPrediction") or "")
         audited.append(
             {
                 "itemId": item["id"],
@@ -102,16 +103,22 @@ def sample_family_failures(
                 "difficulty": item.get("difficulty"),
                 "sampleIndex": row.get("sampleIndex"),
                 "outcome": row.get("outcome"),
+                "truncated": bool(row.get("truncated")),
                 "invalidReason": row.get("invalidReason"),
                 "expected": strip_correction_metadata(
                     correct_expected(item["expected"], prompt=item.get("prompt")),
                 ),
+                "prompt": item.get("prompt"),
                 "parsedAnswer": classification.get("parsedAnswer"),
                 "classification": classification["classification"],
                 "rationale": classification["rationale"],
                 "independentEqual": classification.get("independentEqual"),
                 "comparable": classification.get("comparable"),
-                "rawPredictionPreview": str(row.get("rawPrediction") or "")[:800],
+                # Full raw retained for reconcile (sample sizes are small).
+                "rawPrediction": raw_full,
+                "rawPredictionPreview": raw_full[:800],
+                "rawPredictionLength": len(raw_full),
+                "previewTruncated": len(raw_full) > 800,
                 "graderVersionAtAudit": GRADER_VERSION,
                 "auditVersion": AUDIT_VERSION,
             },

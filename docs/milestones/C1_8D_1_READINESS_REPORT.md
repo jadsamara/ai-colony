@@ -52,9 +52,9 @@ Report fields: original vs corrected accuracy (both modes), per-family deltas, f
 
 Coverage: all regraded wrong/invalid/truncated/grader_error; all high-risk original→corrected transitions; stratified 10% of regraded corrects by family × mode (seed 18). Blind packets expose only `problemStatement` + `rawModelResponse`.
 
-### Grader-miss reconcile
+### Grader-miss reconcile (v2)
 
-Weak-family `grader_miss` samples are reconciled into `historical_corrected` (fixed by grader v3.4 / exact expected overlay) vs `remaining_defect` (still open Stage B blockers). CPU fixture covers the known corrected classes (markdown-bold, LaTeX wrappers, exact `2**k`, interval float). Point prepare at the VM `weak-family-audit-v2.json` for live counts.
+Weak-family `grader_miss` samples reconcile to `historical_corrected`, `incomplete_or_truncated_response` (not a blocker), or `remaining_defect` (open Stage B blocker). Item `polynomial_factorization:0042` is **incomplete/truncated** (no usable `ANSWER:`) — not a grader defect. See `C1_8D_1_FULL_AUDIT_PREFLIGHT.md`. Packet count **325** = 119 failures + stratified 10% corrects + 18 exclusive high-risk transitions (design target was 307).
 
 ## Phase 4 — Readiness (current)
 
