@@ -59,6 +59,7 @@ def build_accounting(results: list[dict[str, Any]], *, samples_per_problem: int)
     wrong_samples = sum(1 for r in results if r.get("outcome") == "wrong")
     invalid_samples = sum(1 for r in results if r.get("outcome") == "invalid")
     truncated_samples = sum(1 for r in results if r.get("outcome") == "truncated")
+    grader_error_samples = sum(1 for r in results if r.get("outcome") == "grader_error")
     format_ok_samples = sum(1 for r in results if r.get("formatCompliant"))
     math_ok_samples = sum(1 for r in results if r.get("mathematicalCorrect") or r.get("correct"))
 
@@ -103,6 +104,7 @@ def build_accounting(results: list[dict[str, Any]], *, samples_per_problem: int)
                 "wrong": 0,
                 "invalid": 0,
                 "truncated": 0,
+                "grader_error": 0,
                 "formatCompliant": 0,
                 "generatedTokensSum": 0,
                 "generatedTokensCount": 0,
@@ -112,8 +114,8 @@ def build_accounting(results: list[dict[str, Any]], *, samples_per_problem: int)
         )
         bucket["samples"] += 1
         outcome = row.get("outcome")
-        if outcome in bucket:
-            bucket[outcome] += 1
+        if outcome in ("correct", "wrong", "invalid", "truncated", "grader_error"):
+            bucket[str(outcome)] += 1
         if row.get("formatCompliant"):
             bucket["formatCompliant"] += 1
         if row.get("generatedTokens") is not None:
@@ -131,7 +133,7 @@ def build_accounting(results: list[dict[str, Any]], *, samples_per_problem: int)
             {
                 **{k: bucket[k] for k in (
                     "family", "difficulty", "samples", "correct", "wrong", "invalid",
-                    "truncated", "formatCompliant",
+                    "truncated", "grader_error", "formatCompliant",
                 )},
                 "mathematicalAccuracy": bucket["correct"] / n,
                 "formatComplianceRate": bucket["formatCompliant"] / n,
@@ -184,6 +186,7 @@ def build_accounting(results: list[dict[str, Any]], *, samples_per_problem: int)
             "wrong": wrong_samples,
             "invalid": invalid_samples,
             "truncated": truncated_samples,
+            "grader_error": grader_error_samples,
             "formatCompliant": format_ok_samples,
             "mathematicalCorrect": math_ok_samples,
             "mathematicalAccuracy": (math_ok_samples / sample_size) if sample_size else 0.0,

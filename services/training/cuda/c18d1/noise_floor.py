@@ -180,7 +180,8 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
             "run1": _run_summary(run1),
             "run2": _run_summary(run2),
             "sameSeedNoiseFloor": same_seed,
-            # Primary fields for promotion analysis: same-seed (matches base-vs-adapter schedule).
+            # Default promotion fields: same-seed (thinking-disabled / greedy pairing).
+            # Thinking-enabled overrides below to alternate-seed sampling variance.
             "comparison": same_seed["comparison"],
             "observedNoiseFloor": same_seed["observedNoiseFloor"],
             "variabilityConfidenceInterval": same_seed["variabilityConfidenceInterval"],
@@ -220,10 +221,20 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
             )
             entry["alternateSeedNoiseFloor"] = alt
             entry["alternateSeedRun"] = _run_summary(run_alt)
+            # Thinking stochastic policy: alternate-seed floor is the promotion reference;
+            # same-seed remains a backend-nondeterminism diagnostic only.
+            entry["comparison"] = alt["comparison"]
+            entry["observedNoiseFloor"] = alt["observedNoiseFloor"]
+            entry["variabilityConfidenceInterval"] = alt["variabilityConfidenceInterval"]
+            entry["minimumDetectableImprovement"] = alt["minimumDetectableImprovement"]
+            entry["modelPromotionThreshold"] = alt["modelPromotionThreshold"]
+            entry["promotionNoiseFloorKind"] = "alternate_seed_sampling_variance"
             entry["thinkingNoiseFloorNote"] = (
-                "sameSeedNoiseFloor = backend nondeterminism under identical seed schedule "
-                "(used for base-vs-adapter). alternateSeedNoiseFloor = sampling variance "
-                "across different seed schedules (diagnostic; not the default promotion comparator)."
+                "alternateSeedNoiseFloor = sampling variance under the intended stochastic "
+                "decoding policy (promotion reference for thinking-enabled base-vs-adapter). "
+                "sameSeedNoiseFloor = backend nondeterminism diagnostic only. "
+                "vLLM does not guarantee per-request seed pairing under continuous batching; "
+                "SamplingParams(seed=…) is recorded but not treated as exact reproducibility."
             )
 
         by_condition[cid] = entry
@@ -282,10 +293,17 @@ def run_noise_floor(job: dict[str, Any]) -> dict[str, Any]:
         "overallMinimumDetectableImprovement": overall_mdi,
         "overallModelPromotionThreshold": overall_promo,
         "minimumPracticallyMeaningfulImprovement": DEFAULT_PRACTICAL_MEANINGFUL_IMPROVEMENT,
-        "promotionComparator": (
-            "same_seed_backend_nondeterminism — base-vs-adapter must use the same "
-            "seed schedule; alternate-seed floor is sampling-variance diagnostic only."
-        ),
+        "promotionComparator": {
+            "thinking_disabled_zero_shot": "same_seed_backend_nondeterminism",
+            "thinking_enabled_zero_shot": "alternate_seed_sampling_variance",
+            "note": (
+                "Thinking-enabled base-vs-adapter comparisons use the alternate-seed "
+                "sampling floor as the variability reference under stochastic decoding. "
+                "Same-seed remains a diagnostic. Thinking-disabled (greedy) still uses "
+                "same-seed. Do not change decoding config or rerun GPU without approval. "
+                "Proposed future thinking samplesPerProblem≥4 is documentation-only until approved."
+            ),
+        },
         "noiseFloorRecorded": True,
         "flipRatesReported": True,
         "artifactsClear": artifacts_clear,

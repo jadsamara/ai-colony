@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Build family diagnostics + weak-family audit from an existing noise-floor OUT dir.
+# CPU-only. Does not run GPU eval. Does not access locked data.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${ROOT}"
+
+DIR="${C18D1_NOISE_FLOOR_DIR:-${1:-}}"
+if [[ -z "${DIR}" || ! -d "${DIR}" ]]; then
+  echo "Usage: C18D1_NOISE_FLOOR_DIR=/path/to/noise-floor-out $0" >&2
+  echo "   or: $0 /path/to/noise-floor-out" >&2
+  exit 2
+fi
+
+PYTHON="${C18D1_PYTHON:-python3}"
+DATASET="${C18D1_DATASET:-services/training/cuda/c18d1/datasets/dev/id_dev.jsonl}"
+
+"${PYTHON}" services/training/cuda/c18d1/family_diagnostics.py \
+  --artifact-dir "${DIR}" \
+  --out "${DIR}/family-diagnostics-report.json"
+
+"${PYTHON}" services/training/cuda/c18d1/weak_family_audit.py \
+  --artifact-dir "${DIR}" \
+  --dataset "${DATASET}" \
+  --sample-size 10 \
+  --seed 18 \
+  --out "${DIR}/weak-family-audit-report.json"
+
+echo "[c18d1] wrote:"
+echo "  ${DIR}/family-diagnostics-report.json"
+echo "  ${DIR}/weak-family-audit-report.json"
+echo "[c18d1] STOP — review reports; do not start pilot/Stage B/training."

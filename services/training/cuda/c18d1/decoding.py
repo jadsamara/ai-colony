@@ -58,12 +58,22 @@ THINKING_ENABLED = {
     "maxNewTokens": 8192,
     "primaryMetric": "pass_at_1",
     "secondaryMetric": "pass_at_3",
+    # Current frozen config remains 3 until an approved config change.
     "samplesPerProblem": 3,
+    "proposedSamplesPerProblem": 4,
     "pilotMaxNewTokens": 8192,
     "decodingConfigVersion": DECODING_CONFIG_VERSION,
+    "seedReproducibilityLimitation": (
+        "sampling_seed_schedule(base, itemIndex, sampleIndex) is attached to each "
+        "SamplingParams(seed=…), but vLLM continuous batching does not guarantee "
+        "per-request seed pairing / bit-identical regeneration. Treat seeds as a "
+        "matched schedule intent, not exact reproducibility."
+    ),
     "note": (
         "Preferred primary Math mode when the department normally uses Qwen3 thinking. "
-        "Do not substitute pass@3 for pass@1 when claiming improvement."
+        "Do not substitute pass@3 for pass@1 when claiming improvement. "
+        "Promotion variability reference: alternate-seed sampling floor. "
+        "proposedSamplesPerProblem=4 is advisory only until decoding config is versioned."
     ),
 }
 

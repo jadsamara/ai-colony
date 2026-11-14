@@ -491,9 +491,16 @@ def grade_model_output(
             "thinkingProtocolViolation": False,
             "mathematicalCorrect": False,
             "correct": False,
-            "outcome": "invalid",
+            "outcome": "grader_error",
             "grade": None,
             "invalidReason": f"parse_error:{type(exc).__name__}",
+            "graderError": {
+                "stage": "parse_model_output",
+                "exceptionType": type(exc).__name__,
+                "exceptionMessage": str(exc)[:500],
+                "rawOutputLogged": True,
+                "rawOutputPreview": (raw or "")[:4000],
+            },
         }
     base = {
         "graderVersion": GRADER_VERSION,
@@ -518,9 +525,17 @@ def grade_model_output(
     except Exception as exc:
         return {
             **base,
-            "outcome": "invalid",
+            "outcome": "grader_error",
             "grade": None,
             "invalidReason": f"grade_error:{type(exc).__name__}",
+            "graderError": {
+                "stage": "grade_answer",
+                "exceptionType": type(exc).__name__,
+                "exceptionMessage": str(exc)[:500],
+                "rawOutputLogged": True,
+                "rawOutputPreview": (raw or "")[:4000],
+                "mathText": parsed.get("mathText") or parsed.get("answer"),
+            },
         }
     math_ok = bool(grade["correct"])
     return {

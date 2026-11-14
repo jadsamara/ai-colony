@@ -12,8 +12,9 @@ def conservative_from_outcomes(outcomes: list[str]) -> dict[str, Any]:
     wrong = sum(1 for o in outcomes if o == "wrong")
     invalid = sum(1 for o in outcomes if o == "invalid")
     truncated = sum(1 for o in outcomes if o == "truncated")
-    # Truncated is a distinct class; do not also count as invalid in totals.
-    # Ensure partition: correct+wrong+invalid+truncated == total when outcomes are exclusive.
+    grader_error = sum(1 for o in outcomes if o == "grader_error")
+    # Truncated / grader_error are distinct; do not double-count as invalid.
+    # grader_error does not inflate the optimistic upper bound (system failure ≠ maybe-correct).
     observed = (correct / total) if total else 0.0
     lower = (correct / total) if total else 0.0
     upper = ((correct + invalid + truncated) / total) if total else 0.0
@@ -23,10 +24,11 @@ def conservative_from_outcomes(outcomes: list[str]) -> dict[str, Any]:
         "wrong": wrong,
         "invalid": invalid,
         "truncated": truncated,
+        "grader_error": grader_error,
         "observedAccuracy": observed,
         "lowerBoundAccuracy": lower,
         "upperBoundAccuracy": upper,
-        "countsConsistent": correct + wrong + invalid + truncated == total,
+        "countsConsistent": correct + wrong + invalid + truncated + grader_error == total,
     }
 
 

@@ -67,15 +67,28 @@ vLLM at `gpu_memory_utilization≈0.92` can reserve ~88 GiB of 96 GiB (large
 | Thinking-disabled `maxNewTokens` 512→2048 | `c18d1-decoding-v2` | v1 (512) preserved as `THINKING_DISABLED_V1` |
 | HF report backend label | reference = `huggingface-batched` | Must never be labeled `vllm-batched` |
 | Full-dev noise floor | same-seed + alternate-seed (thinking) | 24-item 21.24% MDI is **not** automatic promotion threshold; practical meaningful improvement is separate |
+| Thinking promotion floor | alternate-seed | Same-seed diagnostic only for thinking; see noise-floor review doc |
+| `grader_error` outcome | accounting | Per-item grading exceptions; counted separately; run continues |
 
-Base-vs-adapter comparisons use the **same seed schedule** and are judged against the **same-seed** noise floor.
+### Thinking-mode promotion comparator (updated)
+
+| Mode | Promotion variability reference | Diagnostic |
+|---|---|---|
+| `thinking_disabled` | **Same-seed** backend nondeterminism | — |
+| `thinking_enabled` | **Alternate-seed** sampling variance | Same-seed retained as diagnostic |
+
+Reason: intended thinking policy is stochastic; vLLM does not guarantee per-request seed pairing. Base-vs-adapter still attach the same *declared* seed schedule, but thinking promotion thresholds compare against the alternate-seed floor. See `C1_8D_1_THINKING_NOISE_FLOOR_REVIEW.md`.
+
+Overall practical floor remains **+5pp**; ~95% thinking accuracy leaves little overall headroom — use pre-registered family-level criteria for targeted work. Family gains never auto-promote.
 
 ## Adapter claims
 
 - Base and adapter evaluated in the **same session**, same backend; adapter via vLLM LoRA.
-- Thinking mode: ≥3 paired samples per item (increase if CIs remain too wide).
-- Improvement must exceed MDI with paired McNemar + Wilson evidence.
-- Do **not** promote when inconclusive.
+- Thinking mode: ≥3 paired samples per item (current frozen config); ≥4 proposed but **not** enabled without a versioned decoding change.
+- Use item-clustered paired stats; do not treat multi-sample draws as independent items.
+- Improvement must exceed the stated noise-floor kind’s threshold with paired evidence.
+- Mandatory thinking-enabled regression for every adapter; overall non-regression required.
+- Do **not** promote when inconclusive; promotion remains admin-approved.
 
 ## Cross-backend check
 

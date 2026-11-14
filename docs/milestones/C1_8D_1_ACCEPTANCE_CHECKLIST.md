@@ -21,11 +21,13 @@
 
 ## Pending GPU acceptance (operator)
 
-- [ ] Full-development noise floor (id_dev, both modes; same-seed + alt-seed thinking) — **STOP for review**
-- [ ] Stratified pilot (vLLM, both modes) — only after noise-floor approval — **STOP**
+- [ ] Full-development noise floor reviewed (thinking ~94.8–95.4%; flips ~10%) — methodology update landed
+- [ ] Family diagnostics + weak-family audit JSON generated from VM artifacts — **STOP for review**
+- [ ] Confirmed grader misses fixed (versioned) before Stage B, if any
+- [ ] Stratified pilot (vLLM, both modes) — only after explicit approval — **STOP**
 - [ ] Stage B full development baselines (vLLM) — only after pilot approval — **STOP for freeze**
 - [ ] Stage C locked ID/OOD + regression **only in same session as first trained adapter**
-- [ ] Metrics include accuracy, uncertainty, invalid/truncated, timing, tokens, samplerImplementation
+- [ ] Metrics include accuracy, uncertainty, invalid/truncated/grader_error, timing, tokens, samplerImplementation
 - [ ] Copy Phase 0 v3 real report to `C1_8D_PHASE0_GPU_RESULT_V3.json` (do not invent)
 
 ## Must remain false

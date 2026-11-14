@@ -135,42 +135,64 @@ def evaluate_condition_on_engine(
         )
         for item, gen in zip(items, gens):
             truncated = bool(gen.get("truncated"))
-            graded = grade_model_output(
-                gen["text"],
-                item["expected"],
-                enable_thinking=bool(fields["enableThinking"]),
-                truncated=truncated,
-            )
-            arts = detect_prefix_artifacts(gen["text"], enable_thinking=bool(fields["enableThinking"]))
+            raw_text = gen.get("text") or ""
+            try:
+                graded = grade_model_output(
+                    raw_text,
+                    item["expected"],
+                    enable_thinking=bool(fields["enableThinking"]),
+                    truncated=truncated,
+                )
+            except Exception as exc:  # noqa: BLE001 — per-item; never abort the run
+                graded = {
+                    "outcome": "grader_error",
+                    "correct": False,
+                    "mathematicalCorrect": False,
+                    "formatCompliant": False,
+                    "thinkingProtocolViolation": False,
+                    "invalidReason": f"eval_wrapper:{type(exc).__name__}",
+                    "parsed": None,
+                    "grade": None,
+                    "graderVersion": GRADER_VERSION,
+                    "graderError": {
+                        "stage": "evaluate_condition_on_engine",
+                        "exceptionType": type(exc).__name__,
+                        "exceptionMessage": str(exc)[:500],
+                        "rawOutputLogged": True,
+                        "rawOutputPreview": raw_text[:4000],
+                    },
+                }
+            arts = detect_prefix_artifacts(raw_text, enable_thinking=bool(fields["enableThinking"]))
             if arts:
                 prefix_hits += 1
             total_tokens += int(gen.get("generatedTokens") or 0)
-            results.append(
-                {
-                    "itemId": item["id"],
-                    "family": item["family"],
-                    "difficulty": item["difficulty"],
-                    "sampleIndex": sample_index,
-                    "samplingSeed": gen["samplingSeed"],
-                    "rawPrediction": gen["text"],
-                    "truncated": truncated,
-                    "outcome": graded["outcome"],
-                    "correct": graded["correct"],
-                    "mathematicalCorrect": graded.get("mathematicalCorrect", graded["correct"]),
-                    "formatCompliant": graded.get("formatCompliant", False),
-                    "thinkingProtocolViolation": graded.get("thinkingProtocolViolation", False),
-                    "invalidReason": graded.get("invalidReason"),
-                    "parsed": graded["parsed"],
-                    "grade": graded["grade"],
-                    "graderVersion": graded.get("graderVersion", GRADER_VERSION),
-                    "generatedTokens": gen.get("generatedTokens"),
-                    "runtimeMs": gen.get("runtimeMs"),
-                    "finishReason": gen.get("finishReason"),
-                    "prefixArtifacts": arts,
-                    "adapterPath": adapter_path,
-                    "backend": BACKEND_ID,
-                },
-            )
+            row = {
+                "itemId": item["id"],
+                "family": item["family"],
+                "difficulty": item["difficulty"],
+                "sampleIndex": sample_index,
+                "samplingSeed": gen["samplingSeed"],
+                "rawPrediction": raw_text,
+                "truncated": truncated,
+                "outcome": graded["outcome"],
+                "correct": graded["correct"],
+                "mathematicalCorrect": graded.get("mathematicalCorrect", graded["correct"]),
+                "formatCompliant": graded.get("formatCompliant", False),
+                "thinkingProtocolViolation": graded.get("thinkingProtocolViolation", False),
+                "invalidReason": graded.get("invalidReason"),
+                "parsed": graded.get("parsed"),
+                "grade": graded.get("grade"),
+                "graderVersion": graded.get("graderVersion", GRADER_VERSION),
+                "generatedTokens": gen.get("generatedTokens"),
+                "runtimeMs": gen.get("runtimeMs"),
+                "finishReason": gen.get("finishReason"),
+                "prefixArtifacts": arts,
+                "adapterPath": adapter_path,
+                "backend": BACKEND_ID,
+            }
+            if graded.get("graderError"):
+                row["graderError"] = graded["graderError"]
+            results.append(row)
 
     eval_ms = int((time.time() - eval_t0) * 1000)
     accounting = build_accounting(results, samples_per_problem=samples_per)

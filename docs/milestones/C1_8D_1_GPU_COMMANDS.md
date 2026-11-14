@@ -149,11 +149,18 @@ export C18D1_OUT=~/ai-colony/tmp/c18d1/noise-floor-full-dev-$(date +%Y%m%d-%H%M%
 ./scripts/c18d1-gpu-noise-floor-full-dev
 # review: $C18D1_OUT/noise-floor-report.json
 #   graderVersion=c18d1-grader-v3.3, decodingConfigVersion=c18d1-decoding-v2
-#   sameSeedNoiseFloor vs alternateSeedNoiseFloor (thinking)
+#   thinking promotionNoiseFloorKind=alternate_seed_sampling_variance
+#   sameSeedNoiseFloor retained as diagnostic
 #   overallModelPromotionThreshold, minimumPracticallyMeaningfulImprovement
 #   truncationByFamily / tokens — STOP for independent review
 # Do NOT start stratified pilot or Stage B until approved
 export C18D1_NOISE_FLOOR_REPORT=$C18D1_OUT/noise-floor-report.json
+export C18D1_NOISE_FLOOR_DIR=$C18D1_OUT
+
+# After a successful noise-floor run — CPU-only reports from artifacts:
+./scripts/c18d1-report-from-noise-floor-artifacts "$C18D1_NOISE_FLOOR_DIR"
+# review: family-diagnostics-report.json + weak-family-audit-report.json
+# Any confirmed grader_miss blocks Stage B until a versioned grader fix.
 ```
 
 ### Step 2 — Cross-backend check (vLLM vs HF)

@@ -1053,6 +1053,218 @@ def test_paired_stats_and_statistical_gate() -> None:
     assert "--phase vllm" in script_src and "--phase hf" in script_src and "--phase compare" in script_src
 
 
+def test_grader_error_outcome_continues() -> None:
+    """Per-item grading exceptions → grader_error (not crash); counted separately."""
+    import sympy_grader as sg
+
+    real_grade_answer = sg.grade_answer
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("forced_grade_failure")
+
+    sg.grade_answer = boom  # type: ignore[assignment]
+    try:
+        graded = grade_model_output(
+            "ANSWER: 1",
+            {"kind": "roots", "values": ["1"]},
+            enable_thinking=False,
+        )
+    finally:
+        sg.grade_answer = real_grade_answer  # type: ignore[assignment]
+
+    assert graded["outcome"] == "grader_error"
+    assert graded["correct"] is False
+    assert graded["invalidReason"] and graded["invalidReason"].startswith("grade_error:")
+    assert graded["graderError"]["rawOutputLogged"] is True
+    assert "ANSWER: 1" in graded["graderError"]["rawOutputPreview"]
+
+    # Accounting counts grader_error separately from invalid.
+    rows = [
+        {
+            "itemId": "a",
+            "family": "linear_equations",
+            "difficulty": "easy",
+            "sampleIndex": 0,
+            "outcome": "grader_error",
+            "correct": False,
+            "formatCompliant": True,
+            "generatedTokens": 12,
+        },
+        {
+            "itemId": "b",
+            "family": "linear_equations",
+            "difficulty": "easy",
+            "sampleIndex": 0,
+            "outcome": "correct",
+            "correct": True,
+            "mathematicalCorrect": True,
+            "formatCompliant": True,
+            "generatedTokens": 8,
+        },
+    ]
+    acc = build_accounting(rows, samples_per_problem=1)
+    assert acc["perSample"]["grader_error"] == 1
+    assert acc["perSample"]["correct"] == 1
+    assert acc["perSample"]["invalid"] == 0
+    cell = next(c for c in acc["familyDifficulty"] if c["family"] == "linear_equations")
+    assert cell["grader_error"] == 1
+
+
+def test_family_diagnostics_and_weak_audit() -> None:
+    """Synthetic artifacts: family report schema + weak-family classification."""
+    from family_diagnostics import build_dual_mode_report, build_per_family_report
+    from weak_family_audit import build_weak_family_audit, classify_failure
+
+    # Parsed answer that grades correct → grader_miss
+    miss = classify_failure(
+        {
+            "outcome": "wrong",
+            "rawPrediction": "ANSWER: 2",
+            "parsed": {"mathText": "2", "ok": True},
+            "truncated": False,
+        },
+        {"kind": "roots", "values": ["2"]},
+        enable_thinking=False,
+    )
+    assert miss["classification"] == "grader_miss"
+
+    genuine = classify_failure(
+        {
+            "outcome": "wrong",
+            "rawPrediction": "ANSWER: 9",
+            "parsed": {"mathText": "9", "ok": True},
+            "truncated": False,
+        },
+        {"kind": "roots", "values": ["2"]},
+        enable_thinking=False,
+    )
+    assert genuine["classification"] == "genuine_math_error"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        # Minimal dual-mode item results
+        for cid, fam in (
+            ("thinking_disabled_zero_shot", "quadratic_equations"),
+            ("thinking_enabled_zero_shot", "quadratic_equations"),
+        ):
+            results = []
+            for i in range(3):
+                results.append(
+                    {
+                        "itemId": f"item-{i}",
+                        "family": fam,
+                        "difficulty": "easy",
+                        "sampleIndex": 0,
+                        "outcome": "wrong" if i else "correct",
+                        "correct": i == 0,
+                        "invalidReason": None,
+                        "generatedTokens": 10 + i,
+                        "runtimeMs": 5.0,
+                        "rawPrediction": f"ANSWER: {i}",
+                        "parsed": {"mathText": str(i), "ok": True},
+                    },
+                )
+            # Add a weak-family wrong row with enough for audit sample
+            for fam in (
+                "exponential_log_equations",
+                "polynomial_factorization",
+                "quadratic_equations",
+                "symbolic_simplification",
+            ):
+                for j in range(10):
+                    results.append(
+                        {
+                            "itemId": f"{fam}-{j}",
+                            "family": fam,
+                            "difficulty": "moderate",
+                            "sampleIndex": 0,
+                            "outcome": "wrong",
+                            "correct": False,
+                            "invalidReason": None,
+                            "generatedTokens": 20,
+                            "runtimeMs": 8.0,
+                            "rawPrediction": "ANSWER: 0",
+                            "parsed": {"mathText": "0", "ok": True},
+                        },
+                    )
+            (tmp_path / f"item-results-{cid}-same-seed-run1.json").write_text(
+                json.dumps({"results": results}) + "\n",
+                encoding="utf-8",
+            )
+
+        # Dataset index for audit
+        ds = tmp_path / "tiny_dev.jsonl"
+        lines = []
+        for fam in (
+            "exponential_log_equations",
+            "polynomial_factorization",
+            "quadratic_equations",
+            "symbolic_simplification",
+        ):
+            for j in range(10):
+                lines.append(
+                    json.dumps(
+                        {
+                            "id": f"{fam}-{j}",
+                            "family": fam,
+                            "difficulty": "moderate",
+                            "expected": {"kind": "roots", "values": ["1"]},
+                        },
+                    ),
+                )
+        ds.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        dual = build_dual_mode_report(tmp_path)
+        assert dual["ok"] is True
+        think = dual["modes"]["thinking_enabled_zero_shot"]
+        assert "perFamily" in think
+        assert think["perFamily"]["quadratic_equations"]["wrong"] >= 1
+        assert "grader_error" in think["perFamily"]["quadratic_equations"]
+
+        enabled_results = json.loads(
+            (tmp_path / "item-results-thinking_enabled_zero_shot-same-seed-run1.json").read_text(
+                encoding="utf-8",
+            ),
+        )["results"]
+        single = build_per_family_report(
+            enabled_results,
+            condition_id="thinking_enabled_zero_shot",
+        )
+        assert set(single["outcomeClasses"]) == {
+            "correct",
+            "wrong",
+            "invalid",
+            "truncated",
+            "grader_error",
+        }
+
+        audit = build_weak_family_audit(
+            artifact_dir=tmp_path,
+            dataset_path=ds,
+            sample_size=10,
+            seed=18,
+        )
+        assert audit["ok"] is True
+        fam_block = audit["modes"]["thinking_enabled_zero_shot"]["families"]["quadratic_equations"]
+        assert fam_block["sampled"] == 10
+        assert all(
+            "expected" in s and "parsedAnswer" in s and "classification" in s
+            for s in fam_block["samples"]
+        )
+
+
+def test_thinking_methodology_constants() -> None:
+    from decoding import THINKING_ENABLED
+    from paired_stats import DEFAULT_PRACTICAL_MEANINGFUL_IMPROVEMENT
+
+    assert THINKING_ENABLED["samplesPerProblem"] == 3  # frozen; no silent config change
+    assert THINKING_ENABLED["proposedSamplesPerProblem"] == 4
+    assert "seedReproducibilityLimitation" in THINKING_ENABLED
+    assert DEFAULT_PRACTICAL_MEANINGFUL_IMPROVEMENT == 0.05
+    assert (REPO_ROOT / "docs" / "milestones" / "C1_8D_1_THINKING_NOISE_FLOOR_REVIEW.md").is_file()
+    assert (REPO_ROOT / "docs" / "milestones" / "C1_8D_1_FIRST_TRAINING_EXPERIMENT_DESIGN.md").is_file()
+
+
 def test_locked_generator_refuses_without_external_seed() -> None:
     saved = {
         key: os.environ.pop(key, None)
@@ -1090,7 +1302,11 @@ def main() -> None:
     test_prompts_have_no_split_identity()
     test_paired_stats_and_statistical_gate()
     test_grader_v32_text_answer_markers()
+    test_grader_v33_emptyset_canonicalization()
     test_interval_float_vs_rational_endpoints()
+    test_grader_error_outcome_continues()
+    test_family_diagnostics_and_weak_audit()
+    test_thinking_methodology_constants()
     test_locked_generator_refuses_without_external_seed()
     print("c18d1 local tests ok")
 
